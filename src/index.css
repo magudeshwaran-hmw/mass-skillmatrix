@@ -105,11 +105,32 @@
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-color: #050B18;
+    background-color: #0a0a0f;
     color: #ffffff;
+    font-family: 'Inter', sans-serif;
   }
   h1, h2, h3, h4 {
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Inter', sans-serif;
+  }
+
+  /* ── Zensar Custom Variables ───────────── */
+  :root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #111118;
+    --bg-card: #16161f;
+    --bg-card-hover: #1e1e2a;
+    --border-subtle: rgba(255,255,255,0.06);
+    --border-active: #6B2D8B;
+    --zensar-purple: #6B2D8B;
+    --zensar-purple-light: #8B4DB0;
+    --zensar-blue: #00A3E0;
+    --zensar-orange: #FF6B35;
+    --text-primary: #ffffff;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
   }
 }
 
@@ -144,8 +165,8 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(20px); }
@@ -154,4 +175,15 @@
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes bounce {
+  0%,100% { transform: translateY(0); }
+  50%     { transform: translateY(-5px); }
 }

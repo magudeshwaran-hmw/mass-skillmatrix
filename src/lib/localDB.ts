@@ -35,7 +35,79 @@ function writeGrowthPlans(data: GrowthPlan[]) {
 }
 
 // ─── Employee CRUD ────────────────────────────────────────────────────────────
-export function getAllEmployees(): Employee[] { return readEmployees(); }
+export async function getAllEmployees(): Promise<{ employees: any[], skills: any[] }> {
+  try {
+    const res = await fetch('http://localhost:3001/api/employees');
+    return await res.json();
+  } catch (err) {
+    console.error('Fetch error:', err);
+    return { employees: [], skills: [] };
+  }
+}
+
+export async function getCurrentUser(): Promise<any> {
+  const { employees } = await getAllEmployees();
+  const userId = localStorage.getItem('skill_nav_session_id');
+  return employees.find((e: any) => e.ID === userId || e.id === userId) || null;
+}
+
+export async function saveEmployee(employeeData: any) {
+  const res = await fetch('http://localhost:3001/api/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ eventType: 'EMPLOYEE_REGISTERED', ...employeeData })
+  });
+  return res.json();
+}
+
+export async function saveSkillRatings(employeeId: string, employeeName: string, ratings: any) {
+  const res = await fetch('http://localhost:3001/api/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      eventType: 'SKILLS_UPDATED',
+      employeeId,
+      employeeName,
+      skillCount: 32,
+      ...ratings
+    })
+  });
+  return res.json();
+}
+
+export async function getSkillsByEmployee(
+  employeeId: string,
+  employeeName?: string
+): Promise<any> {
+  try {
+    const { skills } = await getAllEmployees();
+    if (!skills || !Array.isArray(skills)) return null;
+
+    const found = skills.find((s: any) => {
+      // Try every possible field name variant Power Automate may use
+      const idMatch = (
+        s.employeeId    === employeeId ||
+        s['Employee ID'] === employeeId ||
+        s['EmployeeID'] === employeeId ||
+        s.employee_id   === employeeId ||
+        s.ID            === employeeId ||
+        s.id            === employeeId
+      );
+      const nameMatch = employeeName && (
+        s.employeeName       === employeeName ||
+        s['Employee Name']   === employeeName ||
+        s.Name               === employeeName
+      );
+      return idMatch || nameMatch;
+    });
+
+    return found || null;
+  } catch (err) {
+    console.error('[localDB] getSkillsByEmployee failed:', err);
+    return null;
+  }
+}
+
 
 export function getEmployee(id: string): Employee | undefined {
   return readEmployees().find(e => e.id === id);
@@ -65,15 +137,6 @@ export function createNewEmployee(name: string, email: string, designation: stri
 }
 
 // ─── Skill ratings ────────────────────────────────────────────────────────────
-export function saveSkillRatings(employeeId: string, ratings: SkillRating[]): void {
-  const all = readEmployees();
-  const idx = all.findIndex(e => e.id === employeeId);
-  if (idx < 0) return;
-  all[idx].skills = ratings;
-  all[idx].overallCapability = computeCompletion(ratings);
-  writeEmployees(all);
-}
-
 export function submitSkillMatrix(employeeId: string): void {
   const all = readEmployees();
   const idx = all.findIndex(e => e.id === employeeId);
@@ -110,13 +173,15 @@ export function saveGrowthPlan(plan: GrowthPlan): void {
 export interface SessionUser { employeeId: string; role: 'employee' | 'admin'; name: string; }
 
 export function saveSession(user: SessionUser) {
-  localStorage.setItem(KEYS.CURRENT_USER, JSON.stringify(user));
+  localStorage.setItem('skill_nav_session_id', user.employeeId);
 }
 export function loadSession(): SessionUser | null {
-  const raw = localStorage.getItem(KEYS.CURRENT_USER);
-  return raw ? JSON.parse(raw) : null;
+  const id = localStorage.getItem('skill_nav_session_id');
+  if (!id) return null;
+  // Temporary synchronous fallback structure for standard app routing until the async data loads!
+  return { employeeId: id, role: 'employee', name: 'User' };
 }
-export function clearSession() { localStorage.removeItem(KEYS.CURRENT_USER); }
+export function clearSession() { localStorage.removeItem('skill_nav_session_id'); }
 
 // ─── Excel Export ─────────────────────────────────────────────────────────────
 const LEVEL_LABEL: Record<number, string> = { 0: 'Not Rated', 1: 'Beginner', 2: 'Intermediate', 3: 'Expert' };
@@ -201,7 +266,7 @@ export function exportAllToExcel(): void {
 }
 
 /** Export a single employee's data to Excel */
-export function exportEmployeeToExcel(employeeId: string): void {
+export function exportEmployeeToExcel(employeeId: string, aiPlanData?: any[]): void {
   const emp = getEmployee(employeeId);
   if (!emp) return;
 
@@ -228,6 +293,11 @@ export function exportEmployeeToExcel(employeeId: string): void {
     };
   });
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(skillRows), 'Skills');
+
+  // AI Insights / 90-Day Plan sheet
+  if (aiPlanData && aiPlanData.length > 0) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(aiPlanData), 'AI 90-Day Plan');
+  }
 
   const date = new Date().toISOString().split('T')[0];
   XLSX.writeFile(wb, `${emp.name.replace(/\s+/g, '_')}_SkillMatrix_${date}.xlsx`);

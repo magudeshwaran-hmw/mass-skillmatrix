@@ -177,7 +177,7 @@ export function computeSkillPriorities(ratings: SkillRating[]): SkillPriorityDat
     const gap = Math.max(0, targetLevel - currentLevel);
     const demand = MARKET_DEMAND[skill.id] ?? 70;
     const impact = CAREER_IMPACT[skill.id] ?? 70;
-    const priorityScore = Math.round((gap / 3) * 100 * (demand / 100) * (impact / 100) * 100) / 10;
+    const priorityScore = ((3 - currentLevel) * demand) / 100;
 
     const weeksMap: Record<number, string> = {
       0: 'Already there',

@@ -1,130 +1,97 @@
-/**
- * server.cjs — Express backend for Skill Navigator
- * Stores all employee data in employees.xlsx (local file)
- * Run: node server.cjs
- */
 const express = require('express');
-const cors    = require('cors');
-const xlsx    = require('xlsx');
-const path    = require('path');
-const fs      = require('fs');
-const fsp     = require('fs').promises;
-
-const app  = express();
+const cors = require('cors');
+const app = express();
 const PORT = 3001;
-const EXCEL_PATH = path.join(__dirname, 'employees.xlsx');
+const crypto = require('crypto');
 
 app.use(cors());
 app.use(express.json());
-// ─── Async-safe Excel writer (retries on EBUSY / file-lock) ─────────────────
-async function writeWorkbookAsync(wb) {
-  const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
-  for (let attempt = 1; attempt <= 6; attempt++) {
-    try {
-      await fsp.writeFile(EXCEL_PATH, buffer);
-      return; // success
-    } catch (err) {
-      if (err.code === 'EBUSY' && attempt < 6) {
-        console.warn(`[Excel] File busy (attempt ${attempt}/6), retrying in 600ms...`);
-        await new Promise(r => setTimeout(r, 600));
-      } else {
-        console.error('[Excel] Write failed:', err.message);
-        throw new Error(
-          err.code === 'EBUSY'
-            ? 'Excel file is open in another program. Please close it and try again.'
-            : err.message
-        );
-      }
-    }
-  }
-}
 
-// ─── Excel helpers ────────────────────────────────────────────────────────────
+// ─── Power Automate Cloud Sync URLs ──────────────────────────────────────
+const PUSH_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/4ee56055a9054741b8fbd9a06df29bce/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=tTHdqTpv9oYLftU9YYiR7-XOu-6RpnZuMGM6EQWxcvk';
+const GET_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/a03f128092b847e5bfe212ed8c19ad26/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=4H8WPkq_FRRv5vGT2ebXls0LfCJZ09GwIpV55eRan8o';
 
-function readWorkbook() {
-  if (fs.existsSync(EXCEL_PATH)) {
-    const wb = xlsx.readFile(EXCEL_PATH);
-    // Ensure Skills sheet exists in older files
-    if (!wb.Sheets['Skills']) {
-      const skillSheet = xlsx.utils.aoa_to_sheet([[
-        'EmployeeID','SkillID','SkillName','Category','SelfRating','ManagerRating','Validated'
-      ]]);
-      xlsx.utils.book_append_sheet(wb, skillSheet, 'Skills');
-      // Sync write only on startup (no user has the file open yet)
-      xlsx.writeFile(wb, EXCEL_PATH);
-    }
-    return wb;
-  }
-  // Create fresh workbook with headers
-  const wb = xlsx.utils.book_new();
-  const empSheet = xlsx.utils.aoa_to_sheet([[
-    'ID','ZensarID','Name','Email','Phone','Designation','Department','Location',
-    'YearsIT','YearsZensar','PrimarySkill','PrimaryDomain',
-    'Password','OverallCapability','Submitted','SubmittedAt',
-    'ResumeUploaded','CreatedAt'
-  ]]);
-  const skillSheet = xlsx.utils.aoa_to_sheet([[
-    'EmployeeID','SkillID','SkillName','Category','SelfRating','ManagerRating','Validated'
-  ]]);
-  xlsx.utils.book_append_sheet(wb, empSheet,   'Employees');
-  xlsx.utils.book_append_sheet(wb, skillSheet, 'Skills');
-  xlsx.writeFile(wb, EXCEL_PATH);
-  return wb;
-}
-
-function getEmployees() {
-  const wb   = readWorkbook();
-  const ws   = wb.Sheets['Employees'];
-  return xlsx.utils.sheet_to_json(ws, { defval: '' });
-}
-
-async function saveEmployees(employees) {
-  const wb  = readWorkbook();
-  wb.Sheets['Employees'] = xlsx.utils.json_to_sheet(employees);
-  wb.SheetNames = ['Employees', ...(wb.SheetNames.filter(n => n !== 'Employees'))];
-  await writeWorkbookAsync(wb);
-}
-
-function getSkills(employeeId) {
-  const wb  = readWorkbook();
-  const ws  = wb.Sheets['Skills'];
-  if (!ws) return [];
-  const rows = xlsx.utils.sheet_to_json(ws, { defval: '' });
-  return employeeId ? rows.filter(r => r.EmployeeID === employeeId) : rows;
-}
-
-async function saveSkillsForEmployee(employeeId, skills) {
-  const wb  = readWorkbook();
-  const ws  = wb.Sheets['Skills'];
-  const all = ws ? xlsx.utils.sheet_to_json(ws, { defval: '' }) : [];
-
-  // Remove old rows for this employee, add new ones
-  const others = all.filter(r => r.EmployeeID !== employeeId);
-  const newRows = skills.map(s => ({
-    EmployeeID:    employeeId,
-    SkillID:       s.skillId,
-    SkillName:     s.skillName || s.skillId,
-    Category:      s.category  || '',
-    SelfRating:    s.selfRating ?? 0,
-    ManagerRating: s.managerRating ?? '',
-    Validated:     s.validated ? 'Yes' : 'No',
-  }));
-  const merged = [...others, ...newRows];
-  const newWs  = xlsx.utils.json_to_sheet(merged);
-  wb.Sheets['Skills'] = newWs;
-  // Ensure 'Skills' is in SheetNames
-  if (!wb.SheetNames.includes('Skills')) wb.SheetNames.push('Skills');
-  await writeWorkbookAsync(wb);
-}
-
-// simple hash — good enough for internal tool
 function hashPw(pw) {
-  let h = 0;
-  for (let i = 0; i < pw.length; i++) h = (Math.imul(31, h) + pw.charCodeAt(i)) | 0;
-  return h.toString(36);
+  return crypto.createHash('sha256').update(pw).digest('hex');
+}
+
+// Push to Cloud directly
+async function syncToCloud(eventType, payload) {
+  try {
+    const res = await fetch(PUSH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType, ...payload, syncedAt: new Date().toISOString() }),
+    });
+    if (res.ok) console.log(`[Cloud Sync] ✅ ${eventType} successfully sent to Cloud.`);
+    else console.warn(`[Cloud Sync] ⚠️  ${eventType} failed. Microsoft returned ${res.status}`);
+  } catch (err) {
+    console.warn(`[Cloud Sync] ⚠️  Cloud unreachable: ${err.message}`);
+  }
+}
+
+// Fetch BOTH tables from Cloud Excel simultaneously
+async function getCloudDB() {
+  try {
+    const res = await fetch(GET_URL, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }});
+    if (!res.ok) throw new Error(`Cloud returned status ${res.status}`);
+    const json = await res.json();
+    
+    // Auto-detect swapped arrays (in case Power Automate mapping is flipped)
+    const arr1 = Array.isArray(json.employees) ? json.employees : [];
+    const arr2 = Array.isArray(json.skills) ? json.skills : [];
+    
+    let actualEmployees = arr1;
+    let actualSkills = arr2;
+    
+    if (arr1[0] && Object.keys(arr1[0]).find(k => k.toLowerCase().includes('selenium'))) {
+      // arr1 contains skills, therefore arr2 is employees!
+      actualEmployees = arr2;
+      actualSkills = arr1;
+    } else if (arr2[0] && Object.keys(arr2[0]).find(k => k.toLowerCase().includes('zensar'))) {
+      // arr2 definitely contains ZensarID, therefore arr2 is employees!
+      actualEmployees = arr2;
+      actualSkills = arr1;
+    }
+
+    // Mathematically merge Capability and Submitted state from Skills to Employees to bypass PowerAutomate missing 'Update' block
+    actualEmployees = actualEmployees.map(emp => {
+      const match = actualSkills.find(s => s.employeeId === emp.ID || s['Employee ID'] === emp.ID || s.employeeName === emp.Name);
+      if (match) {
+        // Find how many skills have a rating > 0
+        const rawSkills = ['Selenium', 'Appium', 'JMeter', 'Postman', 'JIRA', 'TestRail', 'Python', 'Java', 'JavaScript', 'TypeScript', 'C#', 'SQL', 'API Testing', 'Mobile Testing', 'Performance Testing', 'Security Testing', 'Database Testing', 'Banking', 'Healthcare', 'E-Commerce', 'Insurance', 'Telecom', 'Manual Testing', 'Automation Testing', 'Regression Testing', 'UAT', 'Git', 'Jenkins', 'Docker', 'Azure DevOps', 'ChatGPT/Prompt Engineering', 'AI Test Automation'];
+        let count = 0;
+        rawSkills.forEach(k => { if (parseInt(match[k]) > 0) count++; });
+        emp.OverallCapability = Math.round((count / 32) * 100);
+        emp.Submitted = 'Yes';
+        emp.SubmittedAt = match.syncedAt || new Date().toISOString();
+      } else {
+        emp.Submitted = 'No';
+      }
+      return emp;
+    });
+
+    return { employees: actualEmployees, skills: actualSkills };
+  } catch (err) {
+    console.error(`[Cloud DB] Read failed: ${err.message}`);
+    return { employees: [], skills: [] }; // Return empty if cloud fails
+  }
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
+
+// Route 1: Frontend reads all data from cloud
+app.get('/api/employees', async (req, res) => {
+  const data = await getCloudDB();
+  res.json(data);
+});
+
+// Route 2: Frontend writes data to cloud
+app.post('/api/sync', async (req, res) => {
+  const { eventType, ...payload } = req.body;
+  await syncToCloud(eventType, payload);
+  res.json({ success: true });
+});
 
 // POST /api/register
 app.post('/api/register', async (req, res) => {
@@ -134,13 +101,13 @@ app.post('/api/register', async (req, res) => {
   if (!name || (!email && !phone) || !password)
     return res.status(400).json({ error: 'Name, email/phone and password are required.' });
 
-  const employees = getEmployees();
+  const { employees } = await getCloudDB();
   const dup = employees.find(e =>
     (email && e.Email?.toLowerCase() === email.toLowerCase()) ||
     (phone && e.Phone === phone) ||
     (zensarId && e.ZensarID === zensarId)
   );
-  if (dup) return res.status(409).json({ error: 'Zensar ID, email or phone already registered.' });
+  if (dup) return res.status(409).json({ error: 'Zensar ID, email or phone already registered in Cloud.' });
 
   const id  = `emp_${Date.now()}`;
   const now = new Date().toISOString();
@@ -152,23 +119,22 @@ app.post('/api/register', async (req, res) => {
     OverallCapability: 0, Submitted: 'No', SubmittedAt: '',
     ResumeUploaded: resumeUploaded ? 'Yes' : 'No', CreatedAt: now,
   };
-  employees.push(newEmp);
-  try {
-    await saveEmployees(employees);
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+
+  console.log(`[Register] New employee sent to Cloud: ${name} (${id})`);
+
+  // ONLY sync to cloud, no local db saving!
+  syncToCloud('EMPLOYEE_REGISTERED', { ...newEmp, Password: password || '' });
+  
   const { Password: _, ...safe } = newEmp;
-  console.log(`[Register] New employee: ${name} (${id})`);
   res.json({ success: true, employee: { ...safe, id } });
 });
 
-// POST /api/login  — accepts ZensarID, email, or phone
-app.post('/api/login', (req, res) => {
+// POST /api/login
+app.post('/api/login', async (req, res) => {
   const { login: loginId, password } = req.body;
   if (!loginId || !password) return res.status(400).json({ error: 'Login ID and password required.' });
 
-  const employees = getEmployees();
+  const { employees } = await getCloudDB();
   const emp = employees.find(e =>
     e.ZensarID === loginId ||
     e.Email?.toLowerCase() === loginId.toLowerCase() ||
@@ -176,72 +142,77 @@ app.post('/api/login', (req, res) => {
   );
 
   if (!emp) return res.status(401).json({ error: 'No account found with this Zensar ID / email / phone.' });
-  if (emp.Password !== hashPw(password)) return res.status(401).json({ error: 'Incorrect password.' });
+  
+  // Support both Cloud plain-text records and locally hashed legacy records
+  if (emp.Password && emp.Password !== hashPw(password) && emp.Password !== password) {
+    return res.status(401).json({ error: 'Incorrect password.' });
+  }
 
   const { Password: _, ...safe } = emp;
   res.json({ success: true, employee: { ...safe, id: emp.ID, name: emp.Name, role: 'employee' } });
 });
 
-// GET /api/employees
-app.get('/api/employees', (req, res) => {
-  const employees = getEmployees().map(e => {
-    const { Password: _, ...safe } = e;
-    return { ...safe, id: e.ID, name: e.Name };
-  });
-  res.json(employees);
-});
-
-// GET /api/employees/:id
-app.get('/api/employees/:id', (req, res) => {
-  const emp = getEmployees().find(e => e.ID === req.params.id);
-  if (!emp) return res.status(404).json({ error: 'Employee not found.' });
-  const { Password: _, ...safe } = emp;
-  res.json({ ...safe, id: emp.ID, name: emp.Name });
-});
-
-// PUT /api/employees/:id
-app.put('/api/employees/:id', async (req, res) => {
-  const employees = getEmployees();
-  const idx = employees.findIndex(e => e.ID === req.params.id);
-  if (idx < 0) return res.status(404).json({ error: 'Not found.' });
-  const updated = { ...employees[idx], ...req.body };
-  employees[idx] = updated;
-  try { await saveEmployees(employees); } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-  const { Password: _, ...safe } = updated;
-  res.json({ success: true, employee: { ...safe, id: updated.ID } });
-});
-
 // GET /api/employees/:id/skills
-app.get('/api/employees/:id/skills', (req, res) => {
-  const skills = getSkills(req.params.id);
-  // Return in frontend format
-  const mapped = skills.map(s => ({
-    skillId:       s.SkillID,
-    selfRating:    parseInt(s.SelfRating) || 0,
-    managerRating: s.ManagerRating !== '' ? parseInt(s.ManagerRating) : null,
-    validated:     s.Validated === 'Yes',
-  }));
-  res.json(mapped);
+app.get('/api/employees/:id/skills', async (req, res) => {
+  // Pull the Skills row perfectly from the SkillsTable block using their ID
+  const { skills } = await getCloudDB();
+  const empSkillsRow = skills.find(s => s.employeeId === req.params.id || s['Employee ID'] === req.params.id || s.employeeName === req.params.id);
+  if (!empSkillsRow) return res.json([]);
+
+  const rawSkills = [
+    'Selenium', 'Appium', 'JMeter', 'Postman', 'JIRA', 'TestRail', 'Python', 'Java', 'JavaScript', 
+    'TypeScript', 'C#', 'SQL', 'API Testing', 'Mobile Testing', 'Performance Testing', 'Security Testing', 
+    'Database Testing', 'Banking', 'Healthcare', 'E-Commerce', 'Insurance', 'Telecom', 'Manual Testing', 
+    'Automation Testing', 'Regression Testing', 'UAT', 'Git', 'Jenkins', 'Docker', 'Azure DevOps', 
+    'ChatGPT/Prompt Engineering', 'AI Test Automation'
+  ];
+  
+  const extractedSkills = rawSkills.map((skName, i) => {
+    // Prevent Power Automate OData encoding bug from breaking C# reads
+    let rawRating = empSkillsRow[skName];
+    if (skName === 'C#' && rawRating === undefined) {
+      rawRating = empSkillsRow['C_x0023_'];
+    }
+
+    return {
+      skillId: 's' + (i+1),
+      skillName: skName,
+      selfRating: rawRating ? parseInt(rawRating) : 0,
+      managerRating: null,
+      validated: false
+    };
+  }).filter(s => s.selfRating > 0);
+
+  res.json(extractedSkills);
 });
 
 // PUT /api/employees/:id/skills
 app.put('/api/employees/:id/skills', async (req, res) => {
-  const { skills } = req.body;
-  if (!Array.isArray(skills)) return res.status(400).json({ error: 'skills must be an array.' });
   try {
-    await saveSkillsForEmployee(req.params.id, skills);
-
+    const { skills } = req.body;
+    
+    // Automatically calculate Capability properly!
     const rated = skills.filter(s => (s.selfRating || 0) > 0).length;
-    const cap   = Math.round((rated / 32) * 100);
-    const employees = getEmployees();
-    const idx = employees.findIndex(e => e.ID === req.params.id);
-    if (idx >= 0) {
-      employees[idx].OverallCapability = cap;
-      await saveEmployees(employees);
-    }
-    console.log(`[Skills] ✅ Saved ${skills.length} skills for ${req.params.id} | capability: ${cap}%`);
+    const cap = Math.round((rated / 32) * 100);
+    
+    console.log(`[Skills] ✅ Triggered async push for ${skills.length} skills. Computed Capability: ${cap}%`);
+    
+    const flattenedSkills = {};
+    skills.forEach(s => {
+      const name = s.skillName || s.skillId;
+      flattenedSkills[name] = s.selfRating || 0;
+    });
+
+    const { employees } = await getCloudDB();
+    const emp = employees.find(e => e.ID === req.params.id);
+
+    syncToCloud('SKILLS_UPDATED', {
+      employeeId: req.params.id,
+      employeeName: emp ? emp.Name : req.params.id,
+      skillCount: skills.length,
+      ...flattenedSkills
+    });
+
     res.json({ success: true, saved: skills.length, capability: cap });
   } catch (err) {
     console.error('[Skills] ❌ Error:', err.message);
@@ -252,13 +223,14 @@ app.put('/api/employees/:id/skills', async (req, res) => {
 // POST /api/employees/:id/submit
 app.post('/api/employees/:id/submit', async (req, res) => {
   try {
-    const employees = getEmployees();
-    const idx = employees.findIndex(e => e.ID === req.params.id);
-    if (idx < 0) return res.status(404).json({ error: 'Employee not found.' });
-    employees[idx].Submitted   = 'Yes';
-    employees[idx].SubmittedAt = new Date().toISOString();
-    await saveEmployees(employees);
-    console.log(`[Submit] ✅ Employee ${req.params.id} marked submitted`);
+    const { employees } = await getCloudDB();
+    const emp = employees.find(e => e.ID === req.params.id);
+    if (!emp) return res.status(404).json({ error: 'Employee not found in Cloud DB.' });
+    
+    // We completely disabled the syncToCloud here because the frontend calls /api/save THEN /api/submit!
+    // Pushing a second webhook here creates a duplicate, blank row in your Excel database.
+    console.log(`[Submit] ✅ Blocked double-write to Cloud for ${req.params.id}. (Already recorded in Skills sheet).`);
+
     res.json({ success: true });
   } catch (err) {
     console.error('[Submit] ❌ Error:', err.message);
@@ -267,8 +239,6 @@ app.post('/api/employees/:id/submit', async (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────
-readWorkbook();
 app.listen(PORT, () => {
-  console.log(`\n✅ Skill Navigator API running on http://localhost:${PORT}`);
-  console.log(`📊 Excel file: ${EXCEL_PATH}\n`);
+  console.log(`\n✅ Skill Navigator SERVERLESS CLOUD DB connected via Power Automate on port ${PORT}\n`);
 });

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Eye, Download, FileSpreadsheet, Users } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/ToastContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { getAllEmployees, computeCompletion, exportAllToExcel, exportEmployeeToExcel, upsertEmployee } from '@/lib/localDB';
 import { SKILLS } from '@/lib/mockData';
@@ -18,61 +18,43 @@ export default function EmployeeListPage() {
   const [sortBy, setSortBy] = useState<'name' | 'completion'>('completion');
   const [refreshTick, setRefreshTick] = useState(0);
 
-  // Sync employees from backend into localStorage on mount
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    (async () => {
-      const serverUp = await isServerAvailable();
-      if (!serverUp) return;
-      try {
-        const backendEmps = await apiGetAllEmployees();
-        for (const raw of backendEmps) {
-          // Backend returns BOTH Capital fields (ID, Name...) and aliased lowercase (id, name)
-          // Coalesce both so we handle any server version
-          const r = raw as any;
-          const empId = r.ID || r.id;
-          if (!empId) continue;
-
-          upsertEmployee({
-            id:                empId,
-            name:              r.Name              || r.name              || '',
-            email:             r.Email             || r.email             || '',
-            phone:             r.Phone             || r.phone             || '',
-            designation:       r.Designation       || r.designation       || '',
-            department:        r.Department        || r.department        || 'Quality Engineering',
-            location:          r.Location          || r.location          || '',
-            yearsIT:           Number(r.YearsIT    ?? r.yearsIT    ?? 0),
-            yearsZensar:       Number(r.YearsZensar?? r.yearsZensar?? 0),
-            primarySkill:      r.PrimarySkill      || r.primarySkill      || '',
-            primaryDomain:     r.PrimaryDomain     || r.primaryDomain     || '',
-            overallCapability: Number(r.OverallCapability ?? r.overallCapability ?? 0),
-            submitted:         r.Submitted === 'Yes' || r.submitted === 'Yes' || r.submitted === true,
-            resumeUploaded:    r.ResumeUploaded === 'Yes' || r.resumeUploaded === 'Yes' || r.resumeUploaded === true,
-            skills: SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
-          });
-
-          // Also sync their skills
-          try {
-            const skills = await apiGetSkills(empId);
-            if (skills.length > 0) {
-              const { saveSkillRatings } = await import('@/lib/localDB');
-              saveSkillRatings(empId, skills.map(s => ({
-                skillId:       s.skillId,
-                selfRating:    s.selfRating as ProficiencyLevel,
-                managerRating: s.managerRating as ProficiencyLevel | null,
-                validated:     s.validated,
-              })));
-            }
-          } catch { /* skip skill sync error */ }
-        }
-        setRefreshTick(t => t + 1);
-        console.log(`[Admin] Synced ${backendEmps.length} employees from backend`);
-      } catch (err) {
-        console.warn('[Admin] Backend sync failed, using localStorage:', err);
-      }
-    })();
-  }, []);
-
-  const employees = useMemo(() => getAllEmployees(), [refreshTick]);
+    let active = true;
+    setLoading(true);
+    getAllEmployees().then(data => {
+      if (!active) return;
+      const arr = data.employees || [];
+      const skillArr = data.skills || [];
+      const mapped = arr.map((e: any) => {
+        const row = skillArr.find((s: any) => s.employeeId === (e.ID || e.id) || s['Employee ID'] === (e.ID || e.id)) || {};
+        return {
+          id: e.ID || e.id,
+          name: e.Name || e.name || '',
+          email: e.Email || e.email || '',
+          phone: e.Phone || e.phone || '',
+          designation: e.Designation || e.designation || '',
+          department: e.Department || e.department || '',
+          primarySkill: e.PrimarySkill || e.primarySkill || '',
+          primaryDomain: e.PrimaryDomain || e.primaryDomain || '',
+          yearsIT: parseInt(e.YearsIT || e.yearsIT) || 0,
+          yearsZensar: parseInt(e.YearsZensar || e.yearsZensar) || 0,
+          submitted: e.Submitted === 'Yes' || e.submitted === true,
+          skills: SKILLS.map(sk => ({
+            skillId: sk.id,
+            selfRating: parseInt(row[sk.name] || row[sk.name === 'C#' ? 'C_x0023_' : sk.name] || '0') || 0,
+            managerRating: null,
+            validated: false
+          }))
+        };
+      });
+      setEmployees(mapped);
+      setLoading(false);
+    });
+    return () => { active = false; };
+  }, [refreshTick]);
   const primarySkills = [...new Set(employees.map(e => e.primarySkill))];
   const domains = [...new Set(employees.map(e => e.primaryDomain))];
 

@@ -127,24 +127,37 @@ export default function SkillMatrixPage() {
             <h1 style={{ fontSize: '30px', fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif", marginBottom: '4px' }}>Skill Matrix</h1>
             <p style={{ color: T.sub, fontSize: '14px' }}>Rate your proficiency across 32 skills in 7 categories</p>
           </div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button onClick={handleSave} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 20px', borderRadius: '9px', background: T.card, border: `1px solid ${T.bdr}`, color: '#60A5FA', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-              <Save size={15} /> Save Progress
-            </button>
-            {alreadySubmitted ? (
-              <button onClick={() => navigate('/employee/report')}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 22px', borderRadius: '9px', background: 'linear-gradient(135deg,#10B981,#059669)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '13px', cursor: 'pointer', boxShadow: '0 0 20px rgba(16,185,129,0.35)' }}>
-                <CheckCircle2 size={15} /> Already Submitted — View Report
+          {!alreadySubmitted && (
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button onClick={handleSave} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 20px', borderRadius: '9px', background: T.card, border: `1px solid ${T.bdr}`, color: '#60A5FA', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+                <Save size={15} /> Save Progress
               </button>
-            ) : (
               <button onClick={handleSubmit} disabled={submitting} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 22px', borderRadius: '9px', background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '13px', cursor: submitting ? 'not-allowed' : 'pointer', boxShadow: '0 0 20px rgba(59,130,246,0.35)', opacity: submitting ? 0.7 : 1 }}>
-                <Send size={15} /> {submitting ? 'Submitting...' : 'Submit & Get AI Report'}
+                <Send size={15} /> {submitting ? 'Submitting...' : 'Submit Final'}
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* ── Completion Bar ─────────────────────────────────────────── */}
+        {alreadySubmitted ? (
+          <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: '18px', padding: '60px 20px', textAlign: 'center', animation: 'fadeIn 0.5s ease' }}>
+            <CheckCircle2 size={80} color="#10B981" style={{ margin: '0 auto 20px' }} />
+            <h2 style={{ fontSize: '32px', fontWeight: 800, marginBottom: '12px', color: T.text, fontFamily: "'Space Grotesk',sans-serif" }}>Your Skills Have Been Submitted</h2>
+            <p style={{ fontSize: '16px', color: T.sub, maxWidth: '500px', margin: '0 auto 30px' }}>
+              You've successfully completed and submitted your Zensar Skill Matrix. Your capability profile is now locked for evaluation and AI integration.
+            </p>
+            <div style={{ display: 'flex', gap: '16px', justifyContent: 'center' }}>
+              <button onClick={() => navigate('/employee/report')} style={{ padding: '12px 28px', borderRadius: '10px', background: 'linear-gradient(135deg,#10B981,#059669)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer', boxShadow: '0 0 24px rgba(16,185,129,0.35)' }}>
+                View Full Skill Report
+              </button>
+              <button onClick={() => navigate('/employee/ai')} style={{ padding: '12px 28px', borderRadius: '10px', background: T.card, border: `1px solid ${T.bdr}`, color: T.text, fontWeight: 600, fontSize: '15px', cursor: 'pointer' }}>
+                Go to AI Intelligence
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* ── Completion Bar ─────────────────────────────────────────── */}
         <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: '18px', padding: '24px', marginBottom: '28px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '10px' }}>
             <div>
@@ -360,13 +373,17 @@ export default function SkillMatrixPage() {
               <Save size={16} /> Save Progress
             </button>
             <button onClick={handleSubmit} disabled={submitting} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 28px', borderRadius: '10px', background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: submitting ? 'not-allowed' : 'pointer', boxShadow: '0 0 24px rgba(59,130,246,0.4)', opacity: submitting ? 0.7 : 1 }}>
-              <Send size={16} /> Submit & View AI Report
+              <Send size={16} /> Submit Final
             </button>
           </div>
         </div>
+        </>
+        )}
       </div>
 
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}
+      </style>
     </div>
   );
 }

@@ -1,337 +1,543 @@
+/**
+ * SkillReportPage.tsx — Skills Report (/employee/report)
+ *
+ * Sections:
+ * 1. Hero stat cards (instant)
+ * 2. Radar chart — 7 categories (instant)
+ * 3. Skill heatmap — 32 skills (instant)
+ * 4. Horizontal grouped bar chart — categories (instant)
+ * 5. AI narrative — 3 insight cards (LLM, fallback if offline)
+ * 6. Strength vs Gap table + PDF download
+ */
 import { useState, useEffect } from 'react';
-import { Brain, TrendingUp, AlertCircle, Lightbulb, Loader2, BarChart3, CheckCircle2, Star, RefreshCw } from 'lucide-react';
-import { useAuth } from '@/lib/authContext';
-import { getEmployee, computeCompletion, getIncompleteSkills } from '@/lib/localDB';
-import { generateSkillReport } from '@/lib/ollamaAI';
-import { checkOllamaStatus } from '@/lib/ollamaAI';
-import { SKILLS } from '@/lib/mockData';
-import { useDark, mkTheme } from '@/lib/themeContext';
-import { apiSaveSkills, apiSubmit, isServerAvailable } from '@/lib/api';
-import { toast } from 'sonner';
+import { useApp } from '@/lib/AppContext';
+import { SKILL_NAMES, CATEGORIES } from '@/lib/appStore';
+import { callLLM } from '@/lib/llm';
+import {
+  Chart as ChartJS,
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  RadarController,
+  BarController,
+} from 'chart.js';
+import { Radar, Bar } from 'react-chartjs-2';
 
+ChartJS.register(
+  RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend,
+  CategoryScale, LinearScale, BarElement, RadarController, BarController,
+);
+
+// ── Helpers ──────────────────────────────────────
+const LEVEL_COLOR = ['#374151','#ef4444','#f59e0b','#22c55e'];
+const LEVEL_LABEL = ['—','Beginner','Intermediate','Expert'];
 const CAT_COLOR: Record<string, string> = {
-  Tool: '#3B82F6', Technology: '#8B5CF6', Application: '#10B981',
-  Domain: '#F59E0B', TestingType: '#EF4444', DevOps: '#06B6D4', AI: '#EC4899',
+  Tool:'#3B82F6', Technology:'#8B5CF6', Application:'#10B981',
+  Domain:'#F59E0B', TestingType:'#EF4444', DevOps:'#06B6D4', AI:'#EC4899',
 };
-const LVL_COLOR: Record<number, string> = { 0: '#4B5563', 1: '#D97706', 2: '#2563EB', 3: '#059669' };
-const LVL_LABEL: Record<number, string> = { 0: 'Not Rated', 1: 'Beginner', 2: 'Intermediate', 3: 'Expert' };
 
-interface Report {
-  strengths: string[];
-  gaps: string[];
-  suggestions: string[];
-  summary: string;
+// ── Count-up hook ─────────────────────────────────
+function useCountUp(target: number) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    let cur = 0;
+    const inc = target / (1000 / 16);
+    const t = setInterval(() => {
+      cur += inc;
+      if (cur >= target) { setVal(target); clearInterval(t); }
+      else setVal(Math.floor(cur));
+    }, 16);
+    return () => clearInterval(t);
+  }, [target]);
+  return val;
 }
 
-const REPORT_CACHE_KEY = (id: string) => `skill_nav_report_${id}`;
+// ── Skeleton ──────────────────────────────────────
+const Skeleton = ({ h = 20, w = '100%', br = 8 }: { h?: number; w?: number | string; br?: number }) => (
+  <div style={{
+    height: h, width: w, borderRadius: br,
+    background: 'linear-gradient(90deg,#16161f 25%,#1e1e2a 50%,#16161f 75%)',
+    backgroundSize: '200% 100%',
+    animation: 'shimmer 1.5s infinite',
+  }} />
+);
 
-function loadCachedReport(empId: string): Report | null {
-  try {
-    const raw = localStorage.getItem(REPORT_CACHE_KEY(empId));
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
+// ── Card ──────────────────────────────────────────
+const Card = ({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) => (
+  <div style={{
+    background: '#16161f', border: '1px solid rgba(255,255,255,0.06)',
+    borderRadius: 16, padding: 24,
+    transition: 'all 0.2s',
+    ...style,
+  }}>
+    {children}
+  </div>
+);
+
+// ── Section title ─────────────────────────────────
+const STitle = ({ children }: { children: React.ReactNode }) => (
+  <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 20 }}>{children}</div>
+);
+
+// ─────────────────────────────────────────────────
+// HERO STATS
+// ─────────────────────────────────────────────────
+function HeroStats({ data }: { data: any }) {
+  const cmp  = useCountUp(data.completion);
+  const exp  = useCountUp(data.expertCount);
+  const gaps = useCountUp(data.gapCount);
+
+  const qeLevel =
+    data.completion >= 80 ? 'Senior QE' :
+    data.completion >= 50 ? 'Mid QE' :
+    data.completion >= 25 ? 'Junior QE' : 'Associate';
+
+  const cards = [
+    { label: 'Completion',    value: cmp,       suffix:'%', color:'#00A3E0' },
+    { label: 'Expert Skills', value: exp,       suffix:'',  color:'#22c55e' },
+    { label: 'Skill Gaps',    value: gaps,      suffix:'',  color:'#f59e0b' },
+    { label: 'QE Readiness',  value: qeLevel,   suffix:'',  color:'#c084fc', isStr: true },
+  ];
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16, marginBottom:24 }}>
+      {cards.map(c => (
+        <Card key={c.label} style={{ textAlign:'center' }}>
+          <div style={{
+            fontFamily:'Inter,sans-serif', fontSize: c.isStr ? 24 : 42,
+            fontWeight:900, color:c.color, lineHeight:1,
+            textShadow:`0 0 24px ${c.color}50`,
+          }}>
+            {c.isStr ? c.value : `${c.value}${c.suffix}`}
+          </div>
+          <div style={{ fontSize:13, color:'rgba(255,255,255,0.5)', marginTop:8 }}>{c.label}</div>
+        </Card>
+      ))}
+    </div>
+  );
 }
 
-function saveReportCache(empId: string, report: Report) {
-  try { localStorage.setItem(REPORT_CACHE_KEY(empId), JSON.stringify(report)); } catch { /* ignore */ }
+// ─────────────────────────────────────────────────
+// RADAR CHART
+// ─────────────────────────────────────────────────
+function RadarSection({ data }: { data: any }) {
+  const radarData = {
+    labels: Object.keys(CATEGORIES),
+    datasets: [
+      {
+        label:'You', fill:true,
+        data: Object.keys(CATEGORIES).map(c => parseFloat(((data.categoryAverages[c]||0)/3*100).toFixed(1))),
+        backgroundColor:'rgba(107,45,139,0.2)', borderColor:'#6B2D8B', borderWidth:2.5,
+        pointBackgroundColor:'#9B4DBB', pointRadius:5,
+      },
+      {
+        label:'Avg QA', fill:true,
+        data: Object.keys(CATEGORIES).map(() => 66.6),
+        backgroundColor:'rgba(255,255,255,0.04)', borderColor:'rgba(255,255,255,0.25)',
+        borderWidth:1.5, borderDash:[5,5], pointRadius:0,
+      },
+      {
+        label:'Senior Target', fill:false,
+        data: Object.keys(CATEGORIES).map(() => 100),
+        backgroundColor:'transparent', borderColor:'rgba(0,163,224,0.4)',
+        borderWidth:1.5, borderDash:[3,3], pointRadius:0,
+      },
+    ],
+  };
+  const opts: any = {
+    responsive:true, maintainAspectRatio:false, animation:{ duration:1200 },
+    scales: {
+      r: {
+        min:0, max:100,
+        ticks:{ display:false },
+        grid:{ color:'rgba(255,255,255,0.06)' },
+        angleLines:{ color:'rgba(255,255,255,0.06)' },
+        pointLabels:{ color:'rgba(255,255,255,0.7)', font:{ size:12, family:'Inter' } },
+      },
+    },
+    plugins: {
+      legend:{ labels:{ color:'rgba(255,255,255,0.5)', font:{ size:11 }, boxWidth:12 } },
+      tooltip:{ backgroundColor:'rgba(10,10,26,0.95)', borderColor:'rgba(107,45,139,0.4)', borderWidth:1 },
+    },
+  };
+  return (
+    <Card style={{ marginBottom:24 }}>
+      <STitle>🕸️ 7-Category Radar Analysis</STitle>
+      <div style={{ height:320 }}><Radar data={radarData} options={opts} /></div>
+    </Card>
+  );
 }
 
-export default function SkillReportPage() {
-  const { employeeId, name } = useAuth();
-  const emp = employeeId && employeeId !== 'new' ? getEmployee(employeeId) : null;
-  const ratings = emp?.skills ?? [];
-  const completion = computeCompletion(ratings);
-  const incomplete = getIncompleteSkills(ratings);
-  const isSubmitted = emp?.submitted === true;
+// ─────────────────────────────────────────────────
+// SKILL HEATMAP
+// ─────────────────────────────────────────────────
+function HeatmapSection({ ratings }: { ratings: Record<string,number> }) {
+  const [hovered, setHovered] = useState<string | null>(null);
+  
+  return (
+    <Card style={{ marginBottom:32, overflow:'hidden', position:'relative' }}>
+      <div style={{ position:'absolute', top:0, right:0, width:300, height:300, background:'radial-gradient(circle, rgba(107,45,139,0.15) 0%, transparent 70%)', pointerEvents:'none' }} />
+      <STitle>🗺️ 32-Skill Capability Heatmap</STitle>
+      
+      <div style={{ display:'flex', flexDirection:'column', gap:28 }}>
+        {Object.entries(CATEGORIES).map(([cat, skills]) => (
+          <div key={cat}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+              <div style={{ width:10, height:10, borderRadius:3, background:CAT_COLOR[cat] }} />
+              <div style={{ fontSize:15, color:'#fff', fontWeight:800, textTransform:'uppercase', letterSpacing:'1px' }}>{cat}</div>
+              <div style={{ flex:1, height:1, background:'rgba(255,255,255,0.05)' }} />
+            </div>
+            
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:10 }}>
+              {skills.map(skill => {
+                const lvl = ratings[skill] || 0;
+                const isHovered = hovered === skill;
+                const bg = [
+                  'rgba(255,255,255,0.03)',
+                  'rgba(239,68,68,0.15)',
+                  'rgba(245,158,11,0.15)',
+                  'rgba(34,197,94,0.15)',
+                ][lvl];
+                const border = [
+                  'rgba(255,255,255,0.08)',
+                  'rgba(239,68,68,0.4)',
+                  'rgba(245,158,11,0.4)',
+                  'rgba(34,197,94,0.4)',
+                ][lvl];
 
-  const [report, setReport]     = useState<Report | null>(() => {
-    if (!employeeId) return null;
-    const cached = loadCachedReport(employeeId);
-    // Discard very short/generic reports so the new rich engine runs
-    if (cached && cached.strengths?.length > 0 && cached.suggestions?.length >= 3) return cached;
-    return null;
-  });
-  const [loading, setLoading]   = useState(!report); // skip loading if cached
-  const [loadingMsg, setLoadingMsg] = useState('Generating your report...');
-  const [aiUsed, setAiUsed]     = useState(false);
+                return (
+                  <div
+                    key={skill}
+                    onMouseEnter={() => setHovered(skill)}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{
+                      background: isHovered ? bg.replace('0.15', '0.25').replace('0.03', '0.06') : bg,
+                      border: `1px solid ${border}`,
+                      borderRadius: 12, padding: '12px 14px',
+                      display: 'flex', flexDirection: 'column', gap: 6,
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      transform: isHovered ? 'translateY(-2px)' : 'none',
+                      boxShadow: isHovered && lvl > 0 ? `0 6px 16px ${LEVEL_COLOR[lvl]}30` : 'none',
+                      cursor: 'default',
+                    }}
+                  >
+                    <div style={{ fontSize:13, fontWeight:700, color:'#fff', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                      {skill}
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                      <div style={{ fontSize:11, fontWeight:600, color: LEVEL_COLOR[lvl] }}>
+                        {LEVEL_LABEL[lvl]}
+                      </div>
+                      <div style={{ display:'flex', gap:3 }}>
+                        {[1, 2, 3].map(dot => (
+                          <div key={dot} style={{ 
+                            width: 6, height: 6, borderRadius: '50%', 
+                            background: dot <= lvl ? LEVEL_COLOR[lvl] : 'rgba(255,255,255,0.1)' 
+                          }} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {/* Legend */}
+      <div style={{ display:'flex', gap:24, marginTop:32, paddingTop:24, borderTop:'1px solid rgba(255,255,255,0.06)', flexWrap:'wrap' }}>
+        {['Not Rated','Beginner','Intermediate','Expert'].map((l,i) => (
+          <div key={l} style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ display:'flex', gap:3, opacity: i===0 ? 0.3 : 1 }}>
+              {[1,2,3].map(dot => (
+                <div key={dot} style={{ width:6, height:6, borderRadius:'50%', background: dot<=i ? LEVEL_COLOR[i] : 'rgba(255,255,255,0.2)' }} />
+              ))}
+            </div>
+            <span style={{ fontSize:12, fontWeight:600, color: i===0 ? 'rgba(255,255,255,0.4)' : '#fff' }}>{l}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
-  const [syncing, setSyncing] = useState(false);
-  const [synced, setSynced]   = useState(false);
+// ─────────────────────────────────────────────────
+// BAR CHART
+// ─────────────────────────────────────────────────
+function BarSection({ data }: { data: any }) {
+  const QA_AVG: Record<string,number>  = { Tool:2.1, Technology:2.0, Application:2.3, Domain:1.8, TestingType:2.2, DevOps:1.9, AI:1.5 };
+  const SENIOR: Record<string,number>  = { Tool:2.8, Technology:2.7, Application:2.9, Domain:2.5, TestingType:2.8, DevOps:2.6, AI:2.4 };
+  const cats = Object.keys(CATEGORIES);
+  const barData = {
+    labels: cats,
+    datasets: [
+      { label:'You', data:cats.map(c=>data.categoryAverages[c]||0), backgroundColor:'rgba(107,45,139,0.8)', borderRadius:6 },
+      { label:'QA Avg', data:cats.map(c=>QA_AVG[c]), backgroundColor:'rgba(255,255,255,0.15)', borderRadius:6 },
+      { label:'Senior', data:cats.map(c=>SENIOR[c]), backgroundColor:'rgba(0,163,224,0.5)', borderRadius:6 },
+    ],
+  };
+  const opts: any = {
+    responsive:true, maintainAspectRatio:false, indexAxis:'y' as const, animation:{ duration:1000 },
+    scales: {
+      x:{ min:0, max:3, grid:{ color:'rgba(255,255,255,0.05)' }, ticks:{ color:'rgba(255,255,255,0.5)' } },
+      y:{ grid:{ display:false }, ticks:{ color:'rgba(255,255,255,0.7)' } },
+    },
+    plugins: {
+      legend:{ labels:{ color:'rgba(255,255,255,0.6)', boxWidth:12 } },
+      tooltip:{ backgroundColor:'rgba(10,10,26,0.95)' },
+    },
+  };
+  return (
+    <Card style={{ marginBottom:24 }}>
+      <STitle>📊 Category Benchmark</STitle>
+      <div style={{ height:280 }}><Bar data={barData} options={opts} /></div>
+    </Card>
+  );
+}
 
-  const { dark } = useDark();
-  const T = mkTheme(dark);
-
-  // Sync locally-stored skills to the Excel backend
-  async function syncToExcel() {
-    if (!employeeId || !emp) return;
-    setSyncing(true);
-    try {
-      const serverUp = await isServerAvailable();
-      if (!serverUp) { toast.error('Backend server is not running.'); setSyncing(false); return; }
-      const payload = (emp.skills ?? []).map(r => ({
-        skillId:       r.skillId,
-        skillName:     SKILLS.find(s => s.id === r.skillId)?.name     || r.skillId,
-        category:      SKILLS.find(s => s.id === r.skillId)?.category || '',
-        selfRating:    r.selfRating,
-        managerRating: r.managerRating,
-        validated:     r.validated,
-      }));
-      await apiSaveSkills(employeeId, payload);
-      await apiSubmit(employeeId);
-      setSynced(true);
-      toast.success('✅ Skills synced to Excel successfully!');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Sync failed — is Excel still open?');
-    } finally {
-      setSyncing(false);
-    }
-  }
+// ─────────────────────────────────────────────────
+// AI NARRATIVE
+// ─────────────────────────────────────────────────
+function AISection({ data }: { data: any }) {
+  const [insights, setInsights] = useState<{ positioning:string; edge:string; milestone:string } | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // If we already have a cached report and employee is submitted, show it immediately
-    if (report && isSubmitted) return;
-    // Otherwise generate
-    generateReport();
+    const load = async () => {
+      const prompt = `You are a career coach for Zensar QE engineers.
+Name: ${data.user?.Name}
+Expert Skills (${data.expertCount}): ${data.expertSkills.join(', ')}
+Gap Skills: ${data.gapSkills.map((g:any)=>g.skill).join(', ')}
+Completion: ${data.completion}%
+
+Return ONLY valid JSON with exactly these keys:
+{
+  "positioning": "2 sentences on market positioning",
+  "edge": "2 sentences on competitive advantages",
+  "milestone": "2 sentences on next career milestone"
+}`;
+      try {
+        const res = await callLLM(prompt);
+        if (res && res.data) {
+          setInsights(res.data);
+          setLoading(false);
+          return;
+        }
+      } catch {}
+      // Fallback if LLM offline
+      setInsights({
+        positioning: `With ${data.expertCount} Expert-level skills and ${data.completion}% matrix completion, ${data.user?.Name} occupies a ${data.completion >= 70 ? 'strong senior' : 'growing mid-level'} position in the Zensar QE talent pool. Key differentiators include expertise in ${data.expertSkills.slice(0,3).join(', ')}.`,
+        edge: `Your Expert mastery of ${data.expertSkills.slice(0,4).join(', ')} provides a tangible advantage in ${data.expertSkills.includes('AI Test Automation') ? 'next-gen AI-driven QA pipelines' : 'enterprise test automation initiatives'}. This profile matches Zensar's growing demand for ${data.categoryAverages['AI'] >= 2 ? 'AI-augmented testing talent' : 'automation-first testing engineers'}.`,
+        milestone: `Advancing ${data.gapSkills.slice(0,2).map((g:any)=>g.skill).join(' and ')} to Expert level will unlock Senior QE Engineer readiness. Consider ISTQB Advanced or ${data.expertSkills.includes('Docker') ? 'AWS DevOps' : 'Azure DevOps'} certification as the next growth vector.`,
+      });
+      setLoading(false);
+    };
+    load();
   }, []);
 
-  async function generateReport() {
-    setLoading(true);
-    setLoadingMsg('🔍 Preparing smart analysis...');
-
-    const status = await checkOllamaStatus();
-    let generated: Report;
-
-    if (status.available && status.model) {
-      setAiUsed(true);
-      setLoadingMsg('🧠 Generating AI analysis...');
-      try {
-        generated = await generateSkillReport(emp?.name || name || 'Employee', ratings, status.model);
-      } catch {
-        generated = fallbackReport();
-      }
-    } else {
-      setLoadingMsg('📊 Generating smart report...');
-      await new Promise(r => setTimeout(r, 800));
-      generated = fallbackReport();
-    }
-
-    setReport(generated);
-    // Cache the report so future visits (after logout/login) show it instantly
-    if (employeeId) saveReportCache(employeeId, generated);
-    setLoading(false);
-  }
-
-  function fallbackReport(): Report {
-    const level3 = SKILLS.filter(s => ratings.find(r => r.skillId === s.id)?.selfRating === 3);
-    const level0 = SKILLS.filter(s => !ratings.find(r => r.skillId === s.id)?.selfRating || ratings.find(r => r.skillId === s.id)?.selfRating === 0);
-    return {
-      strengths: level3.length > 0
-        ? level3.slice(0, 3).map(s => `Strong expertise in ${s.name} — a key QE skill`)
-        : ['Starting your QE journey with a fresh assessment', 'Ready to build a comprehensive skill profile', 'Focus on rating all 32 skills for a complete picture'],
-      gaps: level0.slice(0, 3).map(s => `${s.name} (${s.category}) has not been assessed yet`),
-      suggestions: [
-        'Complete all 32 skills across 7 categories for a comprehensive profile',
-        'Focus on AI testing skills (ChatGPT, AI Test Automation) as they are in highest demand',
-        'Get manager validation on your key skills to add credibility to your profile',
-        'Set a 90-day milestone: move 3 skills from Beginner to Intermediate level',
-        "Explore Zensar's internal certification programs aligned with your gap areas",
-      ],
-      summary: `You have completed ${completion}% of your skill matrix with ${ratings.filter(r => r.selfRating > 0).length} of 32 skills rated. ${level3.length > 0 ? `Your strongest areas are ${level3.slice(0, 2).map(s => s.name).join(' and ')}.` : ''} Focus on closing the ${level0.length} unrated skills to get a complete picture of your QE capability.`,
-    };
-  }
-
-  // Category breakdown
-  const categories = [...new Set(SKILLS.map(s => s.category))];
-  const catStats = categories.map(cat => {
-    const catSkills = SKILLS.filter(s => s.category === cat);
-    const rated = catSkills.filter(s => (ratings.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0);
-    const avgLevel = rated.length > 0
-      ? rated.reduce((sum, s) => sum + (ratings.find(r => r.skillId === s.id)?.selfRating ?? 0), 0) / rated.length
-      : 0;
-    return { cat, total: catSkills.length, rated: rated.length, avgLevel: Math.round(avgLevel * 10) / 10 };
-  });
+  const cards = [
+    { key:'positioning', icon:'🎯', title:'Market Positioning' },
+    { key:'edge',        icon:'⚡', title:'Your Competitive Edge' },
+    { key:'milestone',   icon:'🚀', title:'Next Career Milestone' },
+  ];
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, fontFamily: "'Inter', sans-serif", transition: 'background 0.3s' }}>
-      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '36px 20px 80px' }}>
+    <Card style={{ marginBottom:24 }}>
+      <STitle>🤖 AI Career Narrative</STitle>
+      <div style={{ display:'grid', gap:14 }}>
+        {loading
+          ? [1,2,3].map(i => <div key={i} style={{ borderRadius:12, overflow:'hidden' }}><Skeleton h={80} /></div>)
+          : cards.map(c => (
+            <div key={c.key} style={{
+              background:'rgba(107,45,139,0.1)', border:'1px solid rgba(107,45,139,0.25)',
+              borderRadius:12, padding:'14px 18px',
+            }}>
+              <div style={{ fontWeight:700, fontSize:14, marginBottom:8 }}>{c.icon} {c.title}</div>
+              <div style={{ fontSize:14, lineHeight:1.7, color:'rgba(255,255,255,0.8)' }}>
+                {(insights as any)?.[c.key]}
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </Card>
+  );
+}
 
-        {/* Header */}
-        <div style={{ marginBottom: '36px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '6px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: 40, height: 40, borderRadius: '12px', background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Brain size={20} color="#fff" />
-              </div>
-              <h1 style={{ fontSize: '26px', fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif" }}>AI Skill Report</h1>
-            </div>
-            {/* Sync to Excel button — shown when not yet synced */}
-            {!synced && (
-              <button onClick={syncToExcel} disabled={syncing} style={{
-                display: 'inline-flex', alignItems: 'center', gap: '7px',
-                padding: '9px 18px', borderRadius: '9px',
-                background: syncing ? 'rgba(59,130,246,0.1)' : 'rgba(16,185,129,0.12)',
-                border: `1px solid ${syncing ? 'rgba(59,130,246,0.3)' : 'rgba(16,185,129,0.4)'}`,
-                color: syncing ? '#60A5FA' : '#34D399',
-                fontWeight: 700, fontSize: '13px', cursor: syncing ? 'not-allowed' : 'pointer',
-              }}>
-                <RefreshCw size={14} style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }} />
-                {syncing ? 'Syncing...' : 'Sync to Excel'}
-              </button>
-            )}
-            {synced && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '9px', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', color: '#34D399', fontSize: '13px', fontWeight: 600 }}>
-                <CheckCircle2 size={14} /> Synced to Excel
-              </div>
-            )}
+// ─────────────────────────────────────────────────
+// STRENGTH vs GAP TABLE
+// ─────────────────────────────────────────────────
+function StrengthGapTable({ data }: { data: any }) {
+  const handlePrint = () => window.print();
+  return (
+    <Card>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12 }}>
+        <STitle>💪 Strengths vs Gaps</STitle>
+        <button onClick={handlePrint} className="no-print" style={{
+          padding:'8px 18px', borderRadius:10, border:'none', cursor:'pointer',
+          background:'linear-gradient(135deg,#6B2D8B,#00A3E0)', color:'#fff',
+          fontWeight:600, fontSize:13, fontFamily:'Inter,sans-serif',
+        }}>
+          📥 Download PDF
+        </button>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:32 }}>
+        {/* STRENGTHS */}
+        <div>
+          <div style={{ color:'#10B981', fontWeight:800, fontSize:18, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ background:'rgba(16,185,129,0.2)', padding:'6px', borderRadius:'10px' }}>🚀</div> Your Core Strengths
           </div>
-          <p style={{ color: T.sub, fontSize: '14px' }}>
-            {aiUsed ? '🧠 AI-powered report' : '📊 Smart report generated'} · {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
-          {isSubmitted && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '20px', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', color: '#10B981', fontSize: '12px', fontWeight: 700, marginTop: '8px' }}>
-              <CheckCircle2 size={13} /> Submitted
-            </div>
-          )}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:12 }}>
+            {data.expertSkills.length > 0
+              ? data.expertSkills.map((s:string, i:number) => {
+                  const hue = (i * 45) % 360;
+                  return (
+                    <div key={s} style={{
+                      padding:'14px 16px', borderRadius:16,
+                      background: `linear-gradient(135deg, hsla(${hue}, 80%, 60%, 0.1), hsla(${hue + 40}, 80%, 60%, 0.1))`,
+                      border: `1px solid hsla(${hue}, 80%, 60%, 0.3)`,
+                      boxShadow: `0 8px 32px hsla(${hue}, 80%, 60%, 0.05)`,
+                      position: 'relative', overflow: 'hidden',
+                      transition: 'transform 0.2s',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                      <div style={{ fontSize:15, fontWeight:800, color:'#fff', marginBottom:4, whiteSpace:'nowrap', textOverflow:'ellipsis', overflow:'hidden' }}>{s}</div>
+                      <div style={{ padding: '2px 8px', background:'rgba(16,185,129,0.2)', color:'#10B981', fontSize:10, fontWeight:700, borderRadius:20, display:'inline-block' }}>✓ EXPERT</div>
+                      
+                      {/* Decorative glossy element */}
+                      <div style={{ position:'absolute', top: -10, right: -10, width: 40, height: 40, borderRadius:'50%', background: `hsla(${hue}, 80%, 60%, 0.2)`, filter:'blur(10px)' }} />
+                    </div>
+                  );
+              })
+              : <div style={{ color:'rgba(255,255,255,0.4)', fontSize:14, gridColumn:'1/-1', textAlign:'center', padding:'40px 0' }}>Rate skills to see strengths</div>
+            }
+          </div>
         </div>
 
-        {/* Loading */}
-        {loading && (
-          <div style={{ textAlign: 'center', padding: '80px 20px' }}>
-            <Loader2 size={48} color="#3B82F6" style={{ margin: '0 auto 20px', animation: 'spin 1s linear infinite' }} />
-            <div style={{ fontSize: '18px', fontWeight: 600, color: T.text, marginBottom: '8px' }}>{loadingMsg}</div>
-            <div style={{ color: T.sub, fontSize: '14px' }}>Analyzing your 32 skills across 7 categories...</div>
+        {/* GAPS */}
+        <div>
+          <div style={{ color:'#F59E0B', fontWeight:800, fontSize:18, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
+            <div style={{ background:'rgba(245,158,11,0.2)', padding:'6px', borderRadius:'10px' }}>🎯</div> Areas for Growth
           </div>
-        )}
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {data.gapSkills.length > 0
+              ? data.gapSkills.map((g:any, i:number) => (
+                <div key={g.skill} style={{
+                  display:'flex', alignItems:'center', gap:14,
+                  padding:'12px 16px', borderRadius:14,
+                  background: 'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)',
+                  transition: 'background 0.2s', cursor: 'default'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                >
+                  <div style={{ 
+                    width: 32, height: 32, borderRadius: 10, display:'flex', alignItems:'center', justifyContent:'center',
+                    background: g.level === 1 ? 'rgba(239,68,68,0.2)' : 'rgba(245,158,11,0.2)',
+                    color: g.level === 1 ? '#ef4444' : '#f59e0b', fontSize: 13, fontWeight: 800
+                  }}>
+                    {g.level === 1 ? 'L1' : 'L2'}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:'#e2e8f0', marginBottom:2 }}>{g.skill}</div>
+                    <div style={{ width:'100%', height:4, borderRadius:4, background:'rgba(255,255,255,0.1)' }}>
+                      <div style={{ height:'100%', borderRadius:4, width: g.level === 1 ? '33%' : '66%', background: g.level === 1 ? '#ef4444' : '#f59e0b' }} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize:11, fontWeight:600, color: g.level === 1 ? '#f87171' : '#fbbf24', minWidth:80, textAlign:'right' }}>
+                    {g.level === 1 ? 'Beginner' : 'Intermediate'}
+                  </div>
+                </div>
+              ))
+              : (
+                <div style={{ textAlign:'center', padding:'40px 20px', background:'rgba(16,185,129,0.05)', borderRadius:16, border:'1px solid rgba(16,185,129,0.2)' }}>
+                  <div style={{ fontSize:32, marginBottom:8 }}>🏆</div>
+                  <div style={{ color:'#10B981', fontWeight:800, fontSize:16 }}>Master Level Achieved</div>
+                  <div style={{ color:'rgba(255,255,255,0.5)', fontSize:13, marginTop:4 }}>All your rated skills are at Expert level!</div>
+                </div>
+              )
+            }
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
-        {!loading && report && (
+// ─────────────────────────────────────────────────
+// EMPTY STATE
+// ─────────────────────────────────────────────────
+function EmptyState() {
+  return (
+    <div style={{ textAlign:'center', padding:'80px 20px' }}>
+      <div style={{ fontSize:64, marginBottom:16 }}>📊</div>
+      <div style={{ fontWeight:700, fontSize:24, marginBottom:8 }}>No Skills Rated Yet</div>
+      <div style={{ color:'rgba(255,255,255,0.5)', marginBottom:24 }}>Complete your Skill Matrix to see your full report</div>
+      <a href="/employee/skills" style={{
+        display:'inline-block', padding:'12px 28px', borderRadius:12,
+        background:'linear-gradient(135deg,#6B2D8B,#00A3E0)',
+        color:'#fff', fontWeight:700, textDecoration:'none',
+      }}>
+        Go to My Skills →
+      </a>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────
+export default function SkillReportPage() {
+  const { data, isLoading } = useApp();
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#0a0a0f', color:'#fff', fontFamily:'Inter,sans-serif', padding:'32px 20px 80px', animation:'fadeIn 0.3s ease' }}>
+      <div style={{ maxWidth:1100, margin:'0 auto' }}>
+        <div style={{ marginBottom:28 }}>
+          <h1 style={{ fontFamily:'Inter,sans-serif', fontWeight:800, fontSize:'clamp(20px,3vw,30px)', margin:0 }}>Skills Report</h1>
+          <p style={{ color:'rgba(255,255,255,0.5)', fontSize:14, margin:'4px 0 0' }}>
+            Your complete QE skill profile · Zensar Technologies
+          </p>
+        </div>
+
+        {isLoading ? (
+          <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+            {[1,2,3,4].map(i => <div key={i} style={{ borderRadius:16, overflow:'hidden' }}><Skeleton h={120} /></div>)}
+          </div>
+        ) : !data?.hasSkills ? (
+          <EmptyState />
+        ) : (
           <>
-            {/* ── Completion Score Card ─────────────────────── */}
-            <div style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.12), rgba(139,92,246,0.12))', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '20px', padding: '28px', marginBottom: '24px', display: 'flex', flexWrap: 'wrap', gap: '28px', alignItems: 'center' }}>
-              <div style={{ textAlign: 'center', flexShrink: 0 }}>
-                <div style={{ width: 120, height: 120, borderRadius: '50%', background: `conic-gradient(#3B82F6 ${completion * 3.6}deg, rgba(255,255,255,0.07) 0)`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                  <div style={{ width: 90, height: 90, borderRadius: '50%', background: dark ? '#050B18' : '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ fontSize: '26px', fontWeight: 800, color: T.text }}>{completion}%</span>
-                    <span style={{ fontSize: '9px', color: T.muted }}>COMPLETE</span>
-                  </div>
-                </div>
-                <div style={{ color: T.muted, fontSize: '12px' }}>{ratings.filter(r => r.selfRating > 0).length}/{SKILLS.length} skills rated</div>
-              </div>
-              <div style={{ flex: 1, minWidth: '240px' }}>
-                <div style={{ fontSize: '15px', color: T.text, lineHeight: 1.75, marginBottom: '14px' }}>{report.summary}</div>
-                {incomplete.length > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}>
-                    <AlertCircle size={14} color="#F87171" />
-                    <span style={{ color: '#FCA5A5', fontSize: '12px', fontWeight: 500 }}>{incomplete.length} skills not yet rated</span>
-                  </div>
-                )}
-              </div>
+            <HeroStats data={data} />
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 }}>
+              <RadarSection data={data} />
+              <BarSection data={data} />
             </div>
-
-            {/* ── Category Breakdown ─────────────────────────── */}
-            <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: '18px', padding: '24px', marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
-                <BarChart3 size={18} color="#60A5FA" /><span style={{ fontWeight: 700, fontSize: '16px', color: T.text }}>Category Breakdown</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
-                {catStats.map(c => {
-                  const pct = Math.round((c.rated / c.total) * 100);
-                  const color = CAT_COLOR[c.cat] || '#3B82F6';
-                  return (
-                    <div key={c.cat} style={{ padding: '14px', borderRadius: '12px', background: `${color}0c`, border: `1px solid ${color}28` }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: T.text }}>{c.cat}</span>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color }}>Avg {c.avgLevel}/3</span>
-                      </div>
-                      <div style={{ height: 6, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)', marginBottom: '6px' }}>
-                        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 999, background: color, transition: 'width 1s' }} />
-                      </div>
-                      <div style={{ fontSize: '11px', color: T.muted }}>{c.rated}/{c.total} rated · {pct}%</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* ── Strengths + Gaps ──────────────────────────── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '24px' }}>
-              <div style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '18px', padding: '22px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                  <Star size={18} color="#34D399" fill="#34D399" />
-                  <span style={{ fontWeight: 700, fontSize: '15px', color: T.text }}>Your Strengths</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {report.strengths.map((s, i) => (
-                    <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                      <CheckCircle2 size={15} color="#10B981" style={{ flexShrink: 0, marginTop: 2 }} />
-                      <span style={{ fontSize: '13px', color: T.sub, lineHeight: 1.6 }}>{s}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '18px', padding: '22px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                  <AlertCircle size={18} color="#F87171" />
-                  <span style={{ fontWeight: 700, fontSize: '15px', color: T.text }}>Skill Gaps</span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {report.gaps.map((g, i) => (
-                    <div key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#EF4444', flexShrink: 0, marginTop: 5 }} />
-                      <span style={{ fontSize: '13px', color: T.sub, lineHeight: 1.6 }}>{g}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* ── AI Suggestions ────────────────────────────── */}
-            <div style={{ background: 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: '18px', padding: '24px', marginBottom: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
-                <Lightbulb size={18} color="#A78BFA" />
-                <span style={{ fontWeight: 700, fontSize: '15px', color: T.text }}>
-                  {aiUsed ? '🧠 AI-Powered Growth Suggestions' : '💡 Growth Suggestions'}
-                </span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
-                {report.suggestions.map((s, i) => (
-                  <div key={i} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '14px', borderRadius: '12px', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)' }}>
-                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg,#8B5CF6,#EC4899)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 800, color: '#fff' }}>{i + 1}</div>
-                    <span style={{ fontSize: '13px', color: T.sub, lineHeight: 1.65 }}>{s}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* ── Full Skill Ratings Table ──────────────────── */}
-            <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: '18px', padding: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
-                <TrendingUp size={18} color="#60A5FA" />
-                <span style={{ fontWeight: 700, fontSize: '15px', color: T.text }}>Full Skill Ratings</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px' }}>
-                {SKILLS.map(s => {
-                  const r = ratings.find(rt => rt.skillId === s.id);
-                  const lvl = r?.selfRating ?? 0;
-                  const color = CAT_COLOR[s.category] || '#3B82F6';
-                  return (
-                    <div key={s.id} style={{ padding: '10px 12px', borderRadius: '10px', background: `${LVL_COLOR[lvl]}0a`, border: `1px solid ${LVL_COLOR[lvl]}28`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontSize: '12px', fontWeight: 600, color: T.text }}>{s.name}</div>
-                        <div style={{ fontSize: '10px', color }}>{s.category}</div>
-                      </div>
-                      <div style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: 700, background: `${LVL_COLOR[lvl]}20`, color: LVL_COLOR[lvl] }}>{LVL_LABEL[lvl]}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <HeatmapSection ratings={data.ratings} />
+            <AISection data={data} />
+            <StrengthGapTable data={data} />
           </>
         )}
       </div>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+        @media print{
+          .no-print{display:none!important}
+          body{background:white!important;color:black!important}
+          header{display:none!important}
+        }
+        @media(max-width:768px){
+          div[style*="grid-template-columns: 1fr 1fr"]{grid-template-columns:1fr!important}
+        }
       `}</style>
     </div>
   );

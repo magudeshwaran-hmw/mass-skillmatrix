@@ -9,7 +9,7 @@ import type { ProficiencyLevel } from '@/lib/types';
 import { ArrowLeft, Download, CheckCircle2, Clock, User, Mail, Phone,
   Briefcase, MapPin, TrendingUp, Loader2, Bot, Brain, Zap, Award, ExternalLink,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/ToastContext';
 import { exportEmployeeToExcel } from '@/lib/localDB';
 import { computeSkillPriorities, generateCareerInsight, recommendCertifications } from '@/lib/aiIntelligence';
 
@@ -75,7 +75,6 @@ export default function EmployeeDetailPage() {
                 managerRating: s.managerRating as ProficiencyLevel | null,
                 validated:     s.validated,
               }));
-              saveSkillRatings(id!, merged.skills);
             }
 
             local = merged;
@@ -112,7 +111,8 @@ export default function EmployeeDetailPage() {
     );
   }
 
-  const completion = computeCompletion(emp.skills);
+  const ratedCompletion = computeCompletion(emp.skills);
+  const completion = Math.max(ratedCompletion, emp.overallCapability);
   const ratedSkills = SKILLS.filter(s => (emp.skills.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0);
   const aiDetectedCount = emp.skills.filter(r => r.aiDetected && r.selfRating > 0).length;
   const aiUsagePct = ratedSkills.length > 0 ? Math.round((aiDetectedCount / ratedSkills.length) * 100) : 0;
@@ -173,26 +173,6 @@ export default function EmployeeDetailPage() {
               <div style={{ fontSize: 11, color: T.muted }}>{ratedSkills.length}/32 rated</div>
             </div>
 
-            {/* AI Usage badge */}
-            <div style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-              padding: '8px 14px', borderRadius: 12,
-              background: aiDetectedCount > 0 ? 'rgba(139,92,246,0.10)' : dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-              border: `1px solid ${aiDetectedCount > 0 ? 'rgba(139,92,246,0.30)' : T.bdr}`,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <Bot size={13} color={aiDetectedCount > 0 ? '#A78BFA' : T.muted as string} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: aiDetectedCount > 0 ? '#A78BFA' : T.muted }}>
-                  AI Usage
-                </span>
-              </div>
-              <span style={{ fontSize: 18, fontWeight: 800, color: aiDetectedCount > 0 ? '#A78BFA' : T.muted, fontFamily: "'Space Grotesk',sans-serif" }}>
-                {aiUsagePct}%
-              </span>
-              <span style={{ fontSize: 10, color: T.muted }}>
-                {aiDetectedCount} of {ratedSkills.length} skills
-              </span>
-            </div>
           </div>
 
           {/* Export */}

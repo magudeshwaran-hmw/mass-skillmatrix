@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
+import { toast } from '@/lib/ToastContext';
 import { Eye, EyeOff, User, Lock, Phone, Mail, Briefcase, MapPin, Clock, Hash, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/authContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
@@ -112,86 +112,55 @@ export default function AuthPage() {
   // ── Login ─────────────────────────────────────────────────────────────────
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!lZensarId.trim()) { toast.error('Enter your Zensar ID'); return; }
-    if (!/^\d{6}$/.test(lZensarId.trim())) { toast.error('Zensar ID must be exactly 6 digits'); return; }
+    if (!lZensarId.trim()) { toast.error('Enter your Zensar ID, email, or phone'); return; }
+    const isZensarId = /^\d{6}$/.test(lZensarId.trim());
+    const isEmail = lZensarId.includes('@');
+    const isPhone = /^[+\d][\d\s-]{6,}$/.test(lZensarId.trim());
+    if (!isZensarId && !isEmail && !isPhone) { toast.error('Enter a valid 6-digit Zensar ID, email, or phone number'); return; }
     if (!lPassword)  { toast.error('Enter your password'); return; }
 
     setLoading(true);
-    const serverUp = await isServerAvailable();
+    try {
+      const emp = await apiLogin(lZensarId.trim(), lPassword);
 
-    if (serverUp) {
-      try {
-        const emp = await apiLogin(lZensarId.trim(), lPassword);
+      // Build a complete Employee for localStorage so SkillMatrixPage works
+      const allData = await getAllEmployees();
+      const existingLocal = (allData.employees || []).find((e: any) => e.ID === emp.id || e.id === emp.id);
 
-        // Build a complete Employee for localStorage so SkillMatrixPage works
-        const existingLocal = getAllEmployees().find(e => e.id === emp.id);
+      // ✅ Preserve submitted=true from localStorage even if server hasn't saved it yet
+      // (e.g. Excel was open during submit — local is source of truth in that case)
+      const serverSubmitted = (emp.submitted as string) === 'Yes';
+      const localSubmitted  = existingLocal?.submitted === true;
+      const isSubmitted     = serverSubmitted || localSubmitted;
 
-        // ✅ Preserve submitted=true from localStorage even if server hasn't saved it yet
-        // (e.g. Excel was open during submit — local is source of truth in that case)
-        const serverSubmitted = (emp.submitted as string) === 'Yes';
-        const localSubmitted  = existingLocal?.submitted === true;
-        const isSubmitted     = serverSubmitted || localSubmitted;
+      upsertEmployee({
+        id:                emp.id,
+        name:              emp.name || '',
+        email:             emp.email || '',
+        phone:             emp.phone || '',
+        designation:       emp.designation || existingLocal?.designation || '',
+        department:        emp.department || 'Quality Engineering',
+        location:          emp.location   || '',
+        yearsIT:           Number(emp.yearsIT ?? 0),
+        yearsZensar:       Number(emp.yearsZensar ?? 0),
+        primarySkill:      emp.primarySkill  || '',
+        primaryDomain:     emp.primaryDomain || '',
+        overallCapability: Number(emp.overallCapability ?? 0),
+        submitted:         isSubmitted,   // combined: server OR local
+        resumeUploaded:    (emp.resumeUploaded as string) === 'Yes',
+        // Keep existing skills from localStorage if already rated, else create fresh
+        skills: existingLocal?.skills?.length
+          ? existingLocal.skills
+          : SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
+      });
 
-        upsertEmployee({
-          id:                emp.id,
-          name:              emp.name || '',
-          email:             emp.email || '',
-          phone:             emp.phone || '',
-          designation:       emp.designation || existingLocal?.designation || '',
-          department:        emp.department || 'Quality Engineering',
-          location:          emp.location   || '',
-          yearsIT:           Number(emp.yearsIT ?? 0),
-          yearsZensar:       Number(emp.yearsZensar ?? 0),
-          primarySkill:      emp.primarySkill  || '',
-          primaryDomain:     emp.primaryDomain || '',
-          overallCapability: Number(emp.overallCapability ?? 0),
-          submitted:         isSubmitted,   // combined: server OR local
-          resumeUploaded:    (emp.resumeUploaded as string) === 'Yes',
-          // Keep existing skills from localStorage if already rated, else create fresh
-          skills: existingLocal?.skills?.length
-            ? existingLocal.skills
-            : SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
-        });
 
-        // Sync skills from backend if available
-        try {
-          const skills = await apiGetSkills(emp.id);
-          if (skills.length > 0) {
-            saveSkillRatings(emp.id, skills.map(s => ({
-              skillId: s.skillId,
-              selfRating: s.selfRating as ProficiencyLevel,
-              managerRating: s.managerRating as ProficiencyLevel | null,
-              validated: s.validated,
-            })));
-          }
-        } catch { /* skills not saved yet — OK */ }
-
-        login('employee', emp.id, emp.name || '');
-        toast.success(`Welcome back, ${(emp.name || '').split(' ')[0]}! ✅`);
-        // Always go to report if submitted (server OR local), skills matrix if not
-        navigate(isSubmitted ? '/employee/report' : '/employee/skills');
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Login failed');
-      }
-    } else {
-      // Fallback: localStorage — match by ZensarID (stored in designation as "Zensar-XXXXXX"), email, or phone
-      const employees = getAllEmployees();
-      const needle = lZensarId.trim().toLowerCase();
-      const emp = employees.find(e =>
-        e.designation === `Zensar-${lZensarId.trim()}` ||
-        e.designation?.toLowerCase().includes(needle) ||
-        e.email?.toLowerCase() === needle ||
-        e.phone === lZensarId.trim()
-      );
-      if (!emp) {
-        toast.error('Server is offline and no local account found. Please ensure the backend server is running.');
-        setLoading(false);
-        return;
-      }
-      login('employee', emp.id, emp.name);
-      toast.success(`Welcome back, ${emp.name.split(' ')[0]}! ✅`);
-      // If already submitted → go straight to their report
-      navigate(emp.submitted ? '/employee/report' : '/employee/skills');
+      login('employee', emp.id, emp.name || '');
+      toast.success(`Welcome back, ${(emp.name || '').split(' ')[0]}! ✅`);
+      // Always go to report if submitted (server OR local), skills matrix if not
+      navigate(isSubmitted ? '/employee/report' : '/employee/skills');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Network Error: Cannot reach server');
     }
     setLoading(false);
   };
@@ -208,65 +177,45 @@ export default function AuthPage() {
     if (sPassword !== sCPassword) { toast.error('Passwords do not match'); return; }
 
     setLoading(true);
-    const serverUp = await isServerAvailable();
-
-    if (serverUp) {
-      try {
-        const emp = await apiRegister({
-          name: sName.trim(),
-          email: sEmail.trim(),
-          phone: sMobile.trim(),
-          designation: sEmail.trim().split('@')[0] || 'Employee',
-          department: sDept,
-          location: sLocation,
-          yearsIT: parseFloat(sYearsIT) || 0,
-          yearsZensar: parseFloat(sYearsZensar) || 0,
-          password: sPassword,
-          resumeUploaded: false,
-          zensarId: sZensarId.trim(),
-        } as Parameters<typeof apiRegister>[0] & { zensarId: string });
-
-        // ✅ Mirror to localStorage so login works even if server has a blip later
-        upsertEmployee({
-          id:                emp.id,
-          name:              sName.trim(),
-          email:             sEmail.trim(),
-          phone:             sMobile.trim(),
-          designation:       `Zensar-${sZensarId.trim()}`, // store ZensarID so fallback login finds it
-          department:        sDept,
-          location:          sLocation,
-          yearsIT:           parseFloat(sYearsIT) || 0,
-          yearsZensar:       parseFloat(sYearsZensar) || 0,
-          primarySkill:      '',
-          primaryDomain:     '',
-          overallCapability: 0,
-          submitted:         false,
-          resumeUploaded:    false,
-          skills:            SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
-        });
-
-        login('employee', emp.id, sName.trim());
-        toast.success('Account created! Now upload your resume 📄');
-        navigate('/employee/resume');
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Registration failed');
-      }
-    } else {
-      // fallback: localStorage
-      const existing = getAllEmployees().find(e => e.email === sEmail.trim());
-      if (existing) { toast.error('Email already registered'); setLoading(false); return; }
-      const emp = createNewEmployee(sName.trim(), sEmail.trim(), `Zensar-${sZensarId.trim()}`);
-      upsertEmployee({
-        ...emp,
+    try {
+      const emp = await apiRegister({
+        name: sName.trim(),
+        email: sEmail.trim(),
         phone: sMobile.trim(),
+        designation: sEmail.trim().split('@')[0] || 'Employee',
+        department: sDept,
         location: sLocation,
         yearsIT: parseFloat(sYearsIT) || 0,
         yearsZensar: parseFloat(sYearsZensar) || 0,
-        department: sDept,
+        password: sPassword,
+        resumeUploaded: false,
+        zensarId: sZensarId.trim(),
+      } as Parameters<typeof apiRegister>[0] & { zensarId: string });
+
+      // ✅ Mirror to localStorage so login works even if server has a blip later
+      upsertEmployee({
+        id:                emp.id,
+        name:              sName.trim(),
+        email:             sEmail.trim(),
+        phone:             sMobile.trim(),
+        designation:       `Zensar-${sZensarId.trim()}`, // store ZensarID so fallback login finds it
+        department:        sDept,
+        location:          sLocation,
+        yearsIT:           parseFloat(sYearsIT) || 0,
+        yearsZensar:       parseFloat(sYearsZensar) || 0,
+        primarySkill:      '',
+        primaryDomain:     '',
+        overallCapability: 0,
+        submitted:         false,
+        resumeUploaded:    false,
+        skills:            SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
       });
+
       login('employee', emp.id, sName.trim());
       toast.success('Account created! Now upload your resume 📄');
       navigate('/employee/resume');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Network Error: Cannot reach server');
     }
     setLoading(false);
   };
@@ -331,10 +280,10 @@ export default function AuthPage() {
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ textAlign: 'center', marginBottom: '4px' }}>
                 <div style={{ fontSize: '20px', fontWeight: 800, color: '#fff', fontFamily: "'Space Grotesk',sans-serif" }}>Welcome Back</div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)', marginTop: '4px' }}>Login with your Zensar ID & password</div>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)', marginTop: '4px' }}>Login with Zensar ID, email, or phone</div>
               </div>
 
-              <InputRow label="Zensar ID" placeholder="6-digit ID e.g. 123456" value={lZensarId}
+              <InputRow label="Zensar ID / Email / Phone" placeholder="123456 or name@zensar.com or mobile" value={lZensarId}
                 onChange={setLZensarId} icon={Hash} dark={dark} T={{}} />
 
               <InputRow label="Password" placeholder="Your password" value={lPassword}

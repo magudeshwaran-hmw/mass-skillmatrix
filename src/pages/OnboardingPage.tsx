@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
+import { toast } from '@/lib/ToastContext';
 import {
   Upload, FileText, CheckCircle2, Loader2, Brain,
   User, Mail, Phone, Briefcase, MapPin, Clock,
@@ -102,6 +102,7 @@ export default function OnboardingPage() {
         const emp = await apiRegister({
           name: details.name.trim(), email: details.email.trim(),
           phone: details.phone.trim(), designation: details.designation.trim(),
+          zensarId: '',
           department: details.department, location: details.location,
           yearsIT: details.yearsIT, yearsZensar: details.yearsZensar,
           password: details.password, resumeUploaded: !!file,
@@ -138,7 +139,7 @@ export default function OnboardingPage() {
             skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false,
           }));
           const merged = applyDetectedSkills(base, detected);
-          saveSkillRatings(empId, merged);
+          saveSkillRatings(empId, details.name.trim(), merged);
           if (serverUp) await apiSaveSkills(empId, merged.map(r => ({
             skillId: r.skillId, 
             skillName: SKILLS.find(s => s.id === r.skillId)?.name || r.skillId,
