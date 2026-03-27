@@ -7,11 +7,15 @@ const crypto = require('crypto');
 app.use(cors());
 app.use(express.json());
 
-// ─── Power Automate Cloud Sync URLs ──────────────────────────────────────
-const PUSH_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/4ee56055a9054741b8fbd9a06df29bce/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=tTHdqTpv9oYLftU9YYiR7-XOu-6RpnZuMGM6EQWxcvk';
-const GET_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/a03f128092b847e5bfe212ed8c19ad26/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=4H8WPkq_FRRv5vGT2ebXls0LfCJZ09GwIpV55eRan8o';
+// ─── Power Automate Cloud Sync URLs (User defined) ────────────────────────
+const EMP_PUSH_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/975c3db1bda4442989760c9fbbed4a36/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=P3oFI_tqyItbbWRweSH0XPZzRV-6xsMPp2OH1Ur_b4M';
+const SKILLS_PUSH_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/136cfd684fb549b8b5cd31bdebac19a3/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=zYCGG0kWy0VNCCtLakvSEomHmsyXfZ3WtDGpLDydz0k';
+const GET_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/72b6a3cf86da4c468c83b339aa6a9818/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=10byP5x_dFglO6ep6yRKP4Ph2oxLThBpPC4JxPBWOEk';
+const CERT_PUSH_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/098aa85467114c6b86d8a886e0e430e9/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=4tItwFDpOm5e68WIQvE0AYX8dKNYBPp8i9qdzkC5_OY';
+const CERT_GET_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/8f25e832cc1c4a3f9035fe2d42e00950/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Y3Pb-9PxIq1X1knu6Oas08xC-P9GUUZi7EWJcaEAF-0';
+const PROJECT_PUSH_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/66d1982527a24aaf88be81122dc960f0/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=M-VPIMem284d1Ou7BDzAKzeD7LxdaM_qascBNnnXCvg';
+const PROJECT_GET_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/097cfadcf0e94128bc43b982198f01f6/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=HMat6K5bvj7FnVy2_pyOmMEOkk_5vetr3kQdM9ZmHJM';
 
-// ─── All 32 skill names (canonical order) ─────────────────────────────────
 const SKILL_NAMES = [
   'Selenium','Appium','JMeter','Postman','JIRA','TestRail',
   'Python','Java','JavaScript','TypeScript','C#','SQL',
@@ -23,281 +27,166 @@ const SKILL_NAMES = [
   'ChatGPT/Prompt Engineering','AI Test Automation'
 ];
 
-function hashPw(pw) {
-  return crypto.createHash('sha256').update(pw).digest('hex');
-}
+function hashPw(pw) { return crypto.createHash('sha256').update(pw).digest('hex'); }
 
-// ─── Generic push to Cloud ─────────────────────────────────────────────────
-async function syncToCloud(eventType, payload) {
-  try {
-    const res = await fetch(PUSH_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventType, ...payload, syncedAt: new Date().toISOString() }),
-    });
-    if (res.ok) console.log(`[Cloud Sync] ✅ ${eventType} successfully sent to Cloud.`);
-    else console.warn(`[Cloud Sync] ⚠️  ${eventType} failed. Microsoft returned ${res.status}`);
-  } catch (err) {
-    console.warn(`[Cloud Sync] ⚠️  Cloud unreachable: ${err.message}`);
-  }
-}
-
-// ─── Fetch BOTH tables from Cloud Excel simultaneously ────────────────────
+// ── READ Employees + Skills ────────────────────────────
 async function getCloudDB() {
   try {
-    const res = await fetch(GET_URL, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }});
-    if (!res.ok) throw new Error(`Cloud returned status ${res.status}`);
+    const res = await fetch(GET_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    if (!res.ok) throw new Error(`Cloud returned ${res.status}`);
     const json = await res.json();
-
-    const arr1 = Array.isArray(json.employees) ? json.employees : [];
-    const arr2 = Array.isArray(json.skills) ? json.skills : [];
-
-    let actualEmployees = arr1;
-    let actualSkills = arr2;
-
-    if (arr1[0] && Object.keys(arr1[0]).find(k => k.toLowerCase().includes('selenium'))) {
-      actualEmployees = arr2;
-      actualSkills = arr1;
-    } else if (arr2[0] && Object.keys(arr2[0]).find(k => k.toLowerCase().includes('zensar'))) {
-      actualEmployees = arr2;
-      actualSkills = arr1;
+    let employees = Array.isArray(json.employees) ? json.employees : [];
+    let skills = Array.isArray(json.skills) ? json.skills : [];
+    if (employees[0] && Object.keys(employees[0]).find(k => k.toLowerCase().includes('selenium'))) {
+      const tmp = employees; employees = skills; skills = tmp;
     }
-
-    // Merge Capability and Submitted status from Skills into Employees
-    // Merge Capability and Submitted status from Skills into Employees
-    actualEmployees = actualEmployees.map(emp => {
-      const match = actualSkills.find(s =>
-        s.employeeId === emp.ID ||
-        s['Employee ID'] === emp.ID
-      );
-      if (match) {
-        let count = 0;
-        SKILL_NAMES.forEach(k => { if (parseInt(match[k]) > 0) count++; });
-        emp.OverallCapability = Math.round((count / 32) * 100);
-        emp.Submitted = 'Yes';
-        emp.SubmittedAt = match.syncedAt || new Date().toISOString();
-      } else {
-        emp.Submitted = 'No';
-      }
-      return emp;
-    });
-
-    return { employees: actualEmployees, skills: actualSkills };
-  } catch (err) {
-    console.error(`[Cloud DB] Read failed: ${err.message}`);
-    return { employees: [], skills: [] };
-  }
+    return { employees, skills };
+  } catch (err) { return { employees: [], skills: [] }; }
 }
 
-// ─── BUG 2 FIX: Smart skill sync — UPDATE existing row, INSERT if new ─────
+// ── WRITE Employee (Handles UPSERT logic) ──────────────
+async function syncEmployeeToCloud(payload) {
+  try {
+    const zid = payload.ZensarID || payload.ID;
+    const existing = await getCloudDB();
+    const match = existing.employees.find(e => 
+      String(e.ZensarID) === String(zid) || String(e.ID) === String(zid) ||
+      (e.Email && payload.Email && e.Email.toLowerCase() === payload.Email.toLowerCase())
+    );
+    const type = match ? 'EMPLOYEE_UPDATE' : (payload.eventType || 'EMPLOYEE_REGISTERED');
+    const finalPayload = match ? { ...match, ...payload, eventType: type } : { ...payload, eventType: type };
+    console.log(`📡 [Cloud] Syncing ${payload.Name} | Type: ${type} | Key: ${zid}`);
+    await fetch(EMP_PUSH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...finalPayload, syncedAt: new Date().toISOString() })
+    });
+  } catch (err) { console.error('Cloud employee sync error:', err.message); }
+}
+
+// ── WRITE Skills (Handles UPSERT logic) ───────────────
 async function syncSkillsToCloud(payload) {
   try {
     const existing = await getCloudDB();
-    const existingSkill = existing.skills.find(s =>
-      s.employeeId === payload.employeeId ||
-      s['Employee ID'] === payload.employeeId
+    const exists = existing.skills.find(s =>
+      String(s.employeeId) === String(payload.employeeId) ||
+      String(s.EmployeeID) === String(payload.employeeId) ||
+      String(s['Employee ID']) === String(payload.employeeId)
     );
-
-    const eventType = existingSkill ? 'SKILLS_UPDATE' : 'SKILLS_UPDATED';
-
-    const res = await fetch(PUSH_URL, {
+    const type = exists ? 'SKILLS_UPDATE' : 'SKILLS_UPDATED';
+    console.log(`📡 [Cloud] Syncing skills for ${payload.employeeId} | Type: ${type}`);
+    await fetch(SKILLS_PUSH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventType, ...payload, syncedAt: new Date().toISOString() })
+      body: JSON.stringify({ ...payload, eventType: type, syncedAt: new Date().toISOString() })
     });
-
-    if (res.ok) {
-      console.log(`[Cloud Sync] ✅ ${eventType} sent successfully`);
-    } else {
-      console.warn(`[Cloud Sync] ⚠️ Failed: ${res.status}`);
-    }
-
-    if (eventType === 'SKILLS_UPDATE') {
-      console.log('[Info] Power Automate needs UPDATE action: Update a row where Employee ID = employeeId');
-    }
-  } catch (err) {
-    console.warn(`[Cloud Sync] ⚠️ syncSkillsToCloud error: ${err.message}`);
-  }
+  } catch (err) { console.error('Cloud skills sync error:', err.message); }
 }
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
+// ── READ Projects/Certs Helper ────────────────────────
+async function getTableData(url, employeeId) {
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employeeId: employeeId || 'ALL' }) });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.projects || json.certifications || [];
+  } catch { return []; }
+}
 
-// Route 1: Frontend reads all data from cloud
+// ── Routes ──────────────────────────────────────────────
+
 app.get('/api/employees', async (req, res) => {
   const data = await getCloudDB();
   res.json(data);
 });
 
-// Route 2: Frontend writes data to cloud
-// BUG 1+2+3 FIX: flat payload, smart update/insert, input validation
-app.post('/api/sync', async (req, res) => {
-  const { eventType, ...payload } = req.body;
-
-  // BUG 3: Validate before sending
-  if (!eventType) {
-    return res.status(400).json({ error: 'eventType is required' });
-  }
-
-  if (eventType === 'SKILLS_UPDATED' || eventType === 'SKILLS_UPDATE') {
-    if (!payload.employeeId) {
-      return res.status(400).json({ error: 'employeeId required for skill sync' });
-    }
-    const hasRating = SKILL_NAMES.some(s => parseInt(String(payload[s] || 0)) > 0);
-    if (!hasRating) {
-      console.warn('[Cloud Sync] Blocked empty skill payload — no ratings found');
-      return res.status(400).json({ error: 'No skill ratings found in payload' });
-    }
-  }
-
-  if (eventType === 'EMPLOYEE_REGISTERED') {
-    if (!payload.Name || !payload.Email) {
-      return res.status(400).json({ error: 'Name and Email required for registration' });
-    }
-  }
-
-  // BUG 2: Route skill events through smart update logic
-  if (eventType === 'SKILLS_UPDATED' || eventType === 'SKILLS_UPDATE') {
-    await syncSkillsToCloud({ ...payload });
-  } else {
-    await syncToCloud(eventType, payload);
-  }
-
-  res.json({ success: true });
-});
-
-// POST /api/register
-app.post('/api/register', async (req, res) => {
-  const { name, email, phone, designation, department, location,
-          yearsIT, yearsZensar, password, resumeUploaded, zensarId } = req.body;
-
-  if (!name || (!email && !phone) || !password)
-    return res.status(400).json({ error: 'Name, email/phone and password are required.' });
-
+app.get('/api/employees/:id', async (req, res) => {
   const { employees } = await getCloudDB();
-  const dup = employees.find(e =>
-    (email && e.Email?.toLowerCase() === email.toLowerCase()) ||
-    (phone && e.Phone === phone) ||
-    (zensarId && e.ZensarID === zensarId)
+  const id = String(req.params.id).toLowerCase();
+  const emp = employees.find(e => 
+    String(e.ID).toLowerCase() === id || 
+    String(e.ZensarID).toLowerCase() === id || 
+    String(e.id).toLowerCase() === id ||
+    (e.Email && String(e.Email).toLowerCase() === id)
   );
-  if (dup) return res.status(409).json({ error: 'Zensar ID, email or phone already registered in Cloud.' });
-
-  const id  = `emp_${Date.now()}`;
-  const now = new Date().toISOString();
-  const newEmp = {
-    ID: id, ZensarID: zensarId || '', Name: name, Email: email || '', Phone: phone || '',
-    Designation: designation || '', Department: department || 'Quality Engineering',
-    Location: location || '', YearsIT: yearsIT || 0, YearsZensar: yearsZensar || 0,
-    PrimarySkill: '', PrimaryDomain: '', Password: hashPw(password),
-    OverallCapability: 0, Submitted: 'No', SubmittedAt: '',
-    ResumeUploaded: resumeUploaded ? 'Yes' : 'No', CreatedAt: now,
-  };
-
-  console.log(`[Register] New employee sent to Cloud: ${name} (${id})`);
-  syncToCloud('EMPLOYEE_REGISTERED', { ...newEmp, Password: password || '' });
-
-  const { Password: _, ...safe } = newEmp;
-  res.json({ success: true, employee: { ...safe, id } });
+  if (!emp) return res.status(404).json({ error: 'Employee not found' });
+  res.json(emp);
 });
 
-// POST /api/login
+app.post('/api/register', async (req, res) => {
+  const { name, email, phone, designation, department, location, yearsIT, yearsZensar, password, zensarId } = req.body;
+  const zid = zensarId || `emp_${Date.now()}`;
+  const newEmp = {
+    ID: zid, ZensarID: zid, Name: name, Email: email || '', Phone: phone || '',
+    Designation: designation || 'Engineer', Department: department || 'Quality Engineering',
+    Location: location || 'India', YearsIT: yearsIT || 0, YearsZensar: yearsZensar || 0,
+    Password: hashPw(password), OverallCapability: 0, Submitted: 'No'
+  };
+  await syncEmployeeToCloud(newEmp);
+  res.json({ success: true, employee: { ...newEmp, id: zid } });
+});
+
 app.post('/api/login', async (req, res) => {
   const { login: loginId, password } = req.body;
-  if (!loginId || !password) return res.status(400).json({ error: 'Login ID and password required.' });
-
   const { employees } = await getCloudDB();
   const emp = employees.find(e =>
-    e.ZensarID === loginId ||
-    e.Email?.toLowerCase() === loginId.toLowerCase() ||
-    e.Phone === loginId
+    String(e.ZensarID) === String(loginId) || (e.Email && String(e.Email).toLowerCase() === String(loginId).toLowerCase()) || String(e.Phone) === String(loginId)
   );
-
-  if (!emp) return res.status(401).json({ error: 'No account found with this Zensar ID / email / phone.' });
-
-  if (emp.Password && emp.Password !== hashPw(password) && emp.Password !== password) {
-    return res.status(401).json({ error: 'Incorrect password.' });
-  }
-
-  const { Password: _, ...safe } = emp;
-  res.json({ success: true, employee: { ...safe, id: emp.ID, name: emp.Name, role: 'employee' } });
+  if (!emp) return res.status(401).json({ error: 'Account not found' });
+  if (emp.Password && emp.Password !== hashPw(password) && emp.Password !== password) return res.status(401).json({ error: 'Incorrect password' });
+  res.json({ success: true, employee: { ...emp, id: emp.ZensarID || emp.ID, name: emp.Name, role: 'employee' } });
 });
 
-// GET /api/employees/:id/skills
 app.get('/api/employees/:id/skills', async (req, res) => {
   const { skills } = await getCloudDB();
-  const empSkillsRow = skills.find(s =>
-    s.employeeId === req.params.id ||
-    s['Employee ID'] === req.params.id
-  );
-  if (!empSkillsRow) return res.json([]);
-
-  const extractedSkills = SKILL_NAMES.map((skName, i) => {
-    let rawRating = empSkillsRow[skName];
-    // BUG 1: C# OData encoding fix
-    if (skName === 'C#' && rawRating === undefined) {
-      rawRating = empSkillsRow['C_x0023_'];
-    }
-    return {
-      skillId: 's' + (i + 1),
-      skillName: skName,
-      selfRating: rawRating ? parseInt(rawRating) : 0,
-      managerRating: null,
-      validated: false
-    };
+  const row = skills.find(s => String(s.employeeId) === String(req.params.id) || String(s.EmployeeID) === String(req.params.id));
+  if (!row) return res.json([]);
+  const resArr = SKILL_NAMES.map((name, i) => {
+    let val = row[name]; if (name === 'C#' && val === undefined) val = row['C_x0023_'];
+    return { skillId: `s${i+1}`, skillName: name, selfRating: val ? parseInt(val) : 0, managerRating: null, validated: false };
   }).filter(s => s.selfRating > 0);
-
-  res.json(extractedSkills);
+  res.json(resArr);
 });
 
-// PUT /api/employees/:id/skills
-// BUG 1 FIX: sends flat skill columns to Cloud, not a JSON blob
 app.put('/api/employees/:id/skills', async (req, res) => {
+  const body = req.body;
+  const flatSkills = {};
+  SKILL_NAMES.forEach(name => { flatSkills[name] = parseInt(String(body[name] || 0)) || 0; });
+  const rated = SKILL_NAMES.filter(n => flatSkills[n] > 0).length;
+  const cap = Math.round((rated / 32) * 100);
+  await syncSkillsToCloud({ employeeId: req.params.id, skillCount: rated, ...flatSkills });
+  const { employees } = await getCloudDB();
+  const emp = employees.find(e => String(e.ID) === String(req.params.id) || String(e.ZensarID) === String(req.params.id));
+  if (emp) await syncEmployeeToCloud({ ...emp, OverallCapability: cap, Submitted: rated >= 25 ? 'Yes' : 'No' });
+  res.json({ success: true, capability: cap });
+});
+
+// Specific Cert/Project fetches for single employee
+app.get('/api/certifications/:id', async (req, res) => {
+  const certifications = await getTableData(CERT_GET_URL, req.params.id);
+  res.json({ certifications: certifications.filter(c => String(c.EmployeeID) === String(req.params.id)) });
+});
+app.get('/api/projects/:id', async (req, res) => {
+  const projects = await getTableData(PROJECT_GET_URL, req.params.id);
+  res.json({ projects: projects.filter(p => String(p.EmployeeID) === String(req.params.id)) });
+});
+
+// Global fetches
+app.get('/api/certifications/ALL', async (req, res) => {
+  const certifications = await getTableData(CERT_GET_URL, 'ALL');
+  res.json({ certifications });
+});
+app.get('/api/projects/ALL', async (req, res) => {
+  const projects = await getTableData(PROJECT_GET_URL, 'ALL');
+  res.json({ projects });
+});
+
+app.post('/api/llm', async (req, res) => {
   try {
-    const body = req.body;
-    const flatSkills = {};
-    SKILL_NAMES.forEach(name => {
-      // Accept either flat fields or nested skills array
-      const fromFlat = parseInt(String(body[name] || 0)) || 0;
-      const fromNested = body.skills
-        ? (body.skills.find((s) => s.skillName === name || s.skillId === name)?.selfRating || 0)
-        : 0;
-      flatSkills[name] = fromFlat || fromNested;
-    });
-
-    const rated = SKILL_NAMES.filter(n => flatSkills[n] > 0).length;
-    const cap = Math.round((rated / 32) * 100);
-    console.log(`[Skills] ✅ Smart sync for ${req.params.id}. Rated: ${rated}. Capability: ${cap}%`);
-
-    const { employees } = await getCloudDB();
-    const emp = employees.find(e => e.ID === req.params.id);
-
-    await syncSkillsToCloud({
-      employeeId: req.params.id,
-      employeeName: emp ? emp.Name : req.params.id,
-      skillCount: rated,
-      ...flatSkills
-    });
-
-    res.json({ success: true, saved: rated, capability: cap });
-  } catch (err) {
-    console.error('[Skills] ❌ Error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
+    const response = await fetch('http://127.0.0.1:11434/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body) });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/employees/:id/submit
-app.post('/api/employees/:id/submit', async (req, res) => {
-  try {
-    console.log(`[Submit] ✅ Submission recorded for ${req.params.id}. Skills already synced via PUT.`);
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[Submit] ❌ Error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── Start ────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n✅ Skill Navigator backend running on port ${PORT}`);
-  console.log(`   Cloud DB : Power Automate (Excel via Webhook)`);
-  console.log(`   Smart sync: SKILLS_UPDATE (existing) | SKILLS_UPDATED (new)\n`);
-});
+app.listen(PORT, () => console.log(`🚀 Backend active on ${PORT}`));

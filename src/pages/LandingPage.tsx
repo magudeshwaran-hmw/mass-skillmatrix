@@ -1,10 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Upload, BarChart3, TrendingUp, Shield, Target, Brain,
-  CheckCircle, Award, BookOpen, ClipboardList, Users } from 'lucide-react';
-
-
-/* ── Always dark — landing page is permanently dark ───────────────────── */
-const dark = true;
+  CheckCircle, Award, BookOpen, ClipboardList, Users, Map as MapIcon, Info } from 'lucide-react';
+import { useDark, mkTheme } from '@/lib/themeContext';
 
 const IMG = {
   hero:     '/office_bg.png',
@@ -13,257 +10,205 @@ const IMG = {
   steps:    '/career_bg.png',
 };
 
-/* Always-dark overlays so text readability never suffers                    */
-/* Light mode = blue-navy tint (slightly lighter), Dark mode = near-black    */
 const OV = {
-  heroD:    'linear-gradient(140deg,rgba(4,9,20,0.84),rgba(10,22,60,0.74))',
-  heroL:    'linear-gradient(140deg,rgba(8,20,60,0.78),rgba(20,45,110,0.68))',
-  statsD:   'rgba(4,9,20,0.82)',
-  statsL:   'rgba(10,25,75,0.76)',
-  matrixD:  'rgba(4,9,20,0.86)',
-  matrixL:  'rgba(8,22,70,0.80)',
-  stepsD:   'rgba(4,9,20,0.78)',
-  stepsL:   'rgba(12,30,80,0.72)',
+  heroD:    'linear-gradient(140deg,rgba(4,9,20,0.88),rgba(10,22,60,0.78))',
+  heroL:    'linear-gradient(140deg,rgba(255,255,255,0.75),rgba(240,249,255,0.65))',
+  statsD:   'rgba(4,9,20,0.86)',
+  statsL:   'rgba(255,255,255,0.65)',
+  matrixD:  'rgba(4,9,20,0.90)',
+  matrixL:  'rgba(255,255,255,0.75)',
+  stepsD:   'rgba(4,9,20,0.82)',
+  stepsL:   'rgba(255,255,255,0.65)',
 };
-
-const STEPS = [
-  { icon: Upload,     n:'01', title:'Upload Resume',       desc:'System reads your resume and auto-detects your QE skills',            color:'#3B82F6' },
-  { icon: BarChart3,  n:'02', title:'Rate Your Skills',    desc:'Fill any remaining skill gaps across 7 professional categories',       color:'#8B5CF6' },
-  { icon: Shield,     n:'03', title:'Manager Validates',   desc:'Your manager reviews and officially validates your skill ratings',     color:'#10B981' },
-  { icon: TrendingUp, n:'04', title:'Get Your Report',     desc:'Receive a personalized growth roadmap and complete capability report', color:'#F59E0B' },
-];
-
-
-
-const BENEFITS = [
-  { icon:ClipboardList, c:'#3B82F6', t:'Know Where You Stand',          d:'Get a clear picture of your QE skills across all domains — structured and accurate.' },
-  { icon:Target,        c:'#8B5CF6', t:'Close Skill Gaps Faster',        d:'Instantly see missing skills and receive prioritised recommendations to close them.' },
-  { icon:Award,         c:'#10B981', t:'Manager-Endorsed Credentials',   d:'Ratings validated by your manager — giving you officially verified proof of expertise.' },
-  { icon:TrendingUp,    c:'#F59E0B', t:'Unlock Better Opportunities',    d:'A complete skill profile helps you get matched to the right projects and career roles.' },
-  { icon:BookOpen,      c:'#EC4899', t:'Personalised Learning Roadmap',  d:'Get a growth plan with specific actions tailored to your career goals.' },
-  { icon:Users,         c:'#06B6D4', t:'Contribute to Team Visibility',  d:'Help leadership plan smarter with accurate QE capability data across the team.' },
-];
-
-const CATS = [
-  {n:'🔧 Tool',         k:6, c:'#3B82F6'},{n:'💻 Technology', k:6, c:'#8B5CF6'},
-  {n:'📱 Application',  k:5, c:'#10B981'},{n:'🏦 Domain',     k:5, c:'#F59E0B'},
-  {n:'🧪 Testing Type', k:4, c:'#EF4444'},{n:'⚙️ DevOps',    k:4, c:'#06B6D4'},
-  {n:'🤖 AI Skills',    k:2, c:'#EC4899'},
-];
 
 export default function LandingPage() {
   const navigate = useNavigate();
-
-  /* Static dark theme tokens — landing page is always dark */
-  const T = {
-    text: '#ffffff', sub: 'rgba(255,255,255,0.55)', muted: 'rgba(255,255,255,0.35)',
-    bg: '#050B18', card: 'rgba(255,255,255,0.07)', bdr: 'rgba(255,255,255,0.12)',
-    input: 'rgba(255,255,255,0.06)', inputBdr: 'rgba(255,255,255,0.14)',
-  };
+  const { dark } = useDark();
+  const T = mkTheme(dark);
 
   const card = (extra?: React.CSSProperties): React.CSSProperties => ({
     background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.92)',
-    border: `1px solid ${dark ? 'rgba(255,255,255,0.12)' : 'rgba(99,102,241,0.22)'}`,
+    border: `1px solid ${dark ? 'rgba(255,255,255,0.12)' : 'rgba(59,130,246,0.22)'}`,
     borderRadius: 16, backdropFilter: 'blur(14px)',
     ...extra,
   });
 
-  /* Text color on IMAGE sections (always white since overlay is dark) */
-  const WT = '#ffffff';
-  const WS = 'rgba(255,255,255,0.72)';
+  const WT = dark ? '#ffffff' : '#050B18';
+  const WS = dark ? 'rgba(255,255,255,0.72)' : 'rgba(15,23,42,0.92)';
 
   return (
     <div style={{ fontFamily:"'Inter',sans-serif", minHeight:'100vh', background:T.bg, transition:'background 0.35s,color 0.35s' }}>
 
-      {/* ══════════════════════════════ HERO ═══════════════════════════════ */}
+      {/* ════════════════ HERO ═══════════════════════════════ */}
       <div style={{ position:'relative', minHeight:'100vh', display:'flex', alignItems:'center', overflow:'hidden' }}>
-        {/* Background photo */}
         <div style={{ position:'absolute', inset:0, backgroundImage:`url(${IMG.hero})`, backgroundSize:'cover', backgroundPosition:'center 30%', zIndex:0 }} />
-        {/* Overlay — keeps text readable */}
         <div style={{ position:'absolute', inset:0, background: dark ? OV.heroD : OV.heroL, zIndex:1 }} />
-        {/* Glows */}
-        <div style={{ position:'absolute', inset:0, zIndex:2, pointerEvents:'none' }}>
-          <div style={{ position:'absolute', top:'10%', left:'0', width:'40%', height:'60%', background:'radial-gradient(circle,rgba(59,130,246,0.26) 0%,transparent 65%)', animation:'fl1 9s ease-in-out infinite' }} />
-          <div style={{ position:'absolute', bottom:'5%', right:'0', width:'36%', height:'50%', background:'radial-gradient(circle,rgba(139,92,246,0.22) 0%,transparent 65%)', animation:'fl2 12s ease-in-out infinite' }} />
-        </div>
-
         <div style={{ position:'relative', zIndex:3, maxWidth:1100, margin:'0 auto', padding:'130px 28px 90px', width:'100%' }}>
           <div style={{ maxWidth:660 }}>
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'6px 16px', borderRadius:999, background:'rgba(59,130,246,0.22)', border:'1px solid rgba(59,130,246,0.42)', marginBottom:28 }}>
-              <div style={{ width:7, height:7, borderRadius:'50%', background:'#60A5FA', animation:'pulse 2s infinite' }} />
-              <span style={{ fontSize:11, fontWeight:700, color:'#93C5FD', letterSpacing:'0.07em' }}>ZENSAR QUALITY ENGINEERING</span>
+              <div style={{ width:7, height:7, borderRadius:'50%', background:'#3B82F6', animation:'pulse 2s infinite' }} />
+              <span style={{ fontSize:11, fontWeight:800, color:'#1D4ED8', letterSpacing:'0.07em' }}>ZENSAR QUALITY ENGINEERING</span>
             </div>
 
-            <h1 style={{ fontSize:'clamp(40px,6vw,78px)', fontWeight:800, lineHeight:1.05, color:WT, marginBottom:22, fontFamily:"'Space Grotesk',sans-serif" }}>
+            <h1 style={{ fontSize:'clamp(36px,5vw,64px)', fontWeight:800, lineHeight:1.1, color:WT, marginBottom:22, fontFamily:"'Space Grotesk',sans-serif", letterSpacing:'-0.02em' }}>
               Know Your Skills.<br />
-              <span style={{ background:'linear-gradient(135deg,#60A5FA,#A78BFA,#F472B6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
+              <span style={{ background:'linear-gradient(135deg,#3B82F6,#9333EA,#DB2777)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontWeight:800 }}>
                 Grow Your Career.
               </span>
             </h1>
-            <p style={{ fontSize:18, color:WS, lineHeight:1.8, maxWidth:520, marginBottom:44 }}>
-              Self-assess across <strong style={{ color:'#93C5FD', fontWeight:700 }}>32 Quality Engineering skills</strong> in 7 categories, get manager validation, and receive a personalized growth roadmap.
+            <p style={{ fontSize:16, color: dark ? WS : '#000000', fontWeight: 500, lineHeight:1.6, maxWidth:520, marginBottom:44, opacity:0.9 }}>
+              Start with your resume. Let AI uncover your skills and certifications. Self-Assess and map your proficiency across different skills. Know your gaps. Plan your growth.
             </p>
 
-            <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
-              <button onClick={()=>navigate('/start')}
-                style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'16px 34px', borderRadius:13, background:'linear-gradient(135deg,#3B82F6,#8B5CF6)', color:WT, fontWeight:700, fontSize:16, border:'none', cursor:'pointer', boxShadow:'0 0 44px rgba(59,130,246,0.6)', transition:'all 0.25s' }}
-                onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow='0 10px 55px rgba(59,130,246,0.75)';}}
-                onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 0 44px rgba(59,130,246,0.6)';}}>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:16 }}>
+              <button onClick={() => navigate('/login')} style={{ padding:'16px 36px', borderRadius:14, background:'linear-gradient(135deg,#3B82F6,#8B5CF6)', border:'none', color:'#fff', fontWeight:800, fontSize:15, cursor:'pointer', boxShadow:'0 10px 25px rgba(59,130,246,0.35)', display:'flex', alignItems:'center', gap:10, transition:'all 0.2s' }}>
                 Start Assessment <ArrowRight size={18} />
               </button>
-              <button
-                onClick={()=>document.getElementById('how-it-works')?.scrollIntoView({behavior:'smooth'})}
-                style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'16px 28px', borderRadius:13, background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.30)', color:WT, fontWeight:600, fontSize:16, cursor:'pointer', backdropFilter:'blur(8px)', transition:'all 0.25s' }}
-                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.20)'}
-                onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.12)'}>
+              <button onClick={() => document.getElementById('about-tool')?.scrollIntoView({ behavior:'smooth' })} style={{ padding:'16px 32px', borderRadius:14, background: dark ? 'rgba(255,255,255,0.12)' : '#f1f5f9', border:`1px solid ${dark ? 'rgba(255,255,255,0.1)' : 'rgba(59,130,246,0.15)'}`, color:WT, fontWeight:700, fontSize:15, cursor:'pointer', transition:'all 0.2s' }}>
                 How it Works ↓
               </button>
             </div>
           </div>
         </div>
-        <div style={{ position:'absolute', bottom:28, left:'50%', transform:'translateX(-50%)', color:WS, fontSize:12, animation:'bounce 2s infinite', zIndex:3 }}>↓ Scroll</div>
       </div>
 
-
-      {/* ════════════════ ABOUT — workspace bg ═══════════════════════════════ */}
-      <div style={{ position:'relative', overflow:'hidden' }}>
-        <div style={{ position:'absolute', inset:0, backgroundImage:`url(${IMG.matrix})`, backgroundSize:'cover', backgroundPosition:'center 40%', zIndex:0 }} />
-        <div style={{ position:'absolute', inset:0, background: dark ? OV.matrixD : OV.matrixL, zIndex:1 }} />
-        <div style={{ position:'relative', zIndex:2, maxWidth:1100, margin:'0 auto', padding:'90px 28px' }}>
-          <div style={{ textAlign:'center', marginBottom:52 }}>
-            <div style={{ color:'#60A5FA', fontWeight:700, fontSize:11, letterSpacing:'0.13em', marginBottom:12 }}>ABOUT THE TOOL</div>
-            <h2 style={{ fontSize:'clamp(28px,4vw,50px)', fontWeight:800, color:WT, fontFamily:"'Space Grotesk',sans-serif" }}>What is the Skill Matrix?</h2>
-            <p style={{ color:WS, marginTop:12, fontSize:16, maxWidth:520, margin:'12px auto 0' }}>A structured QE capability assessment covering 32 skills across 7 categories.</p>
+      {/* ════════════════ JOURNEY ═════════════════════════════ */}
+      <div id="about-tool" style={{ scrollMarginTop:100, position:'relative', zIndex:2, maxWidth:1100, margin:'0 auto', padding:'100px 28px' }}>
+          <div style={{ textAlign:'center', marginBottom:80 }}>
+            <div style={{ color:'#3B82F6', fontWeight:700, fontSize:11, letterSpacing:'0.2em', marginBottom:12, textTransform:'uppercase' }}>The Evaluation Journey</div>
+            <h2 style={{ fontSize:'clamp(28px,4vw,42px)', fontWeight:900, color:WT, fontFamily:"'Space Grotesk',sans-serif", letterSpacing:'-0.03em' }}>How the Skill Matrix Works</h2>
+            <p style={{ color:T.muted, maxWidth:600, margin:'12px auto 0', fontSize:15, lineHeight:1.6 }}>A sophisticated, AI-powered process for your technical growth.</p>
           </div>
 
-          <div style={{ display:'flex', flexWrap:'wrap', gap:32, alignItems:'flex-start' }}>
-            {/* Q&A cards */}
-            <div style={{ flex:'1', minWidth:280, display:'flex', flexDirection:'column', gap:12 }}>
-              {[
-                { q:'WHAT IT IS',     a:"A structured self-assessment tool that maps every QE team member's proficiency across 32 skills in 7 professional categories." },
-                { q:'WHAT IT COVERS', a:'Testing tools, programming languages, application types, domain knowledge, testing types, DevOps practices, and AI skills.' },
-                { q:'HOW IT WORKS',   a:'Upload resume → System detects skills → You fill remaining gaps → Manager validates → Get your full report.' },
-                { q:'DATA INTEGRITY', a:'AI-detected skills are locked and cannot be manually changed. Only unrated skills can be filled to ensure accuracy.' },
-              ].map((item,i)=>(
-                <div key={i} style={card({ padding:'18px 22px' })}>
-                  <div style={{ fontSize:10, fontWeight:800, color:'#60A5FA', marginBottom:7, letterSpacing:'0.08em' }}>{item.q}</div>
-                  <div style={{ fontSize:14, color: dark?'rgba(255,255,255,0.75)':'#1E3A5F', lineHeight:1.75 }}>{item.a}</div>
+          <div style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative', gap:0 }}>
+             
+             {/* Stage 1: Authentication */}
+             <div style={{ width:'100%', maxWidth:500, position:'relative', zIndex:2 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:20, marginBottom:10, justifyContent:'center' }}>
+                   <div style={{ fontSize:10, fontWeight:800, color:'#3B82F6', textTransform:'uppercase', letterSpacing:'0.1em' }}>01. Authentication</div>
                 </div>
-              ))}
-            </div>
-            {/* Category grid */}
-            <div style={{ flex:'1', minWidth:260, display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:10, alignContent:'start' }}>
-              {CATS.map(c=>(
-                <div key={c.n} style={card({ padding:'16px 14px', display:'flex', alignItems:'center', justifyContent:'space-between', borderColor:`${c.c}40` })}>
-                  <span style={{ fontSize:13, fontWeight:600, color: dark?WT:'#1E3A5F' }}>{c.n}</span>
-                  <span style={{ fontSize:15, fontWeight:800, color:c.c, minWidth:18, textAlign:'right' }}>{c.k}</span>
+                <div style={{ ...card({ padding:'18px 24px', display:'flex', alignItems:'center', gap:18 }) }}>
+                   <div style={{ width:40, height:40, borderRadius:10, background:'rgba(59,130,246,0.1)', display:'flex', alignItems:'center', justifyContent:'center' }}><Users color="#3B82F6" size={18} /></div>
+                   <div style={{ flex:1 }}>
+                      <div style={{ color:WT, fontWeight:800, fontSize:15 }}>Login & Pulse</div>
+                      <div style={{ color:T.muted, fontSize:12, marginTop:2 }}>Zensar ID / Email Authentication</div>
+                   </div>
                 </div>
-              ))}
-            </div>
+             </div>
+
+             <div style={{ width:1, height:40, background:'#3B82F6', opacity:0.3 }} />
+
+             {/* Stage 2: Resume */}
+             <div style={{ width:'100%', maxWidth:500, position:'relative', zIndex:2 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:20, marginBottom:10, justifyContent:'center' }}>
+                   <div style={{ fontSize:10, fontWeight:800, color:'#3B82F6', textTransform:'uppercase', letterSpacing:'0.1em' }}>02. Input Data</div>
+                </div>
+                <div style={{ ...card({ padding:'18px 24px', display:'flex', alignItems:'center', gap:18 }) }}>
+                   <div style={{ width:40, height:40, borderRadius:10, background:'rgba(139,92,246,0.1)', display:'flex', alignItems:'center', justifyContent:'center' }}><Upload color="#8B5CF6" size={18} /></div>
+                   <div style={{ flex:1 }}>
+                      <div style={{ color:WT, fontWeight:800, fontSize:15 }}>Resume Upload</div>
+                      <div style={{ color:T.muted, fontSize:12, marginTop:2 }}>PDF / LinkedIn Profile Extract</div>
+                   </div>
+                </div>
+             </div>
+
+             <div style={{ width:1, height:60, background:'linear-gradient(#3B82F6,#10B981)', opacity:0.6 }} />
+
+             {/* Stage 3: AI Engine */}
+             <div style={{ width:'100%', maxWidth:600, position:'relative', zIndex:2 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:20, marginBottom:10, justifyContent:'center' }}>
+                   <div style={{ fontSize:11, fontWeight:800, color:'#10B981', textTransform:'uppercase', letterSpacing:'0.1em' }}>03. AI Engine</div>
+                </div>
+                <div style={{ background:'linear-gradient(135deg,rgba(16,185,129,0.1),rgba(6,182,212,0.1))', border:'1px solid rgba(16,185,129,0.3)', borderRadius:20, padding:'24px 32px', display:'flex', alignItems:'center', gap:28, backdropFilter:'blur(20px)', boxShadow:`0 15px 40px ${dark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.06)'}`, animation:'float 6s ease-in-out infinite' }}>
+                   <div style={{ width:48, height:48, borderRadius:14, background:'linear-gradient(135deg,#10B981,#06B6D4)', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 20px rgba(16,185,129,0.3)', flexShrink:0 }}><Brain color="#fff" size={24} /></div>
+                   <div>
+                      <div style={{ color:WT, fontWeight:800, fontSize:17 }}>Intelligence Sync</div>
+                      <div style={{ color:T.muted, fontSize:14, marginTop:4, lineHeight:1.5 }}>Deep-scanning technical history for certifications.</div>
+                   </div>
+                </div>
+             </div>
+
+             {/* FORK */}
+             <div style={{ width:'100%', height:60, position:'relative', maxWidth:1100 }}>
+                <div style={{ position:'absolute', top:30, left:'15%', right:'15%', height:2, background:'rgba(16,185,129,0.3)' }} />
+                <div style={{ position:'absolute', top:0, left:'50%', width:2, height:30, background:'#10B981', opacity:0.6 }} />
+                <div style={{ position:'absolute', top:30, left:'15%', width:2, height:30, background:'linear-gradient(#10B981,#3B82F6)', opacity:0.6 }} />
+                <div style={{ position:'absolute', top:30, left:'50%', width:2, height:30, background:'linear-gradient(#10B981,#F59E0B)', opacity:0.6 }} />
+                <div style={{ position:'absolute', top:30, right:'15%', width:2, height:30, background:'linear-gradient(#10B981,#10B981)', opacity:0.6 }} />
+             </div>
+
+             {/* Stage 4: Skills Split */}
+             <div style={{ width:'100%', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:24, position:'relative', zIndex:2 }}>
+                {[
+                  { t:'Defect management', d:'Jira, Azure DevOps, Bugzilla...', c:'#3B82F6', icon: ClipboardList },
+                  { t:'Test management', d:'Zephyr, TestRail, ALM/Quality Center...', c:'#F59E0B', icon: MapIcon },
+                  { t:'Automation', d:'Selenium, Cypress, Appium, Playwright...', c:'#10B981', icon: Target }
+                ].map(s => (
+                  <div key={s.t} style={{ ...card({ padding:20, borderTop:`3px solid ${s.c}`, transition:'all 0.3s', textAlign:'center' }), cursor:'default' }} onMouseEnter={e => e.currentTarget.style.transform='translateY(-6px)'} onMouseLeave={e => e.currentTarget.style.transform='none'}>
+                     <div style={{ width:36, height:36, borderRadius:10, background:`${s.c}12`, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}><s.icon size={18} color={s.c} /></div>
+                     <div style={{ color:WT, fontWeight:800, fontSize:15, marginBottom:8 }}>{s.t}</div>
+                     <div style={{ color:T.muted, fontSize:12, lineHeight:1.5 }}>{s.d}</div>
+                  </div>
+                ))}
+             </div>
+
+             {/* Merge Line */}
+             <div style={{ width:'100%', height:60, position:'relative', maxWidth:1100 }}>
+                <div style={{ position:'absolute', bottom:30, left:'15%', right:'15%', height:2, background:'rgba(245,158,11,0.3)' }} />
+                <div style={{ position:'absolute', bottom:0, left:'50%', width:2, height:30, background:'#EC4899', opacity:0.4 }} />
+                <div style={{ position:'absolute', bottom:30, left:'15%', width:2, height:30, background:'linear-gradient(#3B82F6,#EC4899)', opacity:0.4 }} />
+                <div style={{ position:'absolute', bottom:30, left:'50%', width:2, height:30, background:'linear-gradient(#F59E0B,#EC4899)', opacity:0.4 }} />
+                <div style={{ position:'absolute', bottom:30, right:'15%', width:2, height:30, background:'linear-gradient(#10B981,#EC4899)', opacity:0.4 }} />
+             </div>
+
+             {/* Stage 5: Action */}
+             <div style={{ width:'100%', maxWidth:800, position:'relative', zIndex:2 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:20, marginBottom:12, justifyContent:'center' }}>
+                   <div style={{ fontSize:11, fontWeight:800, color:'#EC4899', textTransform:'uppercase', letterSpacing:'0.1em' }}>04. Action</div>
+                </div>
+                <div style={{ ...card({ padding:'24px 32px', display:'flex', alignItems:'center', gap:24, border:`1px dashed ${dark ? 'rgba(236,72,153,0.3)': 'rgba(236,72,153,0.1)'}`, background:dark?'rgba(236,72,153,0.02)':'rgba(236,72,153,0.01)' }) }}>
+                   <div style={{ width:48, height:48, borderRadius:16, background:'rgba(236,72,153,0.1)', display:'flex', alignItems:'center', justifyContent:'center' }}><CheckCircle color="#EC4899" size={22} /></div>
+                   <div style={{ flex:1 }}>
+                      <div style={{ color:WT, fontWeight:800, fontSize:17 }}>Validation & Launch</div>
+                      <div style={{ color:T.muted, fontSize:14, marginTop:2 }}>Finalize your profile and gain professional insights.</div>
+                   </div>
+                   <button onClick={() => navigate('/login')} style={{ background:'#EC4899', border:'none', color:'#fff', padding:'10px 24px', borderRadius:11, fontWeight:800, fontSize:14, cursor:'pointer', boxShadow:'0 5px 15px rgba(236,72,153,0.25)' }}>Get Started</button>
+                </div>
+             </div>
+
           </div>
-        </div>
       </div>
 
-      {/* ════════════════ HOW IT WORKS — career bg ═══════════════════════════ */}
-      <div id="how-it-works" style={{ scrollMarginTop:70, position:'relative', overflow:'hidden' }}>
-        <div style={{ position:'absolute', inset:0, backgroundImage:`url(${IMG.steps})`, backgroundSize:'cover', backgroundPosition:'center 50%', zIndex:0 }} />
-        <div style={{ position:'absolute', inset:0, background: dark ? OV.stepsD : OV.stepsL, zIndex:1 }} />
-        <div style={{ position:'relative', zIndex:2, maxWidth:1100, margin:'0 auto', padding:'90px 28px' }}>
-          <div style={{ textAlign:'center', marginBottom:64 }}>
-            <div style={{ color:'#A78BFA', fontWeight:700, fontSize:11, letterSpacing:'0.13em', marginBottom:12 }}>HOW IT WORKS</div>
-            <h2 style={{ fontSize:'clamp(28px,4vw,50px)', fontWeight:800, color:WT, fontFamily:"'Space Grotesk',sans-serif" }}>
-              Four Steps to Your{' '}
-              <span style={{ background:'linear-gradient(135deg,#60A5FA,#A78BFA)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>Capability Map</span>
-            </h2>
-          </div>
-
-          {/* Step cards — grid layout (no connector line that breaks on mobile) */}
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:18 }}>
-            {STEPS.map((s,i)=>(
-              <div key={i} style={card({ padding:'28px 22px', textAlign:'center', borderColor:`${s.color}40`, transition:'all 0.3s' })}
-                onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-6px)';e.currentTarget.style.boxShadow=`0 16px 44px ${s.color}38`;e.currentTarget.style.borderColor=`${s.color}88`;}}
-                onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='none';e.currentTarget.style.borderColor=`${s.color}40`;}}>
-                {/* Number badge */}
-                <div style={{ width:32, height:32, borderRadius:'50%', background:`${s.color}30`, border:`1.5px solid ${s.color}`, display:'inline-flex', alignItems:'center', justifyContent:'center', marginBottom:16, fontSize:13, fontWeight:800, color:s.color }}>
-                  {i+1}
-                </div>
-                <div style={{ width:68, height:68, borderRadius:'50%', margin:'0 auto 18px', background:`radial-gradient(circle,${s.color}40,${s.color}10)`, border:`2.5px solid ${s.color}`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:`0 0 28px ${s.color}55` }}>
-                  <s.icon size={32} color={s.color} />
-                </div>
-                <div style={{ fontSize:10, color:s.color, fontWeight:800, letterSpacing:'0.1em', marginBottom:8 }}>STEP {s.n}</div>
-                <div style={{ fontSize:16, fontWeight:700, color:WT, marginBottom:8, fontFamily:"'Space Grotesk',sans-serif" }}>{s.title}</div>
-                <div style={{ fontSize:13, color:WS, lineHeight:1.7 }}>{s.desc}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ════════════════ BENEFITS — solid section (alternating) ═════════════ */}
-      <div style={{ background: dark ? '#0A1628' : '#EEF4FF', padding:'90px 28px' }}>
+      <div id="key-benefits" style={{ scrollMarginTop:100, background: dark ? '#0A1628' : '#fff', padding:'90px 28px' }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:54 }}>
-            <div style={{ color:'#34D399', fontWeight:700, fontSize:11, letterSpacing:'0.13em', marginBottom:12 }}>WHY IT MATTERS</div>
-            <h2 style={{ fontSize:'clamp(28px,4vw,50px)', fontWeight:800, color:T.text, fontFamily:"'Space Grotesk',sans-serif", marginBottom:14 }}>
-              What Every Employee Gains
-            </h2>
-            <p style={{ color:T.sub, fontSize:16, maxWidth:500, margin:'0 auto', lineHeight:1.7 }}>
-              Filling your skill matrix directly impacts your visibility, growth, and career trajectory.
-            </p>
+            <h2 style={{ fontSize:'clamp(28px,4vw,50px)', fontWeight:800, color:WT, fontFamily:"'Space Grotesk',sans-serif" }}>What Every Employee Gains</h2>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:18 }}>
-            {BENEFITS.map((b,i)=>(
-              <div key={i} style={{ padding:26, borderRadius:18, background: dark?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.90)', border:`1px solid ${dark?'rgba(255,255,255,0.09)':b.c+'25'}`, backdropFilter:'blur(12px)', transition:'all 0.3s', cursor:'default' }}
-                onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-5px)';e.currentTarget.style.borderColor=b.c+'55';e.currentTarget.style.boxShadow=`0 16px 44px ${b.c}22`;}}
-                onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.borderColor=dark?'rgba(255,255,255,0.09)':b.c+'25';e.currentTarget.style.boxShadow='';}}>
-                <div style={{ width:50, height:50, borderRadius:14, marginBottom:16, background:`${b.c}18`, border:`1px solid ${b.c}42`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <b.icon size={24} color={b.c} />
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:24 }}>
+            {[
+              { icon:ClipboardList, c:'#3B82F6', t:'Know Where You Stand',          d:'Get a clear picture of your QE skills across all domains — structured and accurate.' },
+              { icon:Target,        c:'#8B5CF6', t:'Close Skill Gaps Faster',        d:'Instantly see missing skills and receive prioritised recommendations to close them.' },
+              { icon:Award,         c:'#10B981', t:'Manager-Endorsed Credentials',   d:'Ratings validated by your manager — giving you officially verified proof of expertise.' },
+              { icon:TrendingUp,    c:'#F59E0B', t:'Unlock Better Opportunities',    d:'A complete skill profile helps you get matched to the right projects and career roles.' },
+              { icon:BookOpen,      c:'#EC4899', t:'Personalised Learning Roadmap',  d:'Get a growth plan with specific actions tailored to your career goals.' },
+              { icon:Users,         c:'#06B6D4', t:'Contribute to Team Visibility',  d:'Help leadership plan smarter with accurate QE capability data across the team.' },
+            ].map(b => (
+              <div key={b.t} style={{ borderRadius:24, padding:32, background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', border:`1px solid ${dark ? 'rgba(255,255,255,0.06)' : 'rgba(59,130,246,0.1)'}`, transition:'all 0.3s' }}>
+                <div style={{ width:48, height:48, borderRadius:16, background:`${b.c}15`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:24 }}>
+                  <b.icon size={22} color={b.c} />
                 </div>
-                <h3 style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:9, fontFamily:"'Space Grotesk',sans-serif" }}>{b.t}</h3>
-                <p style={{ fontSize:13, color:T.sub, lineHeight:1.8 }}>{b.d}</p>
-                <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:14 }}>
-                  <CheckCircle size={13} color={b.c} />
-                  <span style={{ fontSize:11, color:b.c, fontWeight:600 }}>Verified benefit</span>
-                </div>
+                <h4 style={{ fontSize:17, fontWeight:800, color:WT, marginBottom:12 }}>{b.t}</h4>
+                <p style={{ fontSize:14, color:WS, lineHeight:1.6, margin:0 }}>{b.d}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ════════════════ CTA — analytics bg ════════════════════════════════ */}
-      <div style={{ position:'relative', overflow:'hidden' }}>
-        <div style={{ position:'absolute', inset:0, backgroundImage:`url(${IMG.stats})`, backgroundSize:'cover', backgroundPosition:'center 70%', zIndex:0 }} />
-        <div style={{ position:'absolute', inset:0, background: dark ? 'rgba(4,9,20,0.88)' : 'rgba(10,25,80,0.84)', zIndex:1 }} />
-        <div style={{ position:'relative', zIndex:2, textAlign:'center', padding:'100px 28px', maxWidth:680, margin:'0 auto' }}>
-          <h2 style={{ fontSize:'clamp(30px,4vw,54px)', fontWeight:800, color:WT, marginBottom:18, fontFamily:"'Space Grotesk',sans-serif" }}>
-            Ready to Map Your Skills?
-          </h2>
-          <p style={{ color:WS, fontSize:17, lineHeight:1.8, maxWidth:460, margin:'0 auto 44px' }}>
-            Join the Zensar QE team. Start your assessment today and get a complete picture of your strengths.
-          </p>
-          <button onClick={()=>navigate('/start')}
-            style={{ display:'inline-flex', alignItems:'center', gap:12, padding:'18px 44px', borderRadius:14, background:'linear-gradient(135deg,#3B82F6,#8B5CF6)', color:WT, fontWeight:700, fontSize:17, border:'none', cursor:'pointer', boxShadow:'0 0 54px rgba(59,130,246,0.6)', transition:'all 0.3s' }}
-            onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-3px)';e.currentTarget.style.boxShadow='0 14px 64px rgba(59,130,246,0.75)';}}
-            onMouseLeave={e=>{e.currentTarget.style.transform='';e.currentTarget.style.boxShadow='0 0 54px rgba(59,130,246,0.6)';}}>
-            Start My Assessment <ArrowRight size={20} />
-          </button>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <footer style={{ background: dark?'#020810':'#1E3A8A', padding:'22px 28px', textAlign:'center', borderTop:`1px solid ${dark?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.12)'}` }}>
-        <span style={{ color: dark?'rgba(255,255,255,0.28)':'rgba(255,255,255,0.65)', fontSize:13 }}>
-          © 2025 Zensar Technologies · Quality Engineering Division
-        </span>
-      </footer>
-
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');
-        @keyframes fl1{0%,100%{transform:translate(0,0)}50%{transform:translate(3%,5%)}}
-        @keyframes fl2{0%,100%{transform:translate(0,0)}50%{transform:translate(-3%,-4%)}}
-        @keyframes bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(9px)}}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+        @keyframes pulse { 0% { opacity:0.5; transform:scale(0.9); } 50% { opacity:1; transform:scale(1.1); } 100% { opacity:0.5; transform:scale(0.9); } }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@800;900&display=swap');
       `}</style>
     </div>
   );

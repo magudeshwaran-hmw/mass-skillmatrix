@@ -25,6 +25,7 @@ const AI_MODE: 'local' | 'cloud' = 'local';
 
 // Try both URLs — avoids "AI offline" on machines where 127.0.0.1 works but localhost doesn't
 const LOCAL_URLS = [
+  'http://localhost:3001/api/llm', // Proxy via our backend to completely bypass Browser CORS
   'http://localhost:11434/api/generate',
   'http://127.0.0.1:11434/api/generate',
 ];
@@ -32,7 +33,7 @@ const LOCAL_STATUS_URLS = [
   'http://localhost:11434/api/tags',
   'http://127.0.0.1:11434/api/tags',
 ];
-const LOCAL_MODEL = 'llama3';
+const LOCAL_MODEL = 'minimax-m2.5:cloud'; // Cloud-routed via Ollama — no RAM needed, fast!
 
 const CLOUD_API_KEY = 'PASTE_API_KEY_HERE'; // replace when approved
 const CLOUD_MODEL = 'claude-sonnet-4-20250514';
@@ -59,12 +60,26 @@ export const callLLM = async (
   _cacheKeyArg?: string   // kept for backwards-compat; ignored — key is auto-derived
 ): Promise<LLMResult> => {
 
-  // Check cache first
-  const cacheKey = `llmCache_${btoa(unescape(encodeURIComponent(prompt))).slice(0, 40)}`;
+  // Check cache first using a more robust key (simple hash of entire prompt)
+  const getPromptHash = (str: string) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(36);
+  };
+
+  const cacheKey = `llmCache_${getPromptHash(prompt)}`;
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
     try {
-      return { data: JSON.parse(cached), fromCache: true };
+      const parsed = JSON.parse(cached);
+      // Ensure we don't return an empty/error object from cache
+      if (parsed && typeof parsed === 'object') {
+        return { data: parsed, fromCache: true };
+      }
     } catch {
       localStorage.removeItem(cacheKey);
     }
@@ -89,12 +104,23 @@ export const callLLM = async (
                 format: 'json',
               }),
             }),
-            15000
+            25000 // Give it longer to try loading into RAM
           ) as Response;
-          if (attempt.ok) { localRes = attempt; break; }
-        } catch { continue; }
+          if (attempt.ok) { 
+            localRes = attempt; 
+            break; 
+          } else {
+            const errTxt = await attempt.text();
+            throw new Error(`Ollama Error (${attempt.status}): ${errTxt}`);
+          }
+        } catch (err: any) { 
+          if (!localRes && err.message.includes('Ollama Error')) {
+            throw err; // strictly throw the OOM memory error immediately
+          }
+          continue; 
+        }
       }
-      if (!localRes) throw new Error('Ollama offline');
+      if (!localRes) throw new Error('Ollama connection completely failed.');
       const json = await localRes.json();
       rawText = json.response;
 

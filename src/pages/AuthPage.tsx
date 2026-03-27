@@ -155,10 +155,14 @@ export default function AuthPage() {
       });
 
 
+      // Set session ID for cloud sync
+      localStorage.setItem('skill_nav_session_id', emp.zensarId || emp.ZensarID || emp.id);
+
       login('employee', emp.id, emp.name || '');
+      window.dispatchEvent(new Event('skill_nav_session_changed'));
       toast.success(`Welcome back, ${(emp.name || '').split(' ')[0]}! ✅`);
-      // Go to report if submitted, else to resume-upload (which leads to skills)
-      navigate(isSubmitted ? '/employee/report' : '/employee/resume-upload');
+      // Go to dashboard for returning users
+      navigate('/employee/dashboard');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Network Error: Cannot reach server');
     }
@@ -210,6 +214,9 @@ export default function AuthPage() {
         resumeUploaded:    false,
         skills:            SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
       });
+
+      // Set session ID for cloud sync
+      localStorage.setItem('skill_nav_session_id', sZensarId.trim());
 
       login('employee', emp.id, sName.trim());
       toast.success('Account created! Now upload your resume 📄');

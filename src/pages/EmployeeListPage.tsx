@@ -3,10 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Eye, Download, FileSpreadsheet, Users } from 'lucide-react';
 import { toast } from '@/lib/ToastContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
-import { getAllEmployees, computeCompletion, exportAllToExcel, exportEmployeeToExcel, upsertEmployee } from '@/lib/localDB';
+import { getAllEmployees, computeCompletion, exportAllToExcel, exportEmployeeToExcel } from '@/lib/localDB';
 import { SKILLS } from '@/lib/mockData';
-import { apiGetAllEmployees, apiGetSkills, isServerAvailable } from '@/lib/api';
-import type { ProficiencyLevel } from '@/lib/types';
 
 export default function EmployeeListPage() {
   const navigate = useNavigate();
@@ -29,9 +27,26 @@ export default function EmployeeListPage() {
       const arr = data.employees || [];
       const skillArr = data.skills || [];
       const mapped = arr.map((e: any) => {
-        const row = skillArr.find((s: any) => s.employeeId === (e.ID || e.id) || s['Employee ID'] === (e.ID || e.id)) || {};
+        const zid = e.ZensarID || e.ID || e.id;
+        const row = skillArr.find((s: any) => 
+          String(s.employeeId) === String(zid) || 
+          String(s['Employee ID']) === String(zid) ||
+          String(s.EmployeeID) === String(zid)
+        ) || {};
+        
+        const ratingsArray = SKILLS.map(sk => {
+          let val = row[sk.name];
+          if (sk.name === 'C#' && val === undefined) val = row['C_x0023_'];
+          return {
+            skillId: sk.id,
+            selfRating: parseInt(String(val || 0)) || 0,
+            managerRating: null,
+            validated: false
+          };
+        });
+
         return {
-          id: e.ID || e.id,
+          id: zid,
           name: e.Name || e.name || '',
           email: e.Email || e.email || '',
           phone: e.Phone || e.phone || '',
@@ -42,12 +57,7 @@ export default function EmployeeListPage() {
           yearsIT: parseInt(e.YearsIT || e.yearsIT) || 0,
           yearsZensar: parseInt(e.YearsZensar || e.yearsZensar) || 0,
           submitted: e.Submitted === 'Yes' || e.submitted === true,
-          skills: SKILLS.map(sk => ({
-            skillId: sk.id,
-            selfRating: parseInt(row[sk.name] || row[sk.name === 'C#' ? 'C_x0023_' : sk.name] || '0') || 0,
-            managerRating: null,
-            validated: false
-          }))
+          skills: ratingsArray
         };
       });
       setEmployees(mapped);
@@ -55,8 +65,6 @@ export default function EmployeeListPage() {
     });
     return () => { active = false; };
   }, [refreshTick]);
-  const primarySkills = [...new Set(employees.map(e => e.primarySkill))];
-  const domains = [...new Set(employees.map(e => e.primaryDomain))];
 
   const filtered = useMemo(() => {
     let list = employees.filter(e => {
@@ -71,7 +79,7 @@ export default function EmployeeListPage() {
           e.primaryDomain.toLowerCase().includes(q);
         const skillMatch = SKILLS.some(sk =>
           sk.name.toLowerCase().includes(q) &&
-          (e.skills.find(r => r.skillId === sk.id)?.selfRating ?? 0) > 0
+          (e.skills.find((r:any) => r.skillId === sk.id)?.selfRating ?? 0) > 0
         );
         if (!profileMatch && !skillMatch) return false;
       }
@@ -92,6 +100,12 @@ export default function EmployeeListPage() {
     padding: '18px 20px',
   };
 
+  if (loading) return (
+    <div style={{ minHeight:'100vh', background:T.bg, display:'flex', alignItems:'center', justifyContent:'center', color:T.text }}>
+      <RefreshCw size={24} className="animate-spin" />
+    </div>
+  );
+
   return (
     <div style={{ minHeight: '100vh', background: T.bg, color: T.text, fontFamily: "'Inter',sans-serif", transition: 'background 0.35s, color 0.35s', padding: '32px 20px 80px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -107,6 +121,7 @@ export default function EmployeeListPage() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: 'linear-gradient(135deg,#10B981,#059669)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               <FileSpreadsheet size={15} /> Export All
             </button>
+            <button onClick={() => setRefreshTick(t => t+1)} style={{ padding:10, borderRadius:10, background:T.input, border:`1px solid ${T.inputBdr}`, color:T.text, cursor:'pointer' }}><RefreshCw size={15}/></button>
           </div>
         </div>
 
@@ -129,22 +144,17 @@ export default function EmployeeListPage() {
             <option value="completion">Sort: Completion</option>
             <option value="name">Sort: Name</option>
           </select>
-          <span style={{ fontSize: 12, color: T.muted }}>{filtered.length} found</span>
         </div>
 
         {/* Employee cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filtered.map(emp => {
             const pct = computeCompletion(emp.skills);
-            const rated = emp.skills.filter(s => s.selfRating > 0).length;
             return (
-              <div key={emp.id} style={{ ...card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, transition: 'all 0.2s' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#3B82F655'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(59,130,246,0.12)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = T.bdr; e.currentTarget.style.boxShadow = 'none'; }}
-              >
+              <div key={emp.id} style={{ ...card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, transition: 'all 0.2s' }}>
                 {/* Avatar */}
-                <div style={{ width: 46, height: 46, borderRadius: 13, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
-                  {emp.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                  {emp.name.split(' ').map((n:any) => n[0]).join('').slice(0, 2)}
                 </div>
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 200 }}>
@@ -156,49 +166,38 @@ export default function EmployeeListPage() {
                     }
                   </div>
                   <div style={{ fontSize: 12, color: T.sub, marginTop: 2 }}>{emp.designation} · {emp.department}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
-                    {[emp.primarySkill, emp.primaryDomain, `${emp.yearsIT}y IT · ${emp.yearsZensar}y Zensar`].map((tag, i) => (
-                      <span key={i} style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(59,130,246,0.08)', color: dark ? 'rgba(255,255,255,0.65)' : '#2D4A8A', border: `1px solid ${dark ? 'rgba(255,255,255,0.10)' : 'rgba(59,130,246,0.18)'}` }}>{tag}</span>
-                    ))}
-                  </div>
                 </div>
                 {/* Progress */}
-                <div style={{ minWidth: 110, textAlign: 'right' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800, color: pct >= 70 ? '#10B981' : pct >= 40 ? '#F59E0B' : '#EF4444', fontFamily: "'Space Grotesk',sans-serif" }}>{pct}%</div>
-                  <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>{rated}/32 rated</div>
-                  <div style={{ width: '100%', height: 5, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, borderRadius: 999, background: pct >= 70 ? '#10B981' : pct >= 40 ? '#F59E0B' : '#EF4444' }} />
+                <div style={{ minWidth: 100, textAlign: 'right' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: pct >= 70 ? '#10B981' : pct >= 40 ? '#F59E0B' : '#EF4444', fontFamily: "'Space Grotesk',sans-serif" }}>{pct}%</div>
+                  <div style={{ width: '100%', height: 4, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)', marginTop:4 }}>
+                    <div style={{ height: '100%', width: `${pct}%`, borderRadius: 999, background: pct >= 70 ? '#10B981' : '#3B82F6' }} />
                   </div>
                 </div>
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => navigate(`/admin/employee/${emp.id}`)}
-                    style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', color: '#60A5FA', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                    title="View Details"
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.22)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(59,130,246,0.12)'}>
-                    <Eye size={15} />
+                    style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', color: '#60A5FA', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Eye size={16} />
                   </button>
                   <button onClick={() => { exportEmployeeToExcel(emp.id); toast.success(`${emp.name}'s report exported!`); }}
-                    style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', color: '#34D399', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                    title="Export Excel"
-                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.22)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(16,185,129,0.12)'}>
-                    <Download size={15} />
+                    style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', color: '#34D399', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Download size={16} />
                   </button>
                 </div>
               </div>
             );
           })}
-          {filtered.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '60px 20px', color: T.muted }}>
-              <Users size={40} style={{ margin: '0 auto 12px', display: 'block' }} />
-              <div style={{ fontSize: 15, fontWeight: 600 }}>No employees found</div>
-            </div>
-          )}
         </div>
       </div>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');`}</style>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');
+        .animate-spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
+
+// Helper icons needed from lucide-react (adding to imports at top)
+import { RefreshCw } from 'lucide-react';

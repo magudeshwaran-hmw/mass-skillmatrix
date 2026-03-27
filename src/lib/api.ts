@@ -42,6 +42,9 @@ export interface EmployeeRecord {
   overallCapability: number;
   submitted: string; submittedAt: string;
   resumeUploaded: string; createdAt: string;
+  zensarId?: string; ZensarID?: string; ID?: string; Name?: string;
+  Email?: string; Phone?: string; Designation?: string; Department?: string;
+  Location?: string; YearsIT?: number; YearsZensar?: number; Submitted?: string;
 }
 
 export async function apiRegister(payload: RegisterPayload): Promise<EmployeeRecord> {
@@ -55,8 +58,8 @@ export async function apiLogin(login: string, password: string): Promise<Employe
 }
 
 // ─── Employees ────────────────────────────────────────────────────────────────
-export async function apiGetAllEmployees(): Promise<EmployeeRecord[]> {
-  return req<EmployeeRecord[]>('GET', '/employees');
+export async function apiGetAllEmployees(): Promise<{ employees: EmployeeRecord[]; skills: any[] }> {
+  return req<{ employees: EmployeeRecord[]; skills: any[] }>('GET', '/employees');
 }
 
 export async function apiGetEmployee(id: string): Promise<EmployeeRecord> {

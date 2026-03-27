@@ -1,41 +1,22 @@
 import { useAuth } from '@/lib/authContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Menu, X } from 'lucide-react';
+import { LogOut, Menu, X, Sun, Moon, LayoutDashboard, Settings, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { checkLLMStatus } from '@/lib/llm';
 import { ZensarLogo } from '@/components/ZensarLogo';
 import { useApp } from '@/lib/AppContext';
-
-const S = {
-  header: {
-    position: 'sticky' as const, top: 0, zIndex: 100,
-    height: 60,
-    background: 'rgba(10,10,15,0.95)',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-  },
-  inner: {
-    maxWidth: 1200, margin: '0 auto', height: '100%',
-    padding: '0 24px', display: 'flex',
-    alignItems: 'center', justifyContent: 'space-between', gap: 16,
-  },
-  navBtn: (active: boolean): React.CSSProperties => ({
-    padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
-    background: active ? 'rgba(107,45,139,0.25)' : 'transparent',
-    color: active ? '#c084fc' : 'rgba(255,255,255,0.6)',
-    fontSize: 13, fontWeight: 500, transition: 'all 0.2s',
-    fontFamily: 'Inter, sans-serif',
-  }),
-};
+import { useDark, mkTheme } from '@/lib/themeContext';
 
 export default function AppHeader() {
   const { isLoggedIn, role, name, logout } = useAuth();
-  const { data: appData, isLoading } = useApp();
+  const { data: appData } = useApp();
   const navigate  = useNavigate();
   const location  = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [llmStatus, setLlmStatus]   = useState<{ online: boolean; mode: string } | null>(null);
+
+  const { dark, toggleDark } = useDark();
+  const T = mkTheme(dark);
 
   useEffect(() => {
     checkLLMStatus().then(s => setLlmStatus(s));
@@ -44,131 +25,139 @@ export default function AppHeader() {
   }, []);
 
   const displayName  = appData?.user?.Name || name || '…';
-  const completion   = appData?.completion ?? 0;
   const active       = (p: string) => location.pathname === p;
 
   const empNavItems = [
+    { label: 'Dashboard',       path: '/employee/dashboard' },
     { label: 'My Skills',       path: '/employee/skills' },
-    { label: 'Skills Report',   path: '/employee/report' },
+    { label: 'Certifications',  path: '/employee/certifications' },
+    { label: 'Projects',        path: '/employee/projects' },
     { label: 'AI Intelligence', path: '/employee/ai' },
-    { label: 'Resume Builder',  path: '/employee/resume' },
   ];
+
   const adminNavItems = [
-    { label: 'Dashboard',  path: '/admin' },
-    { label: 'Employees',  path: '/admin/employees' },
+    { label: 'Admin Terminal',  path: '/admin', icon: LayoutDashboard },
+    { label: 'Integration Settings',  path: '/setup', icon: Settings },
   ];
+
   const navItems = role === 'admin' ? adminNavItems : empNavItems;
 
+  const headerStyle = {
+    position: 'sticky' as const, top: 0, zIndex: 100,
+    height: 70,
+    background: dark ? 'rgba(10,10,15,0.85)' : '#ffffff', // Solid white in light mode for max visibility
+    borderBottom: `1px solid ${T.bdr}`,
+    boxShadow: dark ? 'none' : '0 1px 10px rgba(0,0,0,0.05)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+  };
+
+  const innerStyle = {
+    maxWidth: 1300, margin: '0 auto', height: '100%',
+    padding: '0 24px', display: 'flex',
+    alignItems: 'center', justifyContent: 'space-between', gap: 16,
+  };
+
+  const navBtn = (isActive: boolean): React.CSSProperties => ({
+    padding: '8px 16px', borderRadius: 12, border: 'none', cursor: 'pointer',
+    background: isActive ? (dark ? 'rgba(59,130,246,0.15)' : '#EFF6FF') : 'transparent',
+    color: isActive ? '#3B82F6' : T.sub,
+    fontSize: 14, fontWeight: isActive ? 700 : 500, transition: 'all 0.2s',
+    display: 'flex', alignItems: 'center', gap: 8
+  });
+
   return (
-    <header style={S.header}>
-      <div style={S.inner}>
-        {/* Left — logo */}
-        <div onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flexShrink: 0 }}>
-          <ZensarLogo size="sm" />
+    <header style={headerStyle}>
+      <div style={innerStyle}>
+        {/* Left — Logo Aligned Left */}
+        <div onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexShrink: 0 }}>
+          <ZensarLogo size="md" />
         </div>
 
-        {/* Center — nav */}
-        {isLoggedIn && (
-          <nav style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, justifyContent: 'center' }} className="sk-hide-mobile">
-            {navItems.map(item => (
+        {/* Center — Clean Nav */}
+        <nav style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'center' }} className="sk-hide-mobile">
+          {isLoggedIn ? (
+            navItems.map(item => (
               <button key={item.path}
-                style={S.navBtn(active(item.path))}
+                style={navBtn(active(item.path))}
                 onClick={() => navigate(item.path)}
-                onMouseEnter={e => { if (!active(item.path)) e.currentTarget.style.color = 'white'; }}
-                onMouseLeave={e => { if (!active(item.path)) e.currentTarget.style.color = 'rgba(255,255,255,0.6)'; }}
               >
                 {item.label}
               </button>
-            ))}
-          </nav>
-        )}
+            ))
+          ) : (
+            <>
+              <button onClick={() => { if(location.pathname!=='/') navigate('/'); setTimeout(()=>document.getElementById('about-tool')?.scrollIntoView({behavior:'smooth'}), 100); }} style={navBtn(false)}>About</button>
+              <button onClick={() => { if(location.pathname!=='/') navigate('/'); setTimeout(()=>document.getElementById('key-benefits')?.scrollIntoView({behavior:'smooth'}), 100); }} style={navBtn(false)}>Features</button>
+              <button onClick={() => { if(location.pathname!=='/') navigate('/'); setTimeout(()=>document.getElementById('how-it-works')?.scrollIntoView({behavior:'smooth'}), 100); }} style={navBtn(false)}>Process</button>
+            </>
+          )}
+        </nav>
 
-        {/* Right — pills + user */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {/* Completion pill */}
-          {isLoggedIn && role === 'employee' && !isLoading && (
-            <div style={{
-              padding: '4px 12px', borderRadius: 20,
-              background: 'rgba(107,45,139,0.2)',
-              border: '1px solid #6B2D8B',
-              color: 'white', fontSize: 12, fontWeight: 600,
-              cursor: 'pointer',
-            }} onClick={() => navigate('/employee/skills')}>
-              {completion}% Complete
+        {/* Right — Active Session Details */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+          
+          {/* Theme */}
+          <button onClick={toggleDark} style={{
+            border: 'none', color: T.sub, cursor: 'pointer',
+            padding: 8, borderRadius: 12, transition: 'background 0.2s',
+            background: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
+          }}>
+            {dark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
+          {/* AI Status */}
+          {llmStatus?.online && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 12, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }} title="Local AI Online">
+               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
+               <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e' }} className="sk-hide-mobile">LOCAL AI</span>
             </div>
           )}
 
-          {/* AI status pill */}
-          {llmStatus !== null && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              padding: '4px 10px', borderRadius: 20,
-              background: llmStatus.online ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
-              border: `1px solid ${llmStatus.online ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`,
-            }} className="sk-hide-mobile">
-              <div style={{ width: 6, height: 6, borderRadius: '50%', background: llmStatus.online ? '#22c55e' : '#ef4444' }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: llmStatus.online ? '#4ade80' : '#f87171' }}>
-                {llmStatus.online ? '● Local AI' : '● AI Offline'}
-              </span>
+          {isLoggedIn && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 12, borderLeft: `1px solid ${T.bdr}` }}>
+               <div style={{ textAlign: 'right' }} className="sk-hide-mobile">
+                  <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{displayName}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#3B82F6', textTransform: 'uppercase' }}>{role} Mode</div>
+               </div>
+               <button 
+                 onClick={() => { logout(); navigate('/'); }}
+                 style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: 'none', color: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                 title="Logout"
+               >
+                 <LogOut size={18} />
+               </button>
             </div>
           )}
 
-          {/* Name */}
-          {isLoggedIn && (
-            <span className="sk-hide-mobile" style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
-              {displayName}
-            </span>
-          )}
-
-          {/* Logout */}
-          {isLoggedIn && (
-            <button
-              onClick={() => { logout(); navigate('/'); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: 'rgba(239,68,68,0.1)', color: '#fca5a5', fontSize: 12, fontWeight: 600,
-                transition: 'all 0.2s', fontFamily: 'Inter, sans-serif',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.2)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
-            >
-              <LogOut size={13} /><span className="sk-hide-mobile">Logout</span>
-            </button>
-          )}
-
-          {/* Login button */}
           {!isLoggedIn && (
-            <button onClick={() => navigate('/start')} style={{
-              padding: '8px 18px', borderRadius: 9, border: 'none', cursor: 'pointer',
-              background: 'linear-gradient(135deg,#6B2D8B,#00A3E0)',
-              color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'Inter,sans-serif',
-            }}>Login →</button>
+            <button onClick={() => navigate('/login')} style={{
+              padding: '10px 24px', borderRadius: 12, border: 'none', cursor: 'pointer',
+              background: '#3B82F6', color: '#fff', fontWeight: 800, fontSize: 14,
+              boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
+            }}>Login</button>
           )}
 
-          {/* Mobile hamburger */}
           {isLoggedIn && (
             <button className="sk-show-mobile" onClick={() => setMobileOpen(v => !v)}
-              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', padding: 4 }}>
-              {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+              style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', padding: 4 }}>
+              {mobileOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           )}
         </div>
       </div>
 
-      {/* Mobile drawer */}
       {mobileOpen && isLoggedIn && (
-        <div style={{ background: 'rgba(10,10,15,0.98)', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '10px 20px 16px' }}>
+        <div style={{ background: T.card, borderTop: `1px solid ${T.bdr}`, padding: '16px', position: 'absolute', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
           {navItems.map(item => (
             <button key={item.path}
               onClick={() => { navigate(item.path); setMobileOpen(false); }}
               style={{
-                display: 'block', width: '100%', textAlign: 'left', padding: '11px 14px',
-                borderRadius: 10, marginBottom: 4,
-                background: active(item.path) ? 'rgba(107,45,139,0.2)' : 'transparent',
-                color: active(item.path) ? '#c084fc' : 'rgba(255,255,255,0.6)',
-                border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500,
-                fontFamily: 'Inter,sans-serif',
+                display: 'block', width: '100%', textAlign: 'left', padding: '14px',
+                borderRadius: 12, marginBottom: 8,
+                background: active(item.path) ? '#3B82F6' : 'transparent',
+                color: active(item.path) ? '#fff' : T.sub,
+                border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 700
               }}>
               {item.label}
             </button>
@@ -177,8 +166,8 @@ export default function AppHeader() {
       )}
 
       <style>{`
-        @media(max-width:768px){.sk-hide-mobile{display:none!important}}
-        @media(min-width:769px){.sk-show-mobile{display:none!important}}
+        @media(max-width:900px){.sk-hide-mobile{display:none!important}}
+        @media(min-width:901px){.sk-show-mobile{display:none!important}}
       `}</style>
     </header>
   );
