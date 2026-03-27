@@ -11,11 +11,23 @@ app.use(express.json());
 const PUSH_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/4ee56055a9054741b8fbd9a06df29bce/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=tTHdqTpv9oYLftU9YYiR7-XOu-6RpnZuMGM6EQWxcvk';
 const GET_URL = 'https://default207c3e3271154ed38a5522f7edb77d.c9.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/a03f128092b847e5bfe212ed8c19ad26/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=4H8WPkq_FRRv5vGT2ebXls0LfCJZ09GwIpV55eRan8o';
 
+// ─── All 32 skill names (canonical order) ─────────────────────────────────
+const SKILL_NAMES = [
+  'Selenium','Appium','JMeter','Postman','JIRA','TestRail',
+  'Python','Java','JavaScript','TypeScript','C#','SQL',
+  'API Testing','Mobile Testing','Performance Testing',
+  'Security Testing','Database Testing','Banking',
+  'Healthcare','E-Commerce','Insurance','Telecom',
+  'Manual Testing','Automation Testing','Regression Testing',
+  'UAT','Git','Jenkins','Docker','Azure DevOps',
+  'ChatGPT/Prompt Engineering','AI Test Automation'
+];
+
 function hashPw(pw) {
   return crypto.createHash('sha256').update(pw).digest('hex');
 }
 
-// Push to Cloud directly
+// ─── Generic push to Cloud ─────────────────────────────────────────────────
 async function syncToCloud(eventType, payload) {
   try {
     const res = await fetch(PUSH_URL, {
@@ -30,38 +42,37 @@ async function syncToCloud(eventType, payload) {
   }
 }
 
-// Fetch BOTH tables from Cloud Excel simultaneously
+// ─── Fetch BOTH tables from Cloud Excel simultaneously ────────────────────
 async function getCloudDB() {
   try {
     const res = await fetch(GET_URL, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }});
     if (!res.ok) throw new Error(`Cloud returned status ${res.status}`);
     const json = await res.json();
-    
-    // Auto-detect swapped arrays (in case Power Automate mapping is flipped)
+
     const arr1 = Array.isArray(json.employees) ? json.employees : [];
     const arr2 = Array.isArray(json.skills) ? json.skills : [];
-    
+
     let actualEmployees = arr1;
     let actualSkills = arr2;
-    
+
     if (arr1[0] && Object.keys(arr1[0]).find(k => k.toLowerCase().includes('selenium'))) {
-      // arr1 contains skills, therefore arr2 is employees!
       actualEmployees = arr2;
       actualSkills = arr1;
     } else if (arr2[0] && Object.keys(arr2[0]).find(k => k.toLowerCase().includes('zensar'))) {
-      // arr2 definitely contains ZensarID, therefore arr2 is employees!
       actualEmployees = arr2;
       actualSkills = arr1;
     }
 
-    // Mathematically merge Capability and Submitted state from Skills to Employees to bypass PowerAutomate missing 'Update' block
+    // Merge Capability and Submitted status from Skills into Employees
     actualEmployees = actualEmployees.map(emp => {
-      const match = actualSkills.find(s => s.employeeId === emp.ID || s['Employee ID'] === emp.ID || s.employeeName === emp.Name);
+      const match = actualSkills.find(s =>
+        s.employeeId === emp.ID ||
+        s['Employee ID'] === emp.ID ||
+        s.employeeName === emp.Name
+      );
       if (match) {
-        // Find how many skills have a rating > 0
-        const rawSkills = ['Selenium', 'Appium', 'JMeter', 'Postman', 'JIRA', 'TestRail', 'Python', 'Java', 'JavaScript', 'TypeScript', 'C#', 'SQL', 'API Testing', 'Mobile Testing', 'Performance Testing', 'Security Testing', 'Database Testing', 'Banking', 'Healthcare', 'E-Commerce', 'Insurance', 'Telecom', 'Manual Testing', 'Automation Testing', 'Regression Testing', 'UAT', 'Git', 'Jenkins', 'Docker', 'Azure DevOps', 'ChatGPT/Prompt Engineering', 'AI Test Automation'];
         let count = 0;
-        rawSkills.forEach(k => { if (parseInt(match[k]) > 0) count++; });
+        SKILL_NAMES.forEach(k => { if (parseInt(match[k]) > 0) count++; });
         emp.OverallCapability = Math.round((count / 32) * 100);
         emp.Submitted = 'Yes';
         emp.SubmittedAt = match.syncedAt || new Date().toISOString();
@@ -74,7 +85,39 @@ async function getCloudDB() {
     return { employees: actualEmployees, skills: actualSkills };
   } catch (err) {
     console.error(`[Cloud DB] Read failed: ${err.message}`);
-    return { employees: [], skills: [] }; // Return empty if cloud fails
+    return { employees: [], skills: [] };
+  }
+}
+
+// ─── BUG 2 FIX: Smart skill sync — UPDATE existing row, INSERT if new ─────
+async function syncSkillsToCloud(payload) {
+  try {
+    const existing = await getCloudDB();
+    const existingSkill = existing.skills.find(s =>
+      s.employeeId === payload.employeeId ||
+      s['Employee ID'] === payload.employeeId ||
+      s.employeeName === payload.employeeName
+    );
+
+    const eventType = existingSkill ? 'SKILLS_UPDATE' : 'SKILLS_UPDATED';
+
+    const res = await fetch(PUSH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventType, ...payload, syncedAt: new Date().toISOString() })
+    });
+
+    if (res.ok) {
+      console.log(`[Cloud Sync] ✅ ${eventType} sent successfully`);
+    } else {
+      console.warn(`[Cloud Sync] ⚠️ Failed: ${res.status}`);
+    }
+
+    if (eventType === 'SKILLS_UPDATE') {
+      console.log('[Info] Power Automate needs UPDATE action: Update a row where Employee ID = employeeId');
+    }
+  } catch (err) {
+    console.warn(`[Cloud Sync] ⚠️ syncSkillsToCloud error: ${err.message}`);
   }
 }
 
@@ -87,9 +130,39 @@ app.get('/api/employees', async (req, res) => {
 });
 
 // Route 2: Frontend writes data to cloud
+// BUG 1+2+3 FIX: flat payload, smart update/insert, input validation
 app.post('/api/sync', async (req, res) => {
   const { eventType, ...payload } = req.body;
-  await syncToCloud(eventType, payload);
+
+  // BUG 3: Validate before sending
+  if (!eventType) {
+    return res.status(400).json({ error: 'eventType is required' });
+  }
+
+  if (eventType === 'SKILLS_UPDATED' || eventType === 'SKILLS_UPDATE') {
+    if (!payload.employeeId) {
+      return res.status(400).json({ error: 'employeeId required for skill sync' });
+    }
+    const hasRating = SKILL_NAMES.some(s => parseInt(String(payload[s] || 0)) > 0);
+    if (!hasRating) {
+      console.warn('[Cloud Sync] Blocked empty skill payload — no ratings found');
+      return res.status(400).json({ error: 'No skill ratings found in payload' });
+    }
+  }
+
+  if (eventType === 'EMPLOYEE_REGISTERED') {
+    if (!payload.Name || !payload.Email) {
+      return res.status(400).json({ error: 'Name and Email required for registration' });
+    }
+  }
+
+  // BUG 2: Route skill events through smart update logic
+  if (eventType === 'SKILLS_UPDATED' || eventType === 'SKILLS_UPDATE') {
+    await syncSkillsToCloud({ ...payload });
+  } else {
+    await syncToCloud(eventType, payload);
+  }
+
   res.json({ success: true });
 });
 
@@ -121,10 +194,8 @@ app.post('/api/register', async (req, res) => {
   };
 
   console.log(`[Register] New employee sent to Cloud: ${name} (${id})`);
-
-  // ONLY sync to cloud, no local db saving!
   syncToCloud('EMPLOYEE_REGISTERED', { ...newEmp, Password: password || '' });
-  
+
   const { Password: _, ...safe } = newEmp;
   res.json({ success: true, employee: { ...safe, id } });
 });
@@ -142,8 +213,7 @@ app.post('/api/login', async (req, res) => {
   );
 
   if (!emp) return res.status(401).json({ error: 'No account found with this Zensar ID / email / phone.' });
-  
-  // Support both Cloud plain-text records and locally hashed legacy records
+
   if (emp.Password && emp.Password !== hashPw(password) && emp.Password !== password) {
     return res.status(401).json({ error: 'Incorrect password.' });
   }
@@ -154,28 +224,22 @@ app.post('/api/login', async (req, res) => {
 
 // GET /api/employees/:id/skills
 app.get('/api/employees/:id/skills', async (req, res) => {
-  // Pull the Skills row perfectly from the SkillsTable block using their ID
   const { skills } = await getCloudDB();
-  const empSkillsRow = skills.find(s => s.employeeId === req.params.id || s['Employee ID'] === req.params.id || s.employeeName === req.params.id);
+  const empSkillsRow = skills.find(s =>
+    s.employeeId === req.params.id ||
+    s['Employee ID'] === req.params.id ||
+    s.employeeName === req.params.id
+  );
   if (!empSkillsRow) return res.json([]);
 
-  const rawSkills = [
-    'Selenium', 'Appium', 'JMeter', 'Postman', 'JIRA', 'TestRail', 'Python', 'Java', 'JavaScript', 
-    'TypeScript', 'C#', 'SQL', 'API Testing', 'Mobile Testing', 'Performance Testing', 'Security Testing', 
-    'Database Testing', 'Banking', 'Healthcare', 'E-Commerce', 'Insurance', 'Telecom', 'Manual Testing', 
-    'Automation Testing', 'Regression Testing', 'UAT', 'Git', 'Jenkins', 'Docker', 'Azure DevOps', 
-    'ChatGPT/Prompt Engineering', 'AI Test Automation'
-  ];
-  
-  const extractedSkills = rawSkills.map((skName, i) => {
-    // Prevent Power Automate OData encoding bug from breaking C# reads
+  const extractedSkills = SKILL_NAMES.map((skName, i) => {
     let rawRating = empSkillsRow[skName];
+    // BUG 1: C# OData encoding fix
     if (skName === 'C#' && rawRating === undefined) {
       rawRating = empSkillsRow['C_x0023_'];
     }
-
     return {
-      skillId: 's' + (i+1),
+      skillId: 's' + (i + 1),
       skillName: skName,
       selfRating: rawRating ? parseInt(rawRating) : 0,
       managerRating: null,
@@ -187,33 +251,35 @@ app.get('/api/employees/:id/skills', async (req, res) => {
 });
 
 // PUT /api/employees/:id/skills
+// BUG 1 FIX: sends flat skill columns to Cloud, not a JSON blob
 app.put('/api/employees/:id/skills', async (req, res) => {
   try {
-    const { skills } = req.body;
-    
-    // Automatically calculate Capability properly!
-    const rated = skills.filter(s => (s.selfRating || 0) > 0).length;
-    const cap = Math.round((rated / 32) * 100);
-    
-    console.log(`[Skills] ✅ Triggered async push for ${skills.length} skills. Computed Capability: ${cap}%`);
-    
-    const flattenedSkills = {};
-    skills.forEach(s => {
-      const name = s.skillName || s.skillId;
-      flattenedSkills[name] = s.selfRating || 0;
+    const body = req.body;
+    const flatSkills = {};
+    SKILL_NAMES.forEach(name => {
+      // Accept either flat fields or nested skills array
+      const fromFlat = parseInt(String(body[name] || 0)) || 0;
+      const fromNested = body.skills
+        ? (body.skills.find((s) => s.skillName === name || s.skillId === name)?.selfRating || 0)
+        : 0;
+      flatSkills[name] = fromFlat || fromNested;
     });
+
+    const rated = SKILL_NAMES.filter(n => flatSkills[n] > 0).length;
+    const cap = Math.round((rated / 32) * 100);
+    console.log(`[Skills] ✅ Smart sync for ${req.params.id}. Rated: ${rated}. Capability: ${cap}%`);
 
     const { employees } = await getCloudDB();
     const emp = employees.find(e => e.ID === req.params.id);
 
-    syncToCloud('SKILLS_UPDATED', {
+    await syncSkillsToCloud({
       employeeId: req.params.id,
       employeeName: emp ? emp.Name : req.params.id,
-      skillCount: skills.length,
-      ...flattenedSkills
+      skillCount: rated,
+      ...flatSkills
     });
 
-    res.json({ success: true, saved: skills.length, capability: cap });
+    res.json({ success: true, saved: rated, capability: cap });
   } catch (err) {
     console.error('[Skills] ❌ Error:', err.message);
     res.status(500).json({ error: err.message });
@@ -223,14 +289,7 @@ app.put('/api/employees/:id/skills', async (req, res) => {
 // POST /api/employees/:id/submit
 app.post('/api/employees/:id/submit', async (req, res) => {
   try {
-    const { employees } = await getCloudDB();
-    const emp = employees.find(e => e.ID === req.params.id);
-    if (!emp) return res.status(404).json({ error: 'Employee not found in Cloud DB.' });
-    
-    // We completely disabled the syncToCloud here because the frontend calls /api/save THEN /api/submit!
-    // Pushing a second webhook here creates a duplicate, blank row in your Excel database.
-    console.log(`[Submit] ✅ Blocked double-write to Cloud for ${req.params.id}. (Already recorded in Skills sheet).`);
-
+    console.log(`[Submit] ✅ Submission recorded for ${req.params.id}. Skills already synced via PUT.`);
     res.json({ success: true });
   } catch (err) {
     console.error('[Submit] ❌ Error:', err.message);
@@ -240,5 +299,7 @@ app.post('/api/employees/:id/submit', async (req, res) => {
 
 // ─── Start ────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n✅ Skill Navigator SERVERLESS CLOUD DB connected via Power Automate on port ${PORT}\n`);
+  console.log(`\n✅ Skill Navigator backend running on port ${PORT}`);
+  console.log(`   Cloud DB : Power Automate (Excel via Webhook)`);
+  console.log(`   Smart sync: SKILLS_UPDATE (existing) | SKILLS_UPDATED (new)\n`);
 });

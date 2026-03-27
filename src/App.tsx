@@ -20,12 +20,14 @@ import NotFound from "@/pages/NotFound";
 import AuthPage from "@/pages/AuthPage";
 import AIIntelligencePage from "@/pages/AIIntelligencePage";
 import ResumeBuilderPage from "@/pages/ResumeBuilderPage";
+import ResumeUploadPage from "@/pages/ResumeUploadPage";
 
 const queryClient = new QueryClient();
 
 function AppRoutes() {
   const { isLoggedIn, role } = useAuth();
-  const loggedInDest = role === 'admin' ? '/admin' : '/employee/skills';
+  // Bug 6: employees go to resume-upload first, then skill matrix
+  const loggedInDest = role === 'admin' ? '/admin' : '/employee/resume-upload';
 
   return (
     <>
@@ -46,7 +48,8 @@ function AppRoutes() {
         <Route path="/employee/ai-hub"       element={<Navigate to="/employee/ai" />} />
         <Route path="/employee/gap-analysis" element={<Navigate to="/employee/report" />} />
         <Route path="/employee/growth-plan"  element={<Navigate to="/employee/ai" />} />
-        <Route path="/employee/resume-upload" element={<Navigate to="/employee/resume" />} />
+        {/* Bug 6: Resume upload step before skill matrix */}
+        <Route path="/employee/resume-upload" element={isLoggedIn ? <ResumeUploadPage /> : <Navigate to="/login" />} />
 
         {/* Admin routes, fallback to specific Admin login */}
         <Route path="/admin"              element={isLoggedIn && role === 'admin' ? <AdminDashboard />   : <AdminLoginPage />} />

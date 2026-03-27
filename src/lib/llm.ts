@@ -23,11 +23,19 @@
 
 const AI_MODE: 'local' | 'cloud' = 'local';
 
-const LOCAL_URL = 'http://localhost:11434/api/generate';
+// Try both URLs — avoids "AI offline" on machines where 127.0.0.1 works but localhost doesn't
+const LOCAL_URLS = [
+  'http://localhost:11434/api/generate',
+  'http://127.0.0.1:11434/api/generate',
+];
+const LOCAL_STATUS_URLS = [
+  'http://localhost:11434/api/tags',
+  'http://127.0.0.1:11434/api/tags',
+];
 const LOCAL_MODEL = 'llama3';
 
 const CLOUD_API_KEY = 'PASTE_API_KEY_HERE'; // replace when approved
-const CLOUD_MODEL = 'claude-sonnet-4-20250514'; // or gemini/openai
+const CLOUD_MODEL = 'claude-sonnet-4-20250514';
 
 // ─── TIMEOUT HELPER ──────────────────────────────────────────
 const withTimeout = (promise: Promise<any>, ms: number) => {
@@ -66,23 +74,28 @@ export const callLLM = async (
     let rawText = '';
 
     if (AI_MODE === 'local') {
-      // ── LOCAL OLLAMA ────────────────────────────────────────
-      const res = await withTimeout(
-        fetch(LOCAL_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: LOCAL_MODEL,
-            prompt: prompt,
-            stream: false,
-            format: 'json',
-          }),
-        }),
-        15000 // 15-second timeout
-      ) as Response;
-
-      if (!res.ok) throw new Error(`Ollama error: ${res.status}`);
-      const json = await res.json();
+      // ── LOCAL OLLAMA — try both localhost and 127.0.0.1 ─────────────────
+      let localRes: Response | null = null;
+      for (const url of LOCAL_URLS) {
+        try {
+          const attempt = await withTimeout(
+            fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: LOCAL_MODEL,
+                prompt: prompt,
+                stream: false,
+                format: 'json',
+              }),
+            }),
+            15000
+          ) as Response;
+          if (attempt.ok) { localRes = attempt; break; }
+        } catch { continue; }
+      }
+      if (!localRes) throw new Error('Ollama offline');
+      const json = await localRes.json();
       rawText = json.response;
 
     } else {
@@ -127,20 +140,20 @@ export const callLLM = async (
     // ── ERROR HANDLING ────────────────────────────────────────
     if (err.message === 'LLM_TIMEOUT') {
       return {
-        data: null,
-        fromCache: false,
-        error: 'timeout',
+        data: null, fromCache: false, error: 'timeout',
         message: 'AI took too long to respond. Click Regenerate.',
       };
     }
 
-    if (err.message?.includes('fetch') || err.name === 'TypeError') {
+    if (
+      err.message?.includes('offline') ||
+      err.message?.includes('fetch') ||
+      err.name === 'TypeError'
+    ) {
       return {
-        data: null,
-        fromCache: false,
-        error: 'offline',
+        data: null, fromCache: false, error: 'offline',
         message: AI_MODE === 'local'
-          ? 'Ollama offline. Run: OLLAMA_ORIGINS=* ollama serve'
+          ? 'Local AI offline. Install Ollama on this device: ollama.com/download — then run: OLLAMA_ORIGINS=* ollama serve'
           : 'Cloud AI unreachable. Check API key or network.',
       };
     }
@@ -170,23 +183,22 @@ export const checkLLMStatus = async (): Promise<{
   message: string;
 }> => {
   if (AI_MODE === 'local') {
-    try {
-      const res = await withTimeout(
-        fetch('http://localhost:11434/api/tags'),
-        3000
-      ) as Response;
-      return {
-        online: res.ok,
-        mode: 'Local Ollama',
-        message: res.ok ? 'Local AI Online' : 'Ollama Offline',
-      };
-    } catch {
-      return {
-        online: false,
-        mode: 'Local Ollama',
-        message: 'Ollama Offline — Run: OLLAMA_ORIGINS=* ollama serve',
-      };
+    // BUG 5 FIX: try both localhost and 127.0.0.1
+    for (const url of LOCAL_STATUS_URLS) {
+      try {
+        const res = await withTimeout(fetch(url), 3000) as Response;
+        if (res.ok) return {
+          online: true,
+          mode: 'Local Ollama',
+          message: '🟢 Local AI Online',
+        };
+      } catch { continue; }
     }
+    return {
+      online: false,
+      mode: 'Local Ollama',
+      message: '🔴 Local AI Offline',
+    };
   } else {
     const configured = CLOUD_API_KEY !== 'PASTE_API_KEY_HERE';
     return {

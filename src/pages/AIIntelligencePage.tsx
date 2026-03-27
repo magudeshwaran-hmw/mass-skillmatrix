@@ -2,10 +2,10 @@
  * AIIntelligencePage.tsx — /employee/ai
  * 3 tabs: Career Coach | Market Intelligence | Learning Roadmap
  */
-import { Map, TrendingUp, Search, MessageSquare, Send, Bot, RefreshCw } from 'lucide-react';
+import { Map, TrendingUp, Search, MessageSquare, Send, Bot, RefreshCw, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/lib/AppContext';
-import { callLLM } from '@/lib/llm';
+import { callLLM, checkLLMStatus } from '@/lib/llm';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
   BarController, Tooltip, Legend,
@@ -472,10 +472,54 @@ const TABS = [
 export default function AIIntelligencePage() {
   const { data, isLoading } = useApp();
   const [tab, setTab] = useState('coach');
+  // Bug 5: offline banner state
+  const [aiOffline, setAiOffline] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    checkLLMStatus().then(s => setAiOffline(!s.online));
+  }, []);
+
+  const retryOllama = () => {
+    setAiOffline(false);
+    checkLLMStatus().then(s => setAiOffline(!s.online));
+  };
 
   return (
     <div style={pg}>
       <div style={container}>
+
+        {/* Bug 5: Dismissible Ollama offline banner — only on this page */}
+        {aiOffline && !bannerDismissed && (
+          <div style={{
+            marginBottom: 20, padding: '16px 20px',
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.35)',
+            borderRadius: 14,
+            display: 'flex', gap: 16, alignItems: 'flex-start',
+          }}>
+            <div style={{ fontSize: 22, flexShrink: 0 }}>🔴</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#f87171', marginBottom: 6 }}>Local AI Offline</div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', lineHeight: 1.7 }}>
+                To enable AI features on this device:<br />
+                1. Install Ollama: <a href="https://ollama.com/download" target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>ollama.com/download</a><br />
+                2. Open terminal and run: <code style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 6px', borderRadius: 4 }}>ollama pull llama3</code><br />
+                3. Then run: <code style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 6px', borderRadius: 4 }}>OLLAMA_ORIGINS=* ollama serve</code><br />
+                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>AI features are optional — all charts and reports work without AI.</span>
+              </div>
+              <button onClick={retryOllama} style={{
+                marginTop: 10, padding: '7px 16px', borderRadius: 8,
+                background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)',
+                color: '#f87171', fontWeight: 600, fontSize: 12, cursor: 'pointer',
+              }}>🔄 Retry Connection</button>
+            </div>
+            <button onClick={() => setBannerDismissed(true)} style={{
+              background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)',
+              cursor: 'pointer', padding: 4, flexShrink: 0,
+            }}><X size={16} /></button>
+          </div>
+        )}
         <div style={{ marginBottom:24 }}>
           <h1 style={{ fontWeight:800, fontSize:'clamp(20px,3vw,30px)', margin:0 }}>AI Intelligence</h1>
           <p style={{ color:'rgba(255,255,255,0.5)', fontSize:14, margin:'4px 0 0' }}>

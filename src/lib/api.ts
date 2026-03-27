@@ -77,8 +77,13 @@ export async function apiGetSkills(employeeId: string): Promise<ApiSkillRating[]
   return req<ApiSkillRating[]>('GET', `/employees/${employeeId}/skills`);
 }
 
-export async function apiSaveSkills(employeeId: string, skills: ApiSkillRating[]): Promise<void> {
-  await req('PUT', `/employees/${employeeId}/skills`, { skills });
+// BUG 1 FIX: send flat skill columns (not a JSON blob array)
+// flatSkills format: { "Selenium": 2, "Python": 3, ... }
+export async function apiSaveSkills(
+  employeeId: string,
+  flatSkills: Record<string, number>
+): Promise<void> {
+  await req('PUT', `/employees/${employeeId}/skills`, flatSkills);
 }
 
 export async function apiSubmit(employeeId: string): Promise<void> {

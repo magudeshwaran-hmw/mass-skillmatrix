@@ -1,13 +1,25 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SKILLS } from '@/lib/mockData';
 import { SkillCategory, ProficiencyLevel, PROFICIENCY_DESCRIPTIONS, SkillRating } from '@/lib/types';
 import { toast } from 'sonner';
-import { Save, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft, Send, FileText } from 'lucide-react';
-import { saveSkillRatings, submitSkillMatrix, computeCompletion, getIncompleteSkills, getEmployee, exportEmployeeToExcel } from '@/lib/localDB';
+import { Save, AlertCircle, CheckCircle2, ChevronRight, ChevronLeft, Send } from 'lucide-react';
+import { saveSkillRatings, submitSkillMatrix, computeCompletion, getIncompleteSkills, getEmployee, exportEmployeeToExcel, upsertEmployee } from '@/lib/localDB';
 import { useAuth } from '@/lib/authContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { apiSaveSkills, apiSubmit, isServerAvailable } from '@/lib/api';
+
+// All 32 skill names in canonical order (matches server)
+const SKILL_NAMES = [
+  'Selenium','Appium','JMeter','Postman','JIRA','TestRail',
+  'Python','Java','JavaScript','TypeScript','C#','SQL',
+  'API Testing','Mobile Testing','Performance Testing',
+  'Security Testing','Database Testing','Banking',
+  'Healthcare','E-Commerce','Insurance','Telecom',
+  'Manual Testing','Automation Testing','Regression Testing',
+  'UAT','Git','Jenkins','Docker','Azure DevOps',
+  'ChatGPT/Prompt Engineering','AI Test Automation'
+];
 
 const CATEGORIES: SkillCategory[] = ['Tool', 'Technology', 'Application', 'Domain', 'TestingType', 'DevOps', 'AI'];
 
@@ -34,10 +46,61 @@ export default function SkillMatrixPage() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [showIncomplete, setShowIncomplete] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Bug 4: cloud-check state (starts from localStorage, upgraded by cloud check)
+  const [alreadySubmitted, setAlreadySubmitted] = useState<boolean>(() => {
+    const empRecord = employeeId && employeeId !== 'new' ? getEmployee(employeeId) : null;
+    return empRecord?.submitted === true;
+  });
 
-  // Check if already submitted
-  const empRecord = employeeId && employeeId !== 'new' ? getEmployee(employeeId) : null;
-  const alreadySubmitted = empRecord?.submitted === true;
+  // BUG 4 FIX: on mount check the cloud for an existing skills row with ratings
+  // This survives logout → login cycles because localStorage may be cleared
+  useEffect(() => {
+    if (!employeeId || employeeId === 'new' || alreadySubmitted) return;
+    const sessionId = localStorage.getItem('skill_nav_session_id');
+    if (!sessionId) return;
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:3001/api/employees');
+        if (!res.ok) return;
+        const { employees, skills } = await res.json();
+        // Check employee submitted flag
+        const employee = (employees || []).find((e: any) =>
+          e.ID === sessionId || e.id === sessionId
+        );
+        if (employee?.Submitted === 'Yes') {
+          setAlreadySubmitted(true);
+          // Persist to localStorage so next check is fast
+          if (employeeId) {
+            const local = getEmployee(employeeId);
+            if (local) upsertEmployee({ ...local, submitted: true });
+          }
+          return;
+        }
+        // Check skills table for any row with rating > 0
+        const userSkills = (skills || []).find((s: any) =>
+          s.employeeId === sessionId || s['Employee ID'] === sessionId
+        );
+        if (userSkills) {
+          const hasRating = SKILL_NAMES.some(n => parseInt(String(userSkills[n] || 0)) > 0);
+          if (hasRating) {
+            setAlreadySubmitted(true);
+            // Also prefill ratings from cloud data
+            const cloudRatings: SkillRating[] = SKILLS.map(sk => ({
+              skillId: sk.id,
+              selfRating: (parseInt(String(userSkills[sk.name] || 0)) || 0) as ProficiencyLevel,
+              managerRating: null,
+              validated: false,
+            }));
+            setRatings(cloudRatings);
+            if (employeeId) {
+              const local = getEmployee(employeeId);
+              if (local) upsertEmployee({ ...local, submitted: true, skills: cloudRatings });
+            }
+          }
+        }
+      } catch { /* server offline — localStorage state is used */ }
+    })();
+  }, [employeeId]);
 
   const activeCategory = CATEGORIES[activeIdx];
   const completion = useMemo(() => computeCompletion(ratings), [ratings]);
@@ -54,20 +117,21 @@ export default function SkillMatrixPage() {
   const updateRating = (skillId: string, level: ProficiencyLevel) =>
     setRatings(prev => prev.map(r => r.skillId === skillId ? { ...r, selfRating: level } : r));
 
-  // Shared: build skill payload for the API
-  const buildSkillsPayload = () => ratings.map(r => ({
-    skillId:       r.skillId,
-    skillName:     SKILLS.find(s => s.id === r.skillId)?.name     || r.skillId,
-    category:      SKILLS.find(s => s.id === r.skillId)?.category || '',
-    selfRating:    r.selfRating,
-    managerRating: r.managerRating,
-    validated:     r.validated,
-  }));
+  // BUG 1 FIX: build FLAT skill name→rating map (not a nested array)
+  const buildSkillsPayload = (): Record<string, number> => {
+    const flat: Record<string, number> = {};
+    SKILLS.forEach(sk => {
+      const r = ratings.find(rt => rt.skillId === sk.id);
+      flat[sk.name] = r?.selfRating ?? 0;
+    });
+    return flat;
+  };
 
   const handleSave = async () => {
     if (!employeeId || employeeId === 'new') { toast.success('✅ Progress saved!'); return; }
+    const empName = getEmployee(employeeId)?.name || '';
     // 1. Always save to localStorage first
-    saveSkillRatings(employeeId, ratings);
+    saveSkillRatings(employeeId, empName, ratings);
     // 2. Push to Excel backend
     try {
       const serverUp = await isServerAvailable();
@@ -83,16 +147,17 @@ export default function SkillMatrixPage() {
   const handleSubmit = async () => {
     if (!employeeId || employeeId === 'new') return;
     setSubmitting(true);
+    const empName = getEmployee(employeeId)?.name || '';
 
-    // 1. ALWAYS save locally first — this ensures the UI reflects submitted state immediately
-    saveSkillRatings(employeeId, ratings);
+    // 1. ALWAYS save locally first
+    saveSkillRatings(employeeId, empName, ratings);
     submitSkillMatrix(employeeId);
 
     // 2. Attempt to save to Excel backend (best-effort)
     try {
       const serverUp = await isServerAvailable();
       if (serverUp) {
-        console.log('[SkillMatrix] Saving', ratings.length, 'skills for', employeeId);
+        console.log('[SkillMatrix] Saving flat skills for', employeeId);
         await apiSaveSkills(employeeId, buildSkillsPayload());
         await apiSubmit(employeeId);
         console.log('[SkillMatrix] Backend submit complete');
@@ -102,7 +167,6 @@ export default function SkillMatrixPage() {
       }
     } catch (err) {
       console.warn('[SkillMatrix] Excel save failed (file may be open):', err);
-      // Still show success — submitted locally. Warn about Excel.
       toast.warning('✅ Submitted! Note: Could not save to Excel (close the file & use Save Progress to sync).');
     }
 
@@ -111,7 +175,8 @@ export default function SkillMatrixPage() {
 
   const handleExport = () => {
     if (employeeId && employeeId !== 'new') {
-      saveSkillRatings(employeeId, ratings);
+      const empName = getEmployee(employeeId)?.name || '';
+      saveSkillRatings(employeeId, empName, ratings);
       exportEmployeeToExcel(employeeId);
       toast.success('📊 Report downloaded!');
     }
