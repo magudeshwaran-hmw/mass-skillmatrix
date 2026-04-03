@@ -8,6 +8,7 @@ import { saveSkillRatings, submitSkillMatrix, computeCompletion, getIncompleteSk
 import { useAuth } from '@/lib/authContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { apiSaveSkills, apiSubmit, isServerAvailable } from '@/lib/api';
+import { useApp } from '@/lib/AppContext';
 
 // All 32 skill names in canonical order (matches server)
 const SKILL_NAMES = [
@@ -38,7 +39,10 @@ export default function SkillMatrixPage() {
   const location = useLocation();
   const { employeeId } = useAuth();
   const { dark } = useDark();
+  const { data, reload, isPopup } = useApp();
   const T = mkTheme(dark);
+  
+  const activeEmpId = isPopup ? (data?.user?.id || data?.user?.ZensarID || employeeId) : employeeId;
   
   // Dynamic color that fixes dark mode visibility for Level 0
   const LVL_COLOR: Record<number, string> = { 0: dark ? '#D1D5DB' : '#4B5563', 1: '#D97706', 2: '#2563EB', 3: '#059669' };
@@ -50,8 +54,13 @@ export default function SkillMatrixPage() {
   const [ratings, setRatings] = useState<SkillRating[]>(() => {
     // Prefer AI ratings from resume upload if available
     if (aiRatingsFromResume && aiRatingsFromResume.length > 0) return aiRatingsFromResume;
-    const emp = employeeId && employeeId !== 'new' ? getEmployee(employeeId) : null;
-    return emp?.skills ?? SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false }));
+    const appRatings = data?.ratings;
+    const emp = activeEmpId && activeEmpId !== 'new' ? getEmployee(activeEmpId) : null;
+    return SKILLS.map(s => {
+      const dbRating = appRatings?.[s.name];
+      const localRating = emp?.skills?.find(sk => sk.skillId === s.id)?.selfRating;
+      return { skillId: s.id, selfRating: (dbRating ?? localRating ?? 0) as ProficiencyLevel, managerRating: null, validated: false };
+    });
   });
   const [activeIdx, setActiveIdx] = useState(0);
   const [showIncomplete, setShowIncomplete] = useState(false);
@@ -59,8 +68,8 @@ export default function SkillMatrixPage() {
   const [showAIBanner, setShowAIBanner] = useState(fromResume);
   
   const [alreadySubmitted, setAlreadySubmitted] = useState<boolean>(() => {
-    const empRecord = employeeId && employeeId !== 'new' ? getEmployee(employeeId) : null;
-    return empRecord?.submitted === true;
+    const empRecord = activeEmpId && activeEmpId !== 'new' ? getEmployee(activeEmpId) : null;
+    return empRecord?.submitted === true || data?.user?.Submitted === 'Yes';
   });
 
   useEffect(() => {
@@ -150,42 +159,50 @@ export default function SkillMatrixPage() {
   };
 
   const handleSave = async () => {
-    if (!employeeId || employeeId === 'new') { toast.success('✅ Progress saved!'); return; }
-    const empName = getEmployee(employeeId)?.name || '';
-    saveSkillRatings(employeeId, empName, ratings);
-    try {
-      const serverUp = await isServerAvailable();
-      if (serverUp) await apiSaveSkills(employeeId, empName, buildSkillsPayload());
-    } catch (err) {
-      toast.error('Could not save to server — progress kept locally');
-      return;
-    }
-    toast.success('✅ Progress saved!');
-  };
-
-  const handleSubmit = async () => {
-    if (!employeeId || employeeId === 'new') return;
-    setSubmitting(true);
-    const empName = getEmployee(employeeId)?.name || '';
-    saveSkillRatings(employeeId, empName, ratings);
-    submitSkillMatrix(employeeId);
+    if (!activeEmpId || activeEmpId === 'new') { toast.success('✅ Progress saved!'); return; }
+    const empName = getEmployee(activeEmpId)?.name || data?.user?.Name || '';
+    saveSkillRatings(activeEmpId, empName, ratings);
     try {
       const serverUp = await isServerAvailable();
       if (serverUp) {
-        await apiSaveSkills(employeeId, empName, buildSkillsPayload());
+        await apiSaveSkills(activeEmpId, empName, buildSkillsPayload());
+        toast.success('Skill Matrix updated directly to cloud!');
+      } else {
+        toast.success('Skill Matrix saved locally.');
+      }
+      if (reload) await reload();
+    } catch (err) {
+      toast.warning('Draft saved locally (Cloud sync failed).');
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!activeEmpId || activeEmpId === 'new') return;
+    setSubmitting(true);
+    const empName = getEmployee(activeEmpId)?.name || data?.user?.Name || '';
+    saveSkillRatings(activeEmpId, empName, ratings);
+    submitSkillMatrix(activeEmpId);
+    try {
+      const serverUp = await isServerAvailable();
+      if (serverUp) {
+        await apiSaveSkills(activeEmpId, empName, buildSkillsPayload());
         toast.success('🎉 Skill Matrix correctly updated in database!');
       } else {
         toast.success('🎉 Skill Matrix submitted locally!');
       }
+      if (reload) await reload();
     } catch (err) {
       toast.warning('✅ Saved locally! (Backend error)');
     }
-    setTimeout(() => navigate('/employee/dashboard'), 900);
+    setTimeout(() => {
+      navigate('/employee/dashboard');
+      if (!isPopup) window.location.reload();
+    }, 900);
   };
 
   const handleExport = () => {
-    if (employeeId && employeeId !== 'new') {
-      const empName = getEmployee(employeeId)?.name || '';
+    if (activeEmpId && activeEmpId !== 'new') {
+      const empName = getEmployee(activeEmpId)?.name || data?.user?.Name || '';
       saveSkillRatings(employeeId, empName, ratings);
       exportEmployeeToExcel(employeeId);
       toast.success('📊 Report downloaded!');

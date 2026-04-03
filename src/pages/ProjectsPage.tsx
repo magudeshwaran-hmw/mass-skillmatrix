@@ -21,8 +21,9 @@ const SKILLS = [ // simplified for multi-select
 export default function ProjectsPage() {
   const { dark } = useDark();
   const T = mkTheme(dark);
-  const { data, reload, isLoading, setGlobalLoading } = useApp();
+  const { data, reload, isPopup, isLoading, setGlobalLoading } = useApp();
   const { employeeId } = useAuth();
+  const activeEmpId = isPopup ? (data?.user?.id || data?.user?.ZensarID || employeeId) : employeeId;
   const [showModal, setShowModal] = useState(false);
   const [editingProj, setEditingProj] = useState<any>(null);
 
@@ -37,16 +38,16 @@ export default function ProjectsPage() {
     e.preventDefault();
     if (!form.ProjectName.trim() || !form.Role.trim()) return alert('Name and Role are required');
 
-    setGlobalLoading(true, 'Saving project...');
+    setGlobalLoading('Saving project...');
     try {
       await fetch(`http://${window.location.hostname}:3001/api/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ID: employeeId,
-          ZensarID: employeeId,
-          EmployeeID: employeeId,
-          EmployeeName: data?.user?.Name || data?.user?.name || employeeId,
+          ID: activeEmpId,
+          ZensarID: activeEmpId,
+          EmployeeID: activeEmpId,
+          EmployeeName: data?.user?.Name || data?.user?.name || activeEmpId,
           ProjectName: form.ProjectName,
           Client: form.Client,
           Domain: form.Domain,
@@ -63,12 +64,13 @@ export default function ProjectsPage() {
       });
       setShowModal(false);
       await reload();
+      if (!isPopup) window.location.reload();
     } catch (err) { alert('Failed to save'); setGlobalLoading(false); }
   };
 
   const handleDelete = async (project: any) => {
     if (!confirm('Are you sure you want to delete this project?')) return;
-    setGlobalLoading(true, 'Deleting project...');
+    setGlobalLoading('Deleting project...');
     try {
       await fetch(`http://${window.location.hostname}:3001/api/projects`, { 
         method: 'POST', 
@@ -76,6 +78,7 @@ export default function ProjectsPage() {
         body: JSON.stringify({ ...project, ProjectName: '[DELETED]' })
       });
       await reload();
+      if (!isPopup) window.location.reload();
     } catch (err) { alert('Failed to delete'); setGlobalLoading(false); }
   };
 

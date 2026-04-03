@@ -7,10 +7,12 @@ interface AppContextType {
   isLoading: boolean;
   setGlobalLoading: (val: boolean | string | null) => void;
   reload: () => Promise<void>;
+  isPopup?: boolean;
+  onTabChange?: (tab: string) => void;
 }
 
 export const AppContext = createContext<AppContextType>({
-  data: null, isLoading: true, setGlobalLoading: () => {}, reload: async () => {},
+  data: null, isLoading: true, setGlobalLoading: () => {}, reload: async () => {}, isPopup: false
 });
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
@@ -45,7 +47,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <AppContext.Provider value={{ data, isLoading, setGlobalLoading, reload: load }}>
+    <AppContext.Provider value={{ data, isLoading, setGlobalLoading, reload: load, isPopup: false }}>
       <LoadingOverlay active={isLoading} text={loadingText} />
       {children}
     </AppContext.Provider>

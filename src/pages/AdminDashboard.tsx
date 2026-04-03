@@ -126,6 +126,9 @@ export default function AdminDashboard() {
       toast.error('Failed to connect to database');
     }
     setLoading(false);
+    if (!loading) {
+      toast.success('Admin: Changes synchronized successfully');
+    }
   };
 
   useEffect(() => { loadAllData(); }, []);
@@ -379,10 +382,14 @@ export default function AdminDashboard() {
                   data: previewData, 
                   isLoading: false, 
                   setGlobalLoading: () => {}, 
+                  isPopup: true,
+                  onTabChange: (tab) => setPopupActiveTab(tab as any),
                   reload: async () => {
                     const d = await loadAppData(previewUser.id);
                     setPreviewData(d);
-                    loadAllData(); // Sync admin view
+                    await loadAllData(); // Sync admin view
+                    setPopupActiveTab('Dashboard');
+                    toast.success('Admin: Changes synchronized successfully');
                   }
                 }}>
                   <div style={{ pointerEvents: 'auto', animation: 'fadeIn 0.4s' }}>

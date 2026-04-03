@@ -12,8 +12,9 @@ import { Award, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, X, ExternalLink 
 export default function CertificationsPage() {
   const { dark } = useDark();
   const T = mkTheme(dark);
-  const { data, reload, isLoading, setGlobalLoading } = useApp();
+  const { data, reload, isPopup, isLoading, setGlobalLoading } = useApp();
   const { employeeId } = useAuth();
+  const activeEmpId = isPopup ? (data?.user?.id || data?.user?.ZensarID || employeeId) : employeeId;
   const [showModal, setShowModal] = useState(false);
   const [editingCert, setEditingCert] = useState<any>(null);
 
@@ -30,27 +31,28 @@ export default function CertificationsPage() {
     e.preventDefault();
     if (!form.CertName.trim() || !form.Provider.trim()) return alert('Name and Provider are required');
 
-    setGlobalLoading(true, 'Saving certification...');
+    setGlobalLoading('Saving certification...');
     try {
       await fetch('http://localhost:3001/api/certifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ID: employeeId,
-          ZensarID: employeeId,
-          EmployeeID: employeeId,
-          EmployeeName: data?.user?.Name || data?.user?.name || employeeId,
+          ID: activeEmpId,
+          ZensarID: activeEmpId,
+          EmployeeID: activeEmpId,
+          EmployeeName: data?.user?.Name || data?.user?.name || activeEmpId,
           ...form
         })
       });
       setShowModal(false);
       await reload();
+      if (!isPopup) window.location.reload();
     } catch (err) { alert('Failed to save'); setGlobalLoading(false); }
   };
 
   const handleDelete = async (cert: any) => {
     if (!confirm('Are you sure you want to delete this certification?')) return;
-    setGlobalLoading(true, 'Deleting certification...');
+    setGlobalLoading('Deleting certification...');
     try {
       await fetch(`http://${window.location.hostname}:3001/api/certifications`, { 
         method: 'POST', 
@@ -58,6 +60,7 @@ export default function CertificationsPage() {
         body: JSON.stringify({ ...cert, CertName: '[DELETED]' })
       });
       await reload();
+      if (!isPopup) window.location.reload();
     } catch (err) { alert('Failed to delete'); setGlobalLoading(false); }
   };
 

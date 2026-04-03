@@ -19,7 +19,7 @@ export default function EmployeeDashboard() {
   const navigate = useNavigate();
   const { dark } = useDark();
   const T = mkTheme(dark);
-  const { data, isLoading } = useApp();
+  const { data, isLoading, isPopup, onTabChange } = useApp();
 
   if (isLoading) {
     return (
@@ -118,7 +118,7 @@ export default function EmployeeDashboard() {
 
           {/* MIDDLE SECTION — 4 Quick Actions */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-            <div style={actionCard} onClick={() => navigate('/employee/skills')} className="hover:scale-105 hover:border-blue-500">
+            <div style={actionCard} onClick={() => isPopup && onTabChange ? onTabChange('Skills') : navigate('/employee/skills')} className="hover:scale-105 hover:border-blue-500">
               <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
                 <PenTool size={22} />
               </div>
@@ -126,7 +126,7 @@ export default function EmployeeDashboard() {
               <div style={{ fontSize: 12, color: T.muted }}>Update your {completion}% completed ratings</div>
             </div>
 
-            <div style={actionCard} onClick={() => navigate('/employee/certifications')} className="hover:scale-105 hover:border-emerald-500">
+            <div style={actionCard} onClick={() => isPopup && onTabChange ? onTabChange('Certifications') : navigate('/employee/certifications')} className="hover:scale-105 hover:border-emerald-500">
               <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(16,185,129,0.1)', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
                 <Award size={22} />
               </div>
@@ -134,7 +134,7 @@ export default function EmployeeDashboard() {
               <div style={{ fontSize: 12, color: T.muted }}>Add technical credentials</div>
             </div>
 
-            <div style={actionCard} onClick={() => navigate('/employee/projects')} className="hover:scale-105 hover:border-purple-500">
+            <div style={actionCard} onClick={() => isPopup && onTabChange ? onTabChange('Projects') : navigate('/employee/projects')} className="hover:scale-105 hover:border-purple-500">
               <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(139,92,246,0.1)', color: '#8B5CF6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
                 <Briefcase size={22} />
               </div>
@@ -142,7 +142,7 @@ export default function EmployeeDashboard() {
               <div style={{ fontSize: 12, color: T.muted }}>Manage Zensar assignments</div>
             </div>
 
-            <div style={actionCard} onClick={() => navigate('/employee/resume')} className="hover:scale-105 hover:border-amber-500">
+            <div style={actionCard} onClick={() => isPopup ? alert('Resume Builder is not available in the admin popup.') : navigate('/employee/resume')} className="hover:scale-105 hover:border-amber-500">
               <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(245,158,11,0.1)', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
                 <FileText size={22} />
               </div>
