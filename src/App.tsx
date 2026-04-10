@@ -29,6 +29,7 @@ import ResumeBuilderPage from "@/pages/ResumeBuilderPage";
 import CertificationsPage from "@/pages/CertificationsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import EducationPage from "@/pages/EducationPage";
+import ResumeUploadPage from "@/pages/ResumeUploadPage";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -65,8 +66,10 @@ function AppRoutes() {
         <Route path="/employee/certifications" element={isLoggedIn ? <CertificationsPage /> : <Navigate to="/login" />} />
         <Route path="/employee/projects"       element={isLoggedIn ? <ProjectsPage />       : <Navigate to="/login" />} />
         <Route path="/employee/education"      element={isLoggedIn ? <EducationPage />      : <Navigate to="/login" />} />
+        <Route path="/employee/resume-upload"  element={isLoggedIn ? <ResumeUploadPage />   : <Navigate to="/login" />} />
 
-        {/* Legacy URL redirects */}
+        {/* Legacy URL redirects and fallbacks */}
+        <Route path="/employee"              element={<Navigate to="/employee/dashboard" />} />
         <Route path="/employee/ai-hub"       element={<Navigate to="/employee/ai" />} />
         <Route path="/employee/gap-analysis" element={<Navigate to="/employee/report" />} />
         <Route path="/employee/growth-plan"  element={<Navigate to="/employee/ai" />} />
@@ -91,7 +94,7 @@ const App = () => (
           <ToastProvider>
             <AppProvider>
               <UserProvider>
-                <BrowserRouter>
+                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                   <AppRoutes />
                 </BrowserRouter>
               </UserProvider>

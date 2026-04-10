@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { toast } from '@/lib/ToastContext';
 import { AppData, Project, Certification, EducationEntry } from '@/lib/appStore';
 import { API_BASE } from '@/lib/api';
+import { callLLM } from '@/lib/llm';
 
 export default function ResumeBuilderPage({ 
   isPopup: propIsPopup, 
@@ -94,37 +95,44 @@ export default function ResumeBuilderPage({
       const content = document.getElementById('zensar-resume')?.innerHTML;
       if (!content) return;
 
-      const header = `
-        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head><meta charset='utf-8'><title>Zensar Resume</title>
-        <style>
-          body { font-family: 'Segoe UI', Arial, sans-serif; line-height: 1.5; color: #333; }
-          .section-header { border-bottom: 2px solid #3B82F6; color: #000; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; margin-top: 20px; font-size: 14pt; }
-          .name { font-size: 24pt; font-weight: bold; color: #111; margin: 0; }
-          .designation { font-size: 14pt; color: #3B82F6; font-weight: bold; margin-bottom: 5px; }
-          .contact { font-size: 10pt; color: #555; margin-bottom: 20px; }
-          .proj-title { font-weight: bold; font-size: 12pt; }
-          .role-info { color: #3B82F6; font-weight: bold; font-size: 10pt; }
-          table { width: 100%; border-collapse: collapse; }
-          td { vertical-align: top; }
-        </style>
-        </head><body>
+      const wordCSS = `
+        body { font-family: 'Calibri', Arial, sans-serif; font-size: 11pt; line-height: 1.6; color: #000; margin: 2cm; }
+        h1 { font-size: 22pt; font-weight: 700; margin: 0 0 2pt; color: #000; }
+        h2 { font-size: 14pt; font-weight: 700; margin: 0 0 4pt; color: #000; }
+        h3 { font-size: 12pt; font-weight: 700; margin: 0 0 2pt; color: #000; }
+        .res-header { border-bottom: 2.5pt solid #000; padding-bottom: 10pt; margin-bottom: 16pt; }
+        .res-contact { font-size: 9.5pt; color: #333; margin-top: 6pt; }
+        .res-section { margin-bottom: 16pt; page-break-inside: avoid; }
+        .res-sec-title { font-size: 10.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1pt; border-bottom: 1.5pt solid #000; padding-bottom: 3pt; margin-bottom: 8pt; color: #000; }
+        .res-proj { border-left: 2pt solid #aaa; padding-left: 10pt; margin-bottom: 12pt; page-break-inside: avoid; }
+        .res-proj-title { font-size: 11.5pt; font-weight: 700; color: #000; }
+        .res-proj-role { font-size: 10pt; font-weight: 600; color: #333; margin: 2pt 0; }
+        .res-proj-desc { font-size: 10pt; color: #333; margin: 4pt 0; }
+        .res-cert { border-left: 2pt solid #aaa; padding-left: 10pt; margin-bottom: 10pt; }
+        .res-cert-name { font-weight: 700; font-size: 11pt; color: #000; }
+        .res-cert-meta { font-size: 9.5pt; color: #555; margin-top: 2pt; }
+        .res-skill-group { font-size: 10pt; margin-bottom: 5pt; }
+        .res-edu { border-left: 2pt solid #aaa; padding-left: 10pt; margin-bottom: 10pt; }
+        .res-footer { font-size: 8pt; color: #888; border-top: 1pt solid #ccc; padding-top: 8pt; margin-top: 20pt; }
       `;
-      const footer = "</body></html>";
-      
+
+      const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>${editableUser.Name} - Resume</title><style>${wordCSS}</style></head><body>`;
+      const footer = `</body></html>`;
+
       const source = header + content + footer;
       const blob = new Blob(['\ufeff', source], { type: 'application/msword' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${editableUser.Name.replace(/\s+/g, '_')}_Zensar_Resume.doc`;
+      link.download = `${(editableUser.Name || 'Employee').replace(/\s+/g, '_')}_Zensar_Resume.doc`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success('Word Document Generated');
-    } catch (e) { 
+      URL.revokeObjectURL(url);
+      toast.success('✅ Word Document Downloaded');
+    } catch (e) {
       console.error(e);
-      toast.error('Failed to generate Word doc'); 
+      toast.error('Failed to generate Word doc');
     } finally {
       setLoading(false);
     }
@@ -136,14 +144,13 @@ export default function ResumeBuilderPage({
       const skills = Object.keys(visibleSkills).filter(k => visibleSkills[k]).join(", ");
       const prompt = `Rewrite this professional summary for a Zensar employee to sound more advanced and leadership-oriented. Keep it concise (3-4 sentences). Current: "${summary}". Skills: ${skills}`;
       
-      const res = await fetch(`${API_BASE}/llm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      });
-      const data = await res.json();
-      if (data.text) setSummary(data.text);
-      toast.success("AI Refinement Complete");
+      const result = await callLLM(prompt);
+      if (result.data) {
+        setSummary(typeof result.data === 'string' ? result.data : JSON.stringify(result.data));
+        toast.success("AI Refinement Complete");
+      } else {
+        toast.error(result.message || "AI Service offline");
+      }
     } catch (e) {
       toast.error("AI Service offline");
     } finally {
@@ -214,28 +221,35 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
     navigate(-1);
   };
 
-  const sectionStyle = { marginBottom: 22, breakInside: 'avoid' as const };
-  const headerStyle = { 
-    fontSize: 13, 
-    fontWeight: 800, 
-    color: '#000', 
-    borderBottom: '2px solid #3B82F6', 
-    paddingBottom: 5, 
-    marginBottom: 12, 
-    textTransform: 'uppercase' as const,
-    letterSpacing: 1.2
+  const sectionStyle: React.CSSProperties = { marginBottom: 24, breakInside: 'avoid' };
+  const headerStyle: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 800,
+    color: '#000',
+    borderBottom: '1.5px solid #000',
+    paddingBottom: 5,
+    marginBottom: 14,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5
   };
 
   const LEVEL_LABEL: Record<number, string> = { 1: 'Beginner', 2: 'Intermediate', 3: 'Expert' };
-  const LEVEL_COLOR: Record<number, string> = { 1: '#F59E0B', 2: '#3B82F6', 3: '#10B981' };
+  const LEVEL_COLOR: Record<number, string> = { 1: '#6B7280', 2: '#374151', 3: '#000' };
 
-  const formatDate = (d?: string) => {
+  const formatDate = (d?: string): string => {
     if (!d) return '';
-    if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
-      const dt = new Date(d);
-      return dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    // Handle raw JS Date toString like "Mon Jan 01 2024 00:00:00 GMT+0000"
+    const raw = String(d).trim();
+    // Try ISO format YYYY-MM-DD first
+    if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+      const dt = new Date(raw);
+      if (!isNaN(dt.getTime())) return dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     }
-    return d;
+    // Try parsing any other date string (handles timestamps)
+    const dt = new Date(raw);
+    if (!isNaN(dt.getTime())) return dt.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    // If already human-readable like "May 2024", return as-is
+    return raw.length < 20 ? raw : '';
   };
 
   if (!rawData?.user) {
@@ -257,19 +271,22 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
 
   return (
     <div style={{ minHeight: '100vh', background: isPopup ? 'transparent' : T.bg, color: T.text, padding: isPopup ? 0 : '20px' }}>
-      <div style={{ maxWidth: 1300, margin: '0 auto', display: 'grid', gridTemplateColumns: isPopup ? '1fr' : '380px 1fr', gap: 28 }}>
+      <div style={{ maxWidth: 1300, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 28 }}>
         
         {/* --- LEFT SIDEBAR: AI COMMAND CENTER --- */}
         <div className="no-print" style={{ 
+          flex: (isPopup || window.innerWidth < 1000) ? '1 1 100%' : '1 1 320px', 
+          maxWidth: (isPopup || window.innerWidth < 1000) ? '100%' : 450,
           background: T.card, 
           border: `1px solid ${T.bdr}`, 
           borderRadius: 20, 
-          padding: 24, 
-          height: isPopup ? 'auto' : 'calc(100vh - 40px)', 
+          padding: window.innerWidth < 600 ? 16 : 24, 
+          height: (isPopup || window.innerWidth < 1000) ? 'auto' : 'calc(100vh - 40px)', 
           overflowY: 'auto',
-          position: isPopup ? 'relative' : 'sticky',
+          position: (isPopup || window.innerWidth < 1000) ? 'relative' : 'sticky',
           top: 20,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.08)'
+          boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+          marginBottom: (isPopup || window.innerWidth < 1000) ? 20 : 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
@@ -416,210 +433,219 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
         </div>
 
         {/* --- RIGHT SIDE: LIVE RESUME PREVIEW --- */}
-        <div style={{ position: 'relative' }}>
+        <div style={{ flex: '2 1 500px', position: 'relative', overflowX: 'auto', paddingBottom: 40 }}>
           
-          <div style={{ position: 'sticky', top: 20, zIndex: 10, display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 16 }} className="no-print">
-            <button onClick={handleDownloadWord} disabled={loading} style={{ background: T.card, color: '#3B82F6', border: `1.5px solid #3B82F6`, padding: '10px 18px', borderRadius: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+          <div style={{ position: 'sticky', top: 20, zIndex: 10, display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10, marginBottom: 16 }} className="no-print">
+            <button onClick={handleDownloadWord} disabled={loading} style={{ background: T.card, color: '#3B82F6', border: `1.5px solid #3B82F6`, padding: '10px 18px', borderRadius: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, flex: '1 1 auto', justifyContent: 'center', minWidth: 120 }}>
                <FileText size={16} /> Export Word
             </button>
-            <button onClick={handlePrint} disabled={loading} style={{ background: '#3B82F6', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', boxShadow: '0 8px 25px rgba(59,130,246,0.3)', fontSize: 13 }}>
+            <button onClick={handlePrint} disabled={loading} style={{ background: '#3B82F6', color: '#fff', border: 'none', padding: '10px 22px', borderRadius: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', boxShadow: '0 8px 25px rgba(59,130,246,0.3)', fontSize: 13, flex: '1 1 auto', justifyContent: 'center', minWidth: 140 }}>
                {loading ? <RefreshCw size={16} className="animate-spin" /> : <Printer size={16} />}
                Generate PDF
             </button>
           </div>
 
           {/* ============ RESUME DOCUMENT ============ */}
-          <div id="zensar-resume" style={{ 
-            background: '#fff', 
-            color: '#111', 
-            padding: '48px 56px', 
-            borderRadius: 4, 
-            boxShadow: '0 20px 60px rgba(0,0,0,0.12)', 
-            minHeight: 1122,
-            fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-            position: 'relative'
+          <div id="zensar-resume" style={{
+            background: '#fff',
+            color: '#1a1a1a',
+            padding: '40px 48px', // Fixed document padding
+            borderRadius: 4,
+            boxShadow: '0 4px 32px rgba(0,0,0,0.1)',
+            fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
+            fontSize: 11,
+            lineHeight: 1.65,
+            minHeight: 1122
           }}>
-             
-             {/* ── HEADER ── */}
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, borderBottom: '2.5px solid #E5E7EB', paddingBottom: 22 }}>
-                <div style={{ flex: 1 }}>
-                   <h1 style={{ margin: 0, fontSize: 32, fontWeight: 900, letterSpacing: -1, color: '#0F172A' }}>
-                     {editableUser.Name || 'Employee Name'}
-                   </h1>
-                   <p style={{ margin: '5px 0 0', fontSize: 15, color: '#3B82F6', fontWeight: 700, letterSpacing: 0.3 }}>
-                     {editableUser.Designation || 'Technology Professional'}
-                     {editableUser.YearsIT ? ` • ${editableUser.YearsIT}+ Years Experience` : ''}
-                   </p>
-                   <div style={{ marginTop: 12, fontSize: 11, color: '#6B7280', display: 'flex', flexWrap: 'wrap', gap: '14px', fontWeight: 500 }}>
-                      {editableUser.Email && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Mail size={11} color="#3B82F6" /> {editableUser.Email}</div>}
-                      {editableUser.Location && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><MapPin size={11} color="#3B82F6" /> {editableUser.Location}</div>}
-                      {editableUser.Phone && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>📞 {editableUser.Phone}</div>}
-                      {editableUser.ZensarID && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>🆔 {editableUser.ZensarID}</div>}
-                   </div>
+            {/* ── HEADER ── */}
+            <div className="res-header" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap-reverse', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2.5px solid #000', paddingBottom: 18, marginBottom: 20, gap: 16 }}>
+              <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: -0.3, color: '#000', lineHeight: 1.1 }}>
+                  {editableUser.Name || 'Employee Name'}
+                </h1>
+                <h2 style={{ margin: '4px 0 0', fontSize: 13, fontWeight: 600, color: '#333', letterSpacing: 0.2 }}>
+                  {editableUser.Designation || 'Technology Professional'}
+                  {editableUser.YearsIT ? ` — ${editableUser.YearsIT}+ Years Experience` : ''}
+                </h2>
+                <div style={{ marginTop: 10, fontSize: 10, color: '#444', display: 'flex', flexWrap: 'wrap', gap: '6px 20px', fontWeight: 500 }} className="res-contact">
+                  {editableUser.Email && <span>✉ {editableUser.Email}</span>}
+                  {editableUser.Location && <span>📍 {editableUser.Location}</span>}
+                  {editableUser.Phone && <span>📞 {editableUser.Phone}</span>}
+                  {editableUser.ZensarID && <span>🆔 Zensar ID: {editableUser.ZensarID}</span>}
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 24 }}>
-                   <img src="/zensar_rpg_logo.png" alt="Zensar" style={{ height: 44, marginBottom: 6 }} onError={(e) => { (e.target as any).src='/zensar_logo.png'; }} />
-                   <div style={{ fontSize: 8, fontWeight: 800, color: '#3B82F6', textTransform: 'uppercase', letterSpacing: 1.5 }}>Experience. Outcomes.</div>
-                   <div style={{ fontSize: 8, fontWeight: 600, color: '#9CA3AF', marginTop: 3 }}>An ®RPG Company</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <img src="/zensar_rpg_logo.png" alt="Zensar" style={{ height: 36, display: 'block', marginBottom: 6, marginLeft: 'auto' }} onError={(e) => { (e.target as any).src = '/zensar_logo.png'; }} />
+                <div style={{ fontSize: 7.5, fontWeight: 700, color: '#555', textTransform: 'uppercase', letterSpacing: 1.2 }}>Experience. Outcomes.</div>
+                <div style={{ fontSize: 7.5, color: '#888', marginTop: 2 }}>An ®RPG Company</div>
+              </div>
+            </div>
+
+            {/* ── PROFESSIONAL SUMMARY ── */}
+            <div style={sectionStyle}>
+              <div style={headerStyle}>Professional Summary</div>
+              <p style={{ margin: 0, fontSize: 11, lineHeight: 1.75, color: '#222', textAlign: 'justify' }}>{summary}</p>
+            </div>
+
+            {/* ── CORE COMPETENCIES ── */}
+            {activeSkillsForResume.length > 0 && (() => {
+              const expert = activeSkillsForResume.filter(s => rawData?.ratings?.[s] === 3);
+              const mid    = activeSkillsForResume.filter(s => rawData?.ratings?.[s] === 2);
+              const beg    = activeSkillsForResume.filter(s => rawData?.ratings?.[s] === 1);
+              return (
+                <div style={sectionStyle}>
+                  <div style={headerStyle}>Core Competencies &amp; Technical Skills</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 5 }} className="res-skill-group">
+                    {expert.length > 0 && (
+                      <div style={{ fontSize: 11 }}>
+                        <span style={{ fontWeight: 700, color: '#000' }}>Expert:&nbsp;</span>
+                        <span style={{ color: '#333' }}>{expert.join('  ·  ')}</span>
+                      </div>
+                    )}
+                    {mid.length > 0 && (
+                      <div style={{ fontSize: 11 }}>
+                        <span style={{ fontWeight: 700, color: '#000' }}>Intermediate:&nbsp;</span>
+                        <span style={{ color: '#333' }}>{mid.join('  ·  ')}</span>
+                      </div>
+                    )}
+                    {beg.length > 0 && (
+                      <div style={{ fontSize: 11 }}>
+                        <span style={{ fontWeight: 700, color: '#000' }}>Foundational:&nbsp;</span>
+                        <span style={{ color: '#333' }}>{beg.join('  ·  ')}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-             </div>
+              );
+            })()}
 
-             {/* ── PROFESSIONAL SUMMARY ── */}
-             <div style={sectionStyle}>
-                <div style={headerStyle}>Professional Summary</div>
-                <p style={{ margin: 0, fontSize: 12, lineHeight: 1.75, color: '#374151', textAlign: 'justify' as const }}>{summary}</p>
-             </div>
+            {/* ── PROFESSIONAL EXPERIENCE & PROJECTS ── */}
+            {(rawData.projects || []).filter(p => visibleProjects[p.ID]).length > 0 && (
+              <div style={sectionStyle}>
+                <div style={headerStyle}>Professional Experience &amp; Projects</div>
+                <div style={{ display: 'grid', gap: 18 }}>
+                  {(rawData.projects || []).filter(p => visibleProjects[p.ID]).map((p, i) => {
+                    const start = formatDate(p.StartDate);
+                    const end = p.IsOngoing ? 'Present' : formatDate(p.EndDate);
+                    const techs = Array.isArray(p.Technologies) ? p.Technologies : [];
+                    const skills = Array.isArray(p.SkillsUsed) ? p.SkillsUsed : [];
+                    const allTech = [...new Set([...techs, ...skills])].filter(Boolean);
+                    const dateStr = [start, end].filter(Boolean).join(' – ');
+                    return (
+                      <div key={i} className="res-proj" style={{ borderLeft: '2px solid #999', paddingLeft: 14, breakInside: 'avoid' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 4 }}>
+                          <span className="res-proj-title" style={{ fontWeight: 700, fontSize: 12, color: '#000' }}>{p.ProjectName || 'Project'}</span>
+                          {dateStr && <span style={{ fontSize: 10, color: '#555', fontWeight: 600, whiteSpace: 'nowrap' }}>{dateStr}</span>}
+                        </div>
+                        <div className="res-proj-role" style={{ fontSize: 10.5, fontWeight: 600, color: '#333', marginTop: 3 }}>
+                          {[p.Role, p.Domain && `Domain: ${p.Domain}`, p.Client && `Client: ${p.Client}`, p.TeamSize && p.TeamSize > 0 && `Team: ${p.TeamSize} members`].filter(Boolean).join('  |  ')}
+                        </div>
+                        {p.Description && (
+                          <p className="res-proj-desc" style={{ margin: '6px 0 4px', fontSize: 11, color: '#333', lineHeight: 1.65 }}>{p.Description}</p>
+                        )}
+                        {p.Outcome && (
+                          <p style={{ margin: '4px 0', fontSize: 10.5, color: '#222', fontWeight: 600, fontStyle: 'italic' }}>Outcome: {p.Outcome}</p>
+                        )}
+                        {allTech.length > 0 && (
+                          <p style={{ margin: '4px 0 0', fontSize: 10, color: '#555' }}>
+                            <span style={{ fontWeight: 700 }}>Technologies: </span>{allTech.slice(0, 10).join(', ')}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-             {/* ── CORE COMPETENCIES ── */}
-             {activeSkillsForResume.length > 0 && (
-               <div style={sectionStyle}>
-                 <div style={headerStyle}>Core Competencies & Technical Skills</div>
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px 20px' }}>
-                   {activeSkillsForResume.map(s => {
-                     const lvl = rawData?.ratings?.[s] || 1;
-                     const pct = lvl === 3 ? 100 : lvl === 2 ? 66 : 33;
-                     return (
-                       <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '3px 0' }}>
-                         <span style={{ fontSize: 11, fontWeight: 600, color: '#1F2937', minWidth: 110, flexShrink: 0 }}>{s}</span>
-                         <div style={{ flex: 1, height: 5, background: '#E5E7EB', borderRadius: 99, overflow: 'hidden' }}>
-                           <div style={{ width: `${pct}%`, height: '100%', background: LEVEL_COLOR[lvl], borderRadius: 99 }} />
-                         </div>
-                         <span style={{ fontSize: 9, fontWeight: 700, color: LEVEL_COLOR[lvl], minWidth: 22, textAlign: 'right' }}>{LEVEL_LABEL[lvl]?.slice(0, 3)}</span>
-                       </div>
-                     );
-                   })}
-                 </div>
-               </div>
-             )}
+            {/* ── CERTIFICATIONS ── */}
+            {(rawData.certifications || []).filter(c => visibleCerts[c.ID]).length > 0 && (
+              <div style={sectionStyle}>
+                <div style={headerStyle}>Certifications &amp; Credentials</div>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {(rawData.certifications || []).filter(c => visibleCerts[c.ID]).map((c, i) => (
+                    <div key={i} className="res-cert" style={{ borderLeft: '2px solid #999', paddingLeft: 14, breakInside: 'avoid' }}>
+                      <div className="res-cert-name" style={{ fontWeight: 700, fontSize: 11.5, color: '#000' }}>{c.CertName || '—'}</div>
+                      <div className="res-cert-meta" style={{ fontSize: 10.5, color: '#444', marginTop: 3 }}>
+                        {c.Provider ? (
+                          <span style={{ fontWeight: 600 }}>{c.Provider}</span>
+                        ) : null}
+                        {c.IssueDate ? <span style={{ marginLeft: 10 }}>Issued: {formatDate(c.IssueDate)}</span> : null}
+                        {c.ExpiryDate && !c.NoExpiry ? <span style={{ marginLeft: 10 }}>Expires: {formatDate(c.ExpiryDate)}</span> : null}
+                        {c.NoExpiry ? <span style={{ marginLeft: 10, fontStyle: 'italic' }}>No Expiry</span> : null}
+                      </div>
+                      {c.CredentialID && (
+                        <div style={{ fontSize: 9.5, color: '#666', marginTop: 2 }}>Credential ID: {c.CredentialID}</div>
+                      )}
+                      {c.CredentialURL && (
+                        <div style={{ fontSize: 9.5, color: '#555', marginTop: 1 }}>URL: {c.CredentialURL}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-             {/* ── PROFESSIONAL EXPERIENCE ── */}
-             {(rawData.projects || []).filter(p => visibleProjects[p.ID]).length > 0 && (
-               <div style={sectionStyle}>
-                 <div style={headerStyle}>Professional Experience & Projects</div>
-                 <div style={{ display: 'grid', gap: 18 }}>
-                   {(rawData.projects || []).filter(p => visibleProjects[p.ID]).map((p, i) => {
-                     const start = formatDate(p.StartDate);
-                     const end   = p.IsOngoing ? 'Present' : formatDate(p.EndDate);
-                     const techs = Array.isArray(p.Technologies) ? p.Technologies : [];
-                     const skills = Array.isArray(p.SkillsUsed) ? p.SkillsUsed : [];
-                     const allTech = [...new Set([...techs, ...skills])].filter(Boolean);
-                     return (
-                       <div key={i} style={{ breakInside: 'avoid', borderLeft: '3px solid #DBEAFE', paddingLeft: 14 }}>
-                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-                           <span style={{ fontWeight: 800, fontSize: 13.5, color: '#0F172A' }}>{p.ProjectName}</span>
-                           {(start || end) && (
-                             <span style={{ fontSize: 10.5, color: '#6B7280', fontWeight: 600, whiteSpace: 'nowrap', marginLeft: 8 }}>
-                               {start}{start && end ? ' — ' : ''}{end}
-                             </span>
-                           )}
-                         </div>
-                         <div style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6', marginBottom: 5 }}>
-                           {[p.Role, p.Domain && `Domain: ${p.Domain}`, p.Client && `Client: ${p.Client}`, p.TeamSize && p.TeamSize > 0 && `Team: ${p.TeamSize}`].filter(Boolean).join(' | ')}
-                         </div>
-                         {p.Description && (
-                           <p style={{ margin: '0 0 6px', fontSize: 11.5, color: '#374151', lineHeight: 1.6 }}>{p.Description}</p>
-                         )}
-                         {p.Outcome && (
-                           <p style={{ margin: '0 0 6px', fontSize: 11, color: '#166534', fontWeight: 600, background: '#F0FDF4', padding: '3px 8px', borderRadius: 4, display: 'inline-block' }}>
-                             ✅ {p.Outcome}
-                           </p>
-                         )}
-                         {allTech.length > 0 && (
-                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-                             {allTech.slice(0, 8).map((t, ti) => (
-                               <span key={ti} style={{ fontSize: 9.5, padding: '2px 7px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 3, color: '#1D4ED8', fontWeight: 600 }}>{t}</span>
-                             ))}
-                           </div>
-                         )}
-                       </div>
-                     );
-                   })}
-                 </div>
-               </div>
-             )}
+            {/* ── EDUCATION ── */}
+            {(rawData.education || []).filter(e => visibleEdu[e.ID]).length > 0 && (
+              <div style={sectionStyle}>
+                <div style={headerStyle}>Education</div>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {(rawData.education || []).filter(e => visibleEdu[e.ID]).map((e, i) => (
+                    <div key={i} className="res-edu" style={{ borderLeft: '2px solid #999', paddingLeft: 14, breakInside: 'avoid' }}>
+                      <div style={{ fontWeight: 700, fontSize: 11.5, color: '#000' }}>{e.Degree}</div>
+                      {e.FieldOfStudy && (
+                        <div style={{ fontSize: 10.5, color: '#444', fontStyle: 'italic' }}>{e.FieldOfStudy}</div>
+                      )}
+                      <div style={{ fontSize: 10.5, color: '#555', marginTop: 2 }}>
+                        {e.Institution}
+                        {e.EndDate ? `  ·  ${formatDate(e.EndDate)}` : ''}
+                        {e.Grade ? `  ·  Grade: ${e.Grade}` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-             {/* ── CERTIFICATIONS & EDUCATION side by side ── */}
-             <div style={{ display: 'grid', gridTemplateColumns: (rawData.certifications || []).filter(c => visibleCerts[c.ID]).length > 0 && (rawData.education || []).filter(e => visibleEdu[e.ID]).length > 0 ? '1.2fr 1fr' : '1fr', gap: 36, marginTop: 4 }}>
-               
-               {(rawData.certifications || []).filter(c => visibleCerts[c.ID]).length > 0 && (
-                 <div style={sectionStyle}>
-                   <div style={headerStyle}>Technical Credentials</div>
-                   <div style={{ display: 'grid', gap: 10 }}>
-                     {(rawData.certifications || []).filter(c => visibleCerts[c.ID]).map((c, i) => (
-                       <div key={i} style={{ fontSize: 11.5, borderLeft: '2px solid #BFDBFE', paddingLeft: 10 }}>
-                         <div style={{ fontWeight: 700, color: '#0F172A', marginBottom: 1 }}>{c.CertName}</div>
-                         <div style={{ color: '#6B7280', fontSize: 11 }}>
-                           {c.Provider}{c.Provider && (c.IssueDate || c.ExpiryDate) ? ' · ' : ''}
-                           {c.IssueDate ? `Issued: ${formatDate(c.IssueDate)}` : ''}
-                           {c.ExpiryDate && !c.NoExpiry ? ` · Exp: ${formatDate(c.ExpiryDate)}` : ''}
-                           {c.NoExpiry ? ' · No Expiry' : ''}
-                         </div>
-                         {c.CredentialID && <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 1 }}>ID: {c.CredentialID}</div>}
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               )}
-
-               {(rawData.education || []).filter(e => visibleEdu[e.ID]).length > 0 && (
-                 <div style={sectionStyle}>
-                   <div style={headerStyle}>Education</div>
-                   <div style={{ display: 'grid', gap: 10 }}>
-                     {(rawData.education || []).filter(e => visibleEdu[e.ID]).map((e, i) => (
-                       <div key={i} style={{ fontSize: 11.5, borderLeft: '2px solid #BFDBFE', paddingLeft: 10 }}>
-                         <div style={{ fontWeight: 700, color: '#0F172A' }}>{e.Degree}</div>
-                         {e.FieldOfStudy && <div style={{ fontSize: 11, color: '#6B7280', fontStyle: 'italic' }}>{e.FieldOfStudy}</div>}
-                         <div style={{ color: '#6B7280', fontSize: 11, marginTop: 1 }}>
-                           {e.Institution}
-                           {e.EndDate ? ` · ${e.EndDate}` : ''}
-                           {e.Grade ? ` · Grade: ${e.Grade}` : ''}
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               )}
-             </div>
-
-             {/* ── FOOTER ── */}
-             <div style={{ 
-               marginTop: 30, borderTop: '1px solid #E5E7EB', paddingTop: 12, 
-               display: 'flex', justifyContent: 'space-between', 
-               fontSize: 8.5, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600 
-             }}>
-                <div>Zensar Technologies Ltd. • Global Delivery Center</div>
-                <div>Skill Navigator™ • High-Fidelity HR Record</div>
-             </div>
-          </div>
+            {/* ── FOOTER ── */}
+            <div className="res-footer" style={{ marginTop: 32, borderTop: '1px solid #ccc', paddingTop: 10, display: 'flex', justifyContent: 'space-between', fontSize: 8.5, color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 600 }}>
+              <div>Zensar Technologies Ltd. • Global Delivery Center</div>
+              <div>Skill Navigator™ • Confidential HR Document</div>
+            </div>
+           </div>
         </div>
 
       </div>
 
       <style>{`
         @media print {
-          body > *:not(#root), 
-          #root > *:not(div:has(#zensar-resume)),
-          header, nav, .AppHeader, .no-print { 
-            display: none !important; 
+          body > *:not(#root),
+          header, nav, .AppHeader, .no-print {
+            display: none !important;
           }
+          body.is-printing-resume * { -webkit-print-color-adjust: exact; }
           body.is-printing-resume #root {
             display: block !important;
             padding: 0 !important;
             margin: 0 !important;
+            background: white !important;
           }
           .is-printing-resume { background: white !important; }
-          #zensar-resume { 
+          #zensar-resume {
             position: fixed !important;
             top: 0 !important; left: 0 !important;
-            width: 100% !important;
-            box-shadow: none !important; 
-            padding: 1.5cm 2cm !important; 
+            width: 100vw !important;
+            box-shadow: none !important;
+            padding: 1.8cm 2cm !important;
             margin: 0 !important;
-            border: none !important; 
+            border: none !important;
             min-height: auto !important;
             border-radius: 0 !important;
+            font-size: 10.5pt !important;
           }
-          @page { margin: 0; size: A4; }
+          .res-proj, .res-cert, .res-edu { page-break-inside: avoid; }
+          @page { margin: 0; size: A4 portrait; }
         }
         input::placeholder, textarea::placeholder { color: ${dark ? '#666' : '#999'}; }
         details summary::-webkit-details-marker { display: none; }

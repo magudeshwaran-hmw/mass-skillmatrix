@@ -5,8 +5,9 @@ import { API_BASE } from '@/lib/api';
  */
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/authContext';
+import { useNavigate } from 'react-router-dom';
 import { useDark, mkTheme } from '@/lib/themeContext';
-import { GraduationCap, MapPin, Calendar, Plus, Trash2, Edit2, Layout, BookOpen, Clock } from 'lucide-react';
+import { GraduationCap, MapPin, Calendar, Plus, Trash2, Edit2, Layout, BookOpen, Clock, ChevronLeft } from 'lucide-react';
 import { useApp } from '@/lib/AppContext';
 import { toast } from '@/lib/ToastContext';
 
@@ -18,6 +19,7 @@ export default function EducationPage({
   onTabChange?: (path: string) => void; 
 }) {
   const { employeeId } = useAuth();
+  const navigate = useNavigate();
   const { dark } = useDark();
   const T = mkTheme(dark);
   const { data, isPopup: ctxIsPopup, isLoading, setGlobalLoading } = useApp();
@@ -116,25 +118,54 @@ export default function EducationPage({
     <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '40px 20px 100px' }}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
         
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 32, fontWeight: 900, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <GraduationCap size={40} color="#3B82F6" /> Academic <span style={{ color: '#3B82F6' }}>Heritage</span>
-            </h1>
-            <p style={{ margin: '8px 0 0', color: T.sub, fontSize: 14 }}>Manage your professional qualifications and academic journey.</p>
+        <div style={{ display: 'flex', flexDirection: window.innerWidth < 768 ? 'column' : 'row', justifyContent: 'space-between', alignItems: window.innerWidth < 768 ? 'flex-start' : 'center', marginBottom: 32, gap: 20 }}>
+          <div style={{ display: 'flex', flexDirection: window.innerWidth < 480 ? 'column' : 'row', alignItems: window.innerWidth < 480 ? 'flex-start' : 'center', gap: 16 }}>
+            {!isPopup && (
+              <button 
+                onClick={() => navigate('/employee/dashboard')} 
+                style={{ 
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, 
+                  background: 'transparent', border: `1.5px solid ${T.bdr}`, color: T.sub, 
+                  cursor: 'pointer', fontSize: 13, fontWeight: 700, transition: '0.2s'
+                }}
+              >
+                <ChevronLeft size={16} /> Back
+              </button>
+            )}
+            <div>
+              <h1 style={{ 
+                margin: 0, 
+                fontSize: window.innerWidth < 480 ? 24 : 32, 
+                fontWeight: 900, 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 12,
+                flexWrap: 'wrap'
+              }}>
+                <GraduationCap size={window.innerWidth < 480 ? 32 : 40} color="#3B82F6" /> 
+                <span>Academic <span style={{ color: '#3B82F6' }}>Heritage</span></span>
+              </h1>
+              <p style={{ margin: '6px 0 0', color: T.sub, fontSize: window.innerWidth < 480 ? 12 : 14, fontWeight: 500 }}>Manage your professional qualifications and academic journey.</p>
+            </div>
           </div>
           <button 
             onClick={() => setIsAdding(!isAdding)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, background: isAdding ? T.card : '#3B82F6', border: isAdding ? `1px solid ${T.bdr}` : 'none', color: isAdding ? T.text : '#fff', fontWeight: 700, cursor: 'pointer', transition: '0.2s' }}
+            style={{ 
+              display: 'flex', alignItems: 'center', gap: 8, padding: '14px 28px', borderRadius: 14, 
+              background: isAdding ? T.card : '#3B82F6', border: isAdding ? `1px solid ${T.bdr}` : 'none', 
+              color: isAdding ? T.text : '#fff', fontWeight: 800, cursor: 'pointer', transition: '0.2s',
+              width: window.innerWidth < 768 ? '100%' : 'auto', justifyContent: 'center',
+              boxShadow: isAdding ? 'none' : '0 10px 20px -5px rgba(59,130,246,0.3)'
+            }}
           >
-            {isAdding ? 'Cancel' : <><Plus size={18} /> Add Credential</>}
+            {isAdding ? 'Cancel Entry' : <><Plus size={20} /> Add Credential</>}
           </button>
         </div>
 
         {isAdding && (
           <div style={{ background: T.card, borderRadius: 24, padding: 32, border: `1px solid ${T.bdr}`, marginBottom: 32, animation: 'slideDown 0.3s' }}>
             <h3 style={{ margin: '0 0 24px', fontSize: 18, fontWeight: 800 }}>Record New Entry</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
               <div style={{ gridColumn: 'span 2' }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 800, color: T.muted, textTransform: 'uppercase', marginBottom: 8 }}>Degree / Certification Name</label>
                 <input 
@@ -180,75 +211,36 @@ export default function EducationPage({
         )}
 
         {eduList.length === 0 && !isAdding && (
-          <div style={{ textAlign: 'center', padding: '80px 40px', background: T.card, borderRadius: 32, border: `3px dashed ${T.bdr}` }}>
-             <Layout size={64} color={T.muted} style={{ margin: '0 auto 24px' }} />
-             <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 12 }}>Academic Vault Empty</h2>
-             <p style={{ color: T.sub, maxWidth: 400, margin: '0 auto' }}>Sync your educational background to complete your professional digital twin profiling.</p>
+          <div style={{ textAlign: 'center', padding: window.innerWidth < 480 ? '40px 20px' : '80px 40px', background: T.card, borderRadius: 32, border: `3px dashed ${T.bdr}`, margin: '0 10px' }}>
+             <Layout size={window.innerWidth < 480 ? 48 : 64} color={T.muted} style={{ margin: '0 auto 24px' }} />
+             <h2 style={{ fontSize: window.innerWidth < 480 ? 20 : 24, fontWeight: 900, marginBottom: 12 }}>Academic Vault Empty</h2>
+             <p style={{ color: T.sub, maxWidth: 400, margin: '0 auto', fontSize: window.innerWidth < 480 ? 13 : 14 }}>Sync your educational background to complete your professional digital twin profiling.</p>
           </div>
         )}
 
-        <div style={{ display: 'grid', gap: 20 }}>
           {eduList.map((edu, idx) => (
-            <div key={edu.id || idx} style={{ background: T.card, borderRadius: 28, padding: 32, border: `1px solid ${T.bdr}`, display: 'flex', gap: 24, position: 'relative', overflow: 'hidden', animation: 'fadeInUp 0.4s ease-out' }}>
-              <div style={{ width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <BookOpen size={32} />
+            <div key={edu.id || idx} style={{ background: T.card, borderRadius: 28, padding: window.innerWidth < 480 ? '20px' : '24px', border: `1px solid ${T.bdr}`, display: 'flex', flexDirection: window.innerWidth < 640 ? 'column' : 'row', gap: window.innerWidth < 640 ? 12 : 20, position: 'relative', overflow: 'hidden', animation: 'fadeInUp 0.4s ease-out', marginBottom: 20 }}>
+              <div style={{ width: window.innerWidth < 480 ? 48 : 56, height: window.innerWidth < 480 ? 48 : 56, borderRadius: 16, background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <BookOpen size={window.innerWidth < 480 ? 24 : 28} />
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>{edu.degree}</h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 6, fontSize: 14, color: '#3B82F6', fontWeight: 700 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><MapPin size={14} /> {edu.institution}</span>
-                      <span style={{ height: 4, width: 4, borderRadius: '50%', background: T.muted }} />
-                      {(() => {
-                        const fmt = (d: string) => {
-                          if (!d) return '';
-                          if (d.includes('T')) return d.slice(0, 7); // ISO: 2026-03-31T18:30:00.000Z -> 2026-03
-                          if (d.length === 10) return d.slice(0, 7); // YYYY-MM-DD -> YYYY-MM
-                          return d;
-                        };
-                        return (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <Calendar size={14} /> {fmt(edu.endDate)}
-                          </span>
-                        );
-                      })()}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ margin: 0, fontSize: window.innerWidth < 480 ? 16 : 18, fontWeight: 900, color: T.text, lineHeight: 1.3, wordBreak: 'break-word' }}>{edu.degree}</h3>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 16px', marginTop: 10, fontSize: 13, color: '#3B82F6', fontWeight: 700 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}><MapPin size={14} /> {edu.institution}</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Calendar size={14} /> {edu.endDate}</span>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => handleDelete(edu.id)}
-                    style={{ 
-                      padding: 10, 
-                      borderRadius: 12, 
-                      background: 'rgba(239,68,68,0.1)', 
-                      border: 'none', 
-                      color: '#EF4444', 
-                      cursor: 'pointer',
-                      zIndex: 10,
-                      position: 'relative',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
-                      e.currentTarget.style.transform = 'scale(1.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-                      e.currentTarget.style.transform = 'scale(1)';
-                    }}
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <button onClick={() => handleDelete(edu.id)} style={{ padding: 10, borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: 'none', color: '#EF4444', cursor: 'pointer', flexShrink: 0 }}><Trash2 size={16} /></button>
                 </div>
-                <div style={{ marginTop: 16, padding: '16px', background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', borderRadius: 16, fontSize: 13, lineHeight: 1.6, color: T.sub }}>
-                   Specialization in <span style={{ color: T.text, fontWeight: 800 }}>{edu.fieldOfStudy}</span>. 
-                   Verified through Zensar Academic Verification protocols.
+                <div style={{ marginTop: 16, padding: '14px', background: dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)', borderRadius: 14, fontSize: 13, lineHeight: 1.5, color: T.sub }}>
+                   Major in <span style={{ color: T.text, fontWeight: 700 }}>{edu.fieldOfStudy}</span>. 
+                   <span style={{ display: window.innerWidth < 600 ? 'none' : 'inline' }}> Verified through Zensar Academic logs.</span>
                 </div>
               </div>
-              <div style={{ position: 'absolute', right: -20, top: -20, width: 100, height: 100, background: 'rgba(59,130,246,0.03)', borderRadius: '50%' }} />
             </div>
           ))}
-        </div>
       </div>
       
       <style>{`

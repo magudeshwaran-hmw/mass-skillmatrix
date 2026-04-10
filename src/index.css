@@ -109,6 +109,8 @@
     background-color: #0a0a0f;
     color: #ffffff;
     font-family: 'Inter', sans-serif;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
   h1, h2, h3, h4 {
     font-family: 'Inter', sans-serif;
@@ -192,4 +194,50 @@
 @keyframes bounce {
   0%,100% { transform: translateY(0); }
   50%     { transform: translateY(-5px); }
+}
+
+/* Mobile Responsive Overrides */
+@media (max-width: 768px) {
+  /* Target React's inline grid styles directly */
+  div[style*="grid-template-columns: repeat(4, 1fr)"],
+  div[style*="grid-template-columns: 1.8fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Additional layout stacking */
+  .sk-details-grid, .sk-stats-block, .sk-details-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .sk-stats-block { 
+    flex-direction: column !important; 
+    align-items: stretch !important; 
+  }
+  .sk-stats-block > div { width: 100% !important; }
+  .sk-mobile-stack { flex-direction: column !important; }
+  .sk-hide-mobile { display: none !important; }
+  .sk-modal-body { padding: 20px !important; }
+
+  /* Ensure modal and tables sizing fits screen */
+  div[style*="width: 100%"][style*="max-width: 1300"],
+  div[style*="max-width: 1300"],
+  div[style*="max-width: 1200"],
+  div[style*="max-width: 1100"],
+  div[style*="max-width: 900"] {
+    max-width: 95vw !important;
+    height: auto !important;
+    max-height: 95vh !important;
+  }
+  
+  /* Prevent horizontal scrolling app wide */
+  body, html {
+    overflow-x: hidden !important;
+    width: 100%;
+  }
+
+  /* Force long text to wrap */
+  * {
+    word-wrap: break-word !important;
+    box-sizing: border-box;
+  }
 }

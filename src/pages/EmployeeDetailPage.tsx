@@ -288,7 +288,7 @@ export default function EmployeeDetailPage() {
         )}
 
         {/* ── Certifications & Projects ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 24, marginBottom: 32 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, marginBottom: 32 }}>
            <div style={card}>
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
                  <Award size={20} color="#F59E0B" />

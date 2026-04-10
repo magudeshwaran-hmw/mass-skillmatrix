@@ -43,7 +43,7 @@ export default function LandingPage() {
       <div style={{ position:'relative', minHeight:'100vh', display:'flex', alignItems:'center', overflow:'hidden' }}>
         <div style={{ position:'absolute', inset:0, backgroundImage:`url(${IMG.hero})`, backgroundSize:'cover', backgroundPosition:'center 30%', zIndex:0 }} />
         <div style={{ position:'absolute', inset:0, background: dark ? OV.heroD : OV.heroL, zIndex:1 }} />
-        <div style={{ position:'relative', zIndex:3, maxWidth:1100, margin:'0 auto', padding:'130px 28px 90px', width:'100%' }}>
+        <div style={{ position:'relative', zIndex:3, maxWidth:1100, margin:'0 auto', padding:'100px 20px 70px', width:'100%' }}>
           <div style={{ maxWidth:660 }}>
             <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'6px 16px', borderRadius:999, background:'rgba(59,130,246,0.22)', border:'1px solid rgba(59,130,246,0.42)', marginBottom:28 }}>
               <div style={{ width:7, height:7, borderRadius:'50%', background:'#3B82F6', animation:'pulse 2s infinite' }} />
@@ -128,17 +128,13 @@ export default function LandingPage() {
                 </div>
              </div>
 
-             {/* FORK */}
-             <div style={{ width:'100%', height:60, position:'relative', maxWidth:1100 }}>
-                <div style={{ position:'absolute', top:30, left:'15%', right:'15%', height:2, background:'rgba(16,185,129,0.3)' }} />
-                <div style={{ position:'absolute', top:0, left:'50%', width:2, height:30, background:'#10B981', opacity:0.6 }} />
-                <div style={{ position:'absolute', top:30, left:'15%', width:2, height:30, background:'linear-gradient(#10B981,#3B82F6)', opacity:0.6 }} />
-                <div style={{ position:'absolute', top:30, left:'50%', width:2, height:30, background:'linear-gradient(#10B981,#F59E0B)', opacity:0.6 }} />
-                <div style={{ position:'absolute', top:30, right:'15%', width:2, height:30, background:'linear-gradient(#10B981,#10B981)', opacity:0.6 }} />
+             {/* FORK connector - safe for mobile */}
+             <div style={{ display:'flex', justifyContent:'center', gap:0, width:'100%', height:40, position:'relative', zIndex:2 }}>
+               <div style={{ width:2, height:40, background:'rgba(16,185,129,0.5)' }} />
              </div>
 
              {/* Stage 4: Skills Split */}
-             <div style={{ width:'100%', display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:24, position:'relative', zIndex:2 }}>
+             <div style={{ width:'100%', display:'grid', gridTemplateColumns: window.innerWidth < 680 ? '1fr' : '1fr 1fr 1fr', gap:window.innerWidth < 680 ? 16 : 24, position:'relative', zIndex:2 }}>
                 {[
                   { t:'Defect management', d:'Jira, Azure DevOps, Bugzilla...', c:'#3B82F6', icon: ClipboardList },
                   { t:'Test management', d:'Zephyr, TestRail, ALM/Quality Center...', c:'#F59E0B', icon: MapIcon },
@@ -152,13 +148,9 @@ export default function LandingPage() {
                 ))}
              </div>
 
-             {/* Merge Line */}
-             <div style={{ width:'100%', height:60, position:'relative', maxWidth:1100 }}>
-                <div style={{ position:'absolute', bottom:30, left:'15%', right:'15%', height:2, background:'rgba(245,158,11,0.3)' }} />
-                <div style={{ position:'absolute', bottom:0, left:'50%', width:2, height:30, background:'#EC4899', opacity:0.4 }} />
-                <div style={{ position:'absolute', bottom:30, left:'15%', width:2, height:30, background:'linear-gradient(#3B82F6,#EC4899)', opacity:0.4 }} />
-                <div style={{ position:'absolute', bottom:30, left:'50%', width:2, height:30, background:'linear-gradient(#F59E0B,#EC4899)', opacity:0.4 }} />
-                <div style={{ position:'absolute', bottom:30, right:'15%', width:2, height:30, background:'linear-gradient(#10B981,#EC4899)', opacity:0.4 }} />
+             {/* MERGE connector - safe for mobile */}
+             <div style={{ display:'flex', justifyContent:'center', width:'100%', height:40, position:'relative', zIndex:2 }}>
+               <div style={{ width:2, height:40, background:'rgba(236,72,153,0.4)' }} />
              </div>
 
              {/* Stage 5: Action */}

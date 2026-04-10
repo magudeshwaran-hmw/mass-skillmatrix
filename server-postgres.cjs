@@ -31,14 +31,14 @@ pool.on('error', (err) => {
 
 // Skill names array (32 skills)
 const SKILL_NAMES = [
-  'Selenium','Appium','JMeter','Postman','JIRA','TestRail',
-  'Python','Java','JavaScript','TypeScript','C#','SQL',
-  'API Testing','Mobile Testing','Performance Testing',
-  'Security Testing','Database Testing','Banking',
-  'Healthcare','E-Commerce','Insurance','Telecom',
-  'Manual Testing','Automation Testing','Regression Testing',
-  'UAT','Git','Jenkins','Docker','Azure DevOps',
-  'ChatGPT/Prompt Engineering','AI Test Automation'
+  'Selenium', 'Appium', 'JMeter', 'Postman', 'JIRA', 'TestRail',
+  'Python', 'Java', 'JavaScript', 'TypeScript', 'C#', 'SQL',
+  'API Testing', 'Mobile Testing', 'Performance Testing',
+  'Security Testing', 'Database Testing', 'Banking',
+  'Healthcare', 'E-Commerce', 'Insurance', 'Telecom',
+  'Manual Testing', 'Automation Testing', 'Regression Testing',
+  'UAT', 'Git', 'Jenkins', 'Docker', 'Azure DevOps',
+  'ChatGPT/Prompt Engineering', 'AI Test Automation'
 ];
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'zensar_secret_key_32_chars_long!!'; // Must be 32 chars
@@ -73,7 +73,7 @@ function withTimeout(promise, ms) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('LLM_TIMEOUT')), ms);
     promise.then(res => { clearTimeout(timer); resolve(res); })
-           .catch(err => { clearTimeout(timer); reject(err); });
+      .catch(err => { clearTimeout(timer); reject(err); });
   });
 }
 
@@ -234,12 +234,16 @@ async function initializeDatabase() {
 
 // API Routes
 
+// Health check endpoint
+app.get('/api/health', (req, res) => res.status(200).send('OK'));
+app.head('/api/health', (req, res) => res.status(200).send('OK'));
+
 // Get all employees
 app.get('/api/employees', async (req, res) => {
   try {
     const employeesResult = await query('SELECT * FROM employees ORDER BY created_at DESC');
     const skillsResult = await query('SELECT * FROM skills ORDER BY employee_id, skill_name');
-    
+
     const employees = employeesResult.rows.map(e => ({
       ...e,
       password: decryptPw(e.password)
@@ -373,18 +377,18 @@ app.get('/api/employees/:id', async (req, res) => {
 // POST /api/employees — Admin employee creation with full field support
 app.post('/api/employees', async (req, res) => {
   try {
-    const body       = req.body;
-    const zensar_id  = (body.ZensarID || body.zensar_id || body.zensarId || `EMP_${Date.now()}`).trim();
-    const name       = (body.EmployeeName || body.name || 'Unknown').trim();
-    const email      = (body.Email || body.email || `${zensar_id.toLowerCase()}@zensar.com`).trim();
-    const phone      = (body.Phone || body.phone || '').trim();
-    const desig      = (body.Designation || body.designation || 'Employee').trim();
-    const loc        = (body.Location || body.location || 'India').trim();
-    const dept       = (body.department || body.Department || '').trim();
-    const yearsIT    = parseInt(body.yearsIT || body.YearsIT || 0) || 0;
-    const yearsZen   = parseInt(body.yearsZensar || body.YearsZensar || 0) || 0;
-    const rawPw      = body.password || body.Password || '';
-    const encPw      = rawPw ? encryptPw(rawPw) : encryptPw('zensar123');
+    const body = req.body;
+    const zensar_id = (body.ZensarID || body.zensar_id || body.zensarId || `EMP_${Date.now()}`).trim();
+    const name = (body.EmployeeName || body.name || 'Unknown').trim();
+    const email = (body.Email || body.email || `${zensar_id.toLowerCase()}@zensar.com`).trim();
+    const phone = (body.Phone || body.phone || '').trim();
+    const desig = (body.Designation || body.designation || 'Employee').trim();
+    const loc = (body.Location || body.location || 'India').trim();
+    const dept = (body.department || body.Department || '').trim();
+    const yearsIT = parseInt(body.yearsIT || body.YearsIT || 0) || 0;
+    const yearsZen = parseInt(body.yearsZensar || body.YearsZensar || 0) || 0;
+    const rawPw = body.password || body.Password || '';
+    const encPw = rawPw ? encryptPw(rawPw) : encryptPw('zensar123');
 
     // Check if already exists (case-insensitive)
     const existing = await query(
@@ -445,13 +449,13 @@ app.post('/api/register', async (req, res) => {
   try {
     const { name, email, phone, designation, department, location, yearsIT, yearsZensar, password, zensarId, primarySkill, primaryDomain } = req.body;
     const zid = zensarId || `emp_${Date.now()}`;
-    
+
     const result = await query(`
       INSERT INTO employees (id, zensar_id, name, email, phone, designation, department, location, years_it, years_zensar, password, primary_skill, primary_domain)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `, [zid, zid, name, email, phone, designation, department, location, yearsIT || 0, yearsZensar || 0, encryptPw(password), primarySkill, primaryDomain]);
-    
+
     res.json({ success: true, employee: { ...result.rows[0], id: result.rows[0].zensar_id || result.rows[0].id } });
   } catch (error) {
     if (error.code === '23505') {
@@ -466,45 +470,45 @@ app.post('/api/login', async (req, res) => {
   try {
     const loginId = String(req.body.login || '').trim().toLowerCase();
     const password = String(req.body.password || '').trim();
-    
+
     // Check for Master Admin from DB
     const adminIdData = await query("SELECT value FROM app_settings WHERE key = 'admin_id'");
     const adminPwData = await query("SELECT value FROM app_settings WHERE key = 'admin_password'");
-    
+
     const dbAdminId = adminIdData.rows[0]?.value || 'admin';
     const dbAdminPw = adminPwData.rows[0]?.value || 'admin123';
 
     if (loginId === dbAdminId.toLowerCase() && password === dbAdminPw) {
-       return res.json({ 
-         success: true, 
-         employee: { id: 'admin', name: 'Master Admin', role: 'admin', zensar_id: dbAdminId.toUpperCase() } 
-       });
+      return res.json({
+        success: true,
+        employee: { id: 'admin', name: 'Master Admin', role: 'admin', zensar_id: dbAdminId.toUpperCase() }
+      });
     }
 
     const result = await query(`
       SELECT * FROM employees 
       WHERE LOWER(zensar_id) = $1 OR LOWER(id) = $1 OR LOWER(email) = $1 OR LOWER(phone) = $1
     `, [loginId]);
-    
+
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Account not found' });
     }
-    
+
     const emp = result.rows[0];
     const storedPw = String(emp.password || '').trim();
-    
+
     if (decryptPw(storedPw) !== password && storedPw !== password) { // Support legacy plain text or encrypted
       return res.status(401).json({ error: 'Incorrect password' });
     }
-    
-    res.json({ 
-      success: true, 
-      employee: { 
-        ...emp, 
-        id: emp.zensar_id || emp.id, 
-        name: emp.name, 
-        role: 'employee' 
-      } 
+
+    res.json({
+      success: true,
+      employee: {
+        ...emp,
+        id: emp.zensar_id || emp.id,
+        name: emp.name,
+        role: 'employee'
+      }
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -514,19 +518,19 @@ app.post('/api/login', async (req, res) => {
 // Update app settings (admin credentials)
 app.post('/api/admin/settings', async (req, res) => {
   try {
-     const { admin_id, admin_password } = req.body;
-     if (admin_id) await query("UPDATE app_settings SET value = $1 WHERE key = 'admin_id'", [admin_id]);
-     if (admin_password) await query("UPDATE app_settings SET value = $1 WHERE key = 'admin_password'", [admin_password]);
-     res.json({ success: true, message: 'Admin settings updated' });
+    const { admin_id, admin_password } = req.body;
+    if (admin_id) await query("UPDATE app_settings SET value = $1 WHERE key = 'admin_id'", [admin_id]);
+    if (admin_password) await query("UPDATE app_settings SET value = $1 WHERE key = 'admin_password'", [admin_password]);
+    res.json({ success: true, message: 'Admin settings updated' });
   } catch (error) {
-     res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/admin/employees/add', async (req, res) => {
   try {
     const { name, email, zensar_id, password, phone, designation, department, location, years_it, years_zensar, primary_skill, primary_domain } = req.body;
-    
+
     // Check if employee already exists
     const existing = await query("SELECT * FROM employees WHERE zensar_id = $1 OR email = $2", [zensar_id, email]);
     if (existing.rows.length > 0) {
@@ -551,7 +555,7 @@ app.post('/api/admin/employees/add', async (req, res) => {
 app.post('/api/admin/employees/update', async (req, res) => {
   try {
     const { id, name, email, zensar_id, password, phone, designation, department, location, years_it, years_zensar, primary_skill, primary_domain } = req.body;
-    
+
     let encrypted = null;
     if (password) {
       encrypted = encryptPw(password);
@@ -565,8 +569,8 @@ app.post('/api/admin/employees/update', async (req, res) => {
           updated_at = CURRENT_TIMESTAMP
       WHERE id = $13 OR zensar_id = $13
     `, [
-      name, email, zensar_id, phone, designation, 
-      department, location, years_it || 0, years_zensar || 0, 
+      name, email, zensar_id, phone, designation,
+      department, location, years_it || 0, years_zensar || 0,
       encrypted, primary_skill, primary_domain, id
     ]);
 
@@ -581,7 +585,7 @@ app.post('/api/admin/employees/update', async (req, res) => {
 app.get('/api/employees/:id/skills', async (req, res) => {
   try {
     const result = await query('SELECT * FROM skills WHERE employee_id = $1', [req.params.id]);
-    
+
     const skills = result.rows.map(row => ({
       skillId: `s${SKILL_NAMES.indexOf(row.skill_name) + 1}`,
       skillName: row.skill_name,
@@ -589,7 +593,7 @@ app.get('/api/employees/:id/skills', async (req, res) => {
       managerRating: row.manager_rating,
       validated: row.validated
     })).filter(s => s.selfRating > 0);
-    
+
     res.json(skills);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -601,14 +605,14 @@ app.put('/api/employees/:id/skills', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
+
     const body = req.body;
     const employeeId = req.params.id;
     const employeeName = body.employeeName || body.EmployeeName;
-    
+
     // Clear existing skills for this employee
     await client.query('DELETE FROM skills WHERE employee_id = $1', [employeeId]);
-    
+
     // Insert new skills
     let ratedCount = 0;
     for (const skillName of SKILL_NAMES) {
@@ -621,17 +625,17 @@ app.put('/api/employees/:id/skills', async (req, res) => {
         `, [employeeId, skillName, rating]);
       }
     }
-    
+
     // Update employee capability and submission status
     const capability = Math.round((ratedCount / 32) * 100);
     const submitted = ratedCount >= 25;
-    
+
     await client.query(`
       UPDATE employees 
       SET overall_capability = $1, submitted = $2, updated_at = CURRENT_TIMESTAMP
       WHERE id = $3 OR zensar_id = $3
     `, [capability, submitted, employeeId]);
-    
+
     await client.query('COMMIT');
     res.json({ success: true, capability });
   } catch (error) {
@@ -668,13 +672,13 @@ app.post('/api/skills', async (req, res) => {
   const empId = req.body.dbEmployeeId || req.body.employeeId;
   const skills = req.body.skills;
   if (!empId || !Array.isArray(skills)) return res.status(400).json({ error: 'Invalid payload' });
-  
+
   // Resolve the actual DB employee id (handle zensar_id lookup)
   let resolvedId = empId;
   try {
     const empCheck = await query('SELECT id FROM employees WHERE id = $1 OR zensar_id = $1', [empId]);
     if (empCheck.rows.length > 0) resolvedId = empCheck.rows[0].id;
-  } catch(_) {}
+  } catch (_) { }
 
   try {
     for (const s of skills) {
@@ -720,28 +724,40 @@ app.post('/api/certifications', async (req, res) => {
   // Helper: returns null for any non-parseable or placeholder date string
   const safeDate = (val) => {
     if (!val) return null;
-    const s = String(val).trim();
-    // Reject known non-date placeholders (AI often outputs these)
-    const invalid = ['pursuing', 'present', 'ongoing', 'current', 'n/a', 'na', '-', 'null', 'none', ''];
-    if (invalid.includes(s.toLowerCase())) return null;
-    // Must contain at least a 4-digit year to be a real date
-    if (!/\d{4}/.test(s)) return null;
-    // Try to parse — if it results in Invalid Date, return null
+    const s = String(val).trim().toLowerCase();
+    
+    // Reject known non-date placeholders
+    const invalid = ['pursuing', 'present', 'ongoing', 'current', 'n/a', 'na', '-', 'null', 'none', '', 'undefined'];
+    if (invalid.some(inv => s.includes(inv))) return null;
+    
+    // Attempt standard parse first
     const d = new Date(s);
-    return isNaN(d.getTime()) ? null : s;
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+
+    // Fallback: Manually extract Year and Month if standard parse fails (e.g. "Dec 2024")
+    const yearMatch = s.match(/\b(20\d{2}|19\d{2})\b/);
+    if (yearMatch) {
+      const year = yearMatch[1];
+      const monthMatch = s.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/);
+      const monthMap = { jan:'01', feb:'02', mar:'03', apr:'04', may:'05', jun:'06', jul:'07', aug:'08', sep:'09', oct:'10', nov:'11', dec:'12' };
+      const month = monthMatch ? (monthMap[monthMatch[0]] || '01') : '01';
+      return `${year}-${month}-01`;
+    }
+    
+    return null;
   };
 
   try {
     const body = req.body;
-    const rawEmpId     = body.employeeId || body.EmployeeID || body.ZensarID || body.ID;
-    const certName     = body.certName || body.CertName || '';
-    const org          = body.issuingOrganization || body.Provider || '';
-    const issueDate    = safeDate(body.issueDate || body.IssueDate);
-    const expiryDate   = safeDate(body.expiryDate || body.ExpiryDate);
-    const noExpiry     = body.noExpiry || body.NoExpiry || false;
+    const rawEmpId = body.employeeId || body.EmployeeID || body.ZensarID || body.ID;
+    const certName = body.certName || body.CertName || '';
+    const org = body.issuingOrganization || body.Provider || '';
+    const issueDate = safeDate(body.issueDate || body.IssueDate);
+    const expiryDate = safeDate(body.expiryDate || body.ExpiryDate);
+    const noExpiry = body.noExpiry || body.NoExpiry || false;
     const credentialId = body.credentialId || body.CredentialID || '';
-    const url          = body.credentialUrl || body.CredentialURL || '';
-    const existingId   = (body.ID && body.ID !== rawEmpId) ? body.ID : body.id;
+    const url = body.credentialUrl || body.CredentialURL || '';
+    const existingId = (body.ID && body.ID !== rawEmpId) ? body.ID : body.id;
 
     if (!rawEmpId) return res.status(400).json({ error: 'Employee ID required for certifications' });
     if (!certName) return res.status(400).json({ error: 'Certification name is required' });
@@ -760,7 +776,7 @@ app.post('/api/certifications', async (req, res) => {
 
     let result;
     if (existingId) {
-       result = await query(`
+      result = await query(`
          UPDATE certifications SET 
            cert_name = $1, issuing_organization = $2, 
            issue_date = $3, expiry_date = $4, no_expiry = $5, 
@@ -769,13 +785,13 @@ app.post('/api/certifications', async (req, res) => {
          RETURNING *
        `, [certName, org, issueDate || null, expiryDate || null, noExpiry, credentialId, url, existingId, empId]);
     } else {
-       result = await query(`
+      result = await query(`
         INSERT INTO certifications (employee_id, cert_name, issuing_organization, issue_date, expiry_date, no_expiry, credential_id, credential_url)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
       `, [empId, certName, org, issueDate || null, expiryDate || null, noExpiry, credentialId, url]);
     }
-    
+
     res.json({ success: true, certification: result.rows[0] });
   } catch (error) {
     console.error('[Cert Sync Error]', error);
@@ -821,23 +837,27 @@ app.post('/api/projects', async (req, res) => {
   try {
     const body = req.body;
     // Accept snake_case employee_id (from AdminResumeUploadPage dbEmployeeId) as well
-    const empId       = body.employee_id || body.employeeId || body.EmployeeID || body.ZensarID;
+    const empId = body.employee_id || body.employeeId || body.EmployeeID || body.ZensarID;
     const projectName = body.ProjectName || body.projectName || '';
-    const role        = body.Role || body.role || '';
-    const client      = body.Client || body.client || '';
-    const domain      = body.Domain || body.domain || '';
-    const startDate   = body.StartDate || body.startDate || null;
-    const endDate     = body.EndDate || body.endDate || null;
-    const desc        = body.Description || body.description || '';
-    let techs         = body.Technologies || body.technologies || [];
-    let skillsUsed    = body.SkillsUsed || body.skillsUsed || [];
-    const teamSize    = parseInt(String(body.TeamSize || body.teamSize || 0)) || 0;
-    const outcome     = body.Outcome || body.outcome || '';
-    const isOngoing   = body.IsOngoing || body.isOngoing || false;
-    
+    const role = body.Role || body.role || '';
+    const client = body.Client || body.client || '';
+    const domain = body.Domain || body.domain || '';
+    const startDate = body.StartDate || body.startDate || null;
+    const endDate = body.EndDate || body.endDate || null;
+    const desc = body.Description || body.description || '';
+    let techs = body.Technologies || body.technologies || [];
+    let skillsUsed = body.SkillsUsed || body.skillsUsed || [];
+    const teamSize = parseInt(String(body.TeamSize || body.teamSize || 0)) || 0;
+
+    // Ensure techs/skills are arrays to prevent PG array errors
+    if (!Array.isArray(techs)) techs = techs ? [techs] : [];
+    if (!Array.isArray(skillsUsed)) skillsUsed = skillsUsed ? [skillsUsed] : [];
+    const outcome = body.Outcome || body.outcome || '';
+    const isOngoing = body.IsOngoing || body.isOngoing || false;
+
     // Check if we are updating an existing project (if ID is passed as a separate field or inside body)
     const existingId = body.id || null;
-    
+
     if (!empId) return res.status(400).json({ error: 'Employee ID required for projects' });
     if (!projectName && !role) return res.status(400).json({ error: 'ProjectName and Role are required' });
 
@@ -855,14 +875,14 @@ app.post('/api/projects', async (req, res) => {
     console.log(`[Projects Sync] ✅ Resolved '${empId}' → employees.id='${resolvedEmpId}'`);
 
     // Handle array serialization
-    if (typeof techs === 'string') { try { techs = JSON.parse(techs); } catch(e) { techs=[techs]; } }
-    if (typeof skillsUsed === 'string') { try { skillsUsed = JSON.parse(skillsUsed); } catch(e) { skillsUsed=[skillsUsed]; } }
+    if (typeof techs === 'string') { try { techs = JSON.parse(techs); } catch (e) { techs = [techs]; } }
+    if (typeof skillsUsed === 'string') { try { skillsUsed = JSON.parse(skillsUsed); } catch (e) { skillsUsed = [skillsUsed]; } }
 
     console.log(`[Projects Sync] ${existingId ? 'Updating' : 'Inserting'} project for ${resolvedEmpId}: ${projectName}`);
 
     let result;
     if (existingId) {
-       result = await query(`
+      result = await query(`
         UPDATE projects SET 
           project_name = $1, role = $2, client = $3, domain = $4, 
           start_date = $5, end_date = $6, description = $7, 
@@ -872,7 +892,7 @@ app.post('/api/projects', async (req, res) => {
         RETURNING *
       `, [projectName, role, client, domain, startDate || null, endDate || null, desc, techs, skillsUsed, teamSize, outcome, isOngoing, existingId, resolvedEmpId]);
     } else {
-       result = await query(`
+      result = await query(`
         INSERT INTO projects (
           employee_id, project_name, role, client, domain, 
           start_date, end_date, description, technologies, 
@@ -882,7 +902,7 @@ app.post('/api/projects', async (req, res) => {
         RETURNING *
       `, [resolvedEmpId, projectName, role, client, domain, startDate || null, endDate || null, desc, techs, skillsUsed, teamSize, outcome, isOngoing]);
     }
-    
+
     res.json({ success: true, project: result.rows[0] });
   } catch (error) {
     console.error('[Projects Sync Error]', error);
@@ -921,15 +941,15 @@ app.get('/api/projects/ALL', async (req, res) => {
 app.post('/api/education', async (req, res) => {
   try {
     const body = req.body;
-    const rawEmpId     = body.employeeId || body.EmployeeID || body.ID;
-    const degree       = body.degree || body.Degree || '';
-    const institution  = body.institution || body.Institution || '';
+    const rawEmpId = body.employeeId || body.EmployeeID || body.ID;
+    const degree = body.degree || body.Degree || '';
+    const institution = body.institution || body.Institution || '';
     const fieldOfStudy = body.fieldOfStudy || body.FieldOfStudy || '';
-    const startDate    = body.startDate || body.StartDate || '';
-    const endDate      = body.endDate || body.EndDate || '';
-    const grade        = body.grade || body.Grade || '';
-    const desc         = body.description || body.Description || '';
-    const existingId   = body.id || body.ID;
+    const startDate = body.startDate || body.StartDate || '';
+    const endDate = body.endDate || body.EndDate || '';
+    const grade = body.grade || body.Grade || '';
+    const desc = body.description || body.Description || '';
+    const existingId = body.id || body.ID;
 
     if (!rawEmpId) return res.status(400).json({ error: 'Employee ID required for academic records' });
 
@@ -961,7 +981,7 @@ app.post('/api/education', async (req, res) => {
         RETURNING *
       `, [empId, degree, institution, fieldOfStudy, startDate, endDate, grade, desc]);
     }
-    
+
     res.json({ success: true, education: result.rows[0] });
   } catch (error) {
     console.error('[Education Sync Error]', error);
@@ -974,7 +994,7 @@ app.get('/api/education/:id', async (req, res) => {
   try {
     let sql = 'SELECT * FROM education WHERE LOWER(employee_id) = LOWER($1) ORDER BY created_at DESC';
     let params = [req.params.id];
-    
+
     if (req.params.id === 'ALL') {
       sql = 'SELECT * FROM education ORDER BY created_at DESC';
       params = [];
@@ -1023,7 +1043,10 @@ app.post('/api/llm', async (req, res) => {
     const apiKey = process.env.CLOUD_API_KEY;
     const provider = (process.env.LLM_PROVIDER || '').toLowerCase();
     const prompt = req.body.prompt;
-    
+
+    // Log incoming proxy request for debugging
+    console.log(`🤖 [LLM Proxy] Provider: ${provider} | Model: ${req.body.model || 'default'}`);
+
     if (apiKey && apiKey !== 'your_api_key_here' && provider === 'openai') {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -1069,23 +1092,34 @@ app.post('/api/llm', async (req, res) => {
     } else {
       // DEFAULT FALLBACK: Route to Local Ollama
       try {
-        const response = await withTimeout(fetch('http://127.0.0.1:11434/api/generate', { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify(req.body) 
-        }), 60000);
-        if (!response.ok) throw new Error(`Ollama Internal Error: ${response.status}`);
+        const body = {
+          ...req.body,
+          stream: false // Double-ensure no streaming to avoid proxy parse errors
+        };
+        const response = await withTimeout(fetch('http://127.0.0.1:11434/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        }), 120000); // 2 minute timeout for large models
+
+        if (!response.ok) {
+          const errText = await response.text().catch(() => 'No error body');
+          throw new Error(`Ollama Error ${response.status}: ${errText}`);
+        }
+
         const data = await response.json();
         res.json(data);
       } catch (ollamaErr) {
         console.error('❌ Local Ollama Offline:', ollamaErr.message);
-        res.status(503).json({ error: (process.env.LLM_PROVIDER === 'local' || !process.env.LLM_PROVIDER) 
-          ? 'Cognitive Engine (Ollama) is offline. Ensure software is running or switch to Cloud IQ Mode.' 
-          : 'Zensar IQ Cloud unreachable. Check network or Professional subscription.' });
+        res.status(503).json({
+          error: (process.env.LLM_PROVIDER === 'local' || !process.env.LLM_PROVIDER)
+            ? 'Cognitive Engine (Ollama) is offline. Ensure software is running or switch to Cloud IQ Mode.'
+            : 'Zensar IQ Cloud unreachable. Check network or Professional subscription.'
+        });
       }
     }
-  } catch (err) { 
-    res.status(500).json({ error: err.message }); 
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1097,5 +1131,10 @@ app.use((req, res) => {
 
 // Initialize database and start server
 initializeDatabase().then(() => {
-  app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Backend active on ${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Backend active on ${PORT}`);
+    console.log(`🔗 API Base: http://localhost:${PORT}/api`);
+  });
+}).catch(err => {
+  console.error('🔥 Critical Failure during server startup:', err);
 });

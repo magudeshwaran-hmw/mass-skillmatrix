@@ -251,13 +251,13 @@ export default function AuthPage() {
 
       {/* Auth Card */}
       <div style={{
-        position: 'relative', zIndex: 2, width: '100%', maxWidth: mode === 'signup' ? '600px' : '420px',
-        margin: '24px auto', padding: '0 16px',
+        position: 'relative', zIndex: 2, width: '100%', maxWidth: mode === 'signup' ? '640px' : '440px',
+        margin: '0 auto', padding: '24px 16px', boxSizing: 'border-box'
       }}>
         <div style={{
-          background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)',
-          border: '1px solid rgba(255,255,255,0.18)', borderRadius: '24px', padding: '36px 32px',
-          boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
+          background: 'rgba(10,15,40,0.70)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)',
+          border: '1px solid rgba(255,255,255,0.14)', borderRadius: '24px', padding: '40px 36px',
+          boxShadow: '0 30px 80px rgba(0,0,0,0.6)', boxSizing: 'border-box'
         }}>
           {/* Logo + title */}
           <div style={{ textAlign: 'center', marginBottom: '28px' }}>
@@ -326,7 +326,7 @@ export default function AuthPage() {
               </div>
 
               {/* Row 1: Zensar ID + Name */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
                 <InputRow label="Zensar ID *" placeholder="6-digit number" value={sZensarId}
                   onChange={v => { if (/^\d{0,6}$/.test(v)) setSZensarId(v); }}
                   icon={Hash} dark={dark} T={{}} />
@@ -335,7 +335,7 @@ export default function AuthPage() {
               </div>
 
               {/* Row 2: Mobile + Email */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
                 <InputRow label="Mobile Number *" placeholder="+91 98765 43210" value={sMobile}
                   onChange={setSMobile} type="tel" icon={Phone} dark={dark} T={{}} />
                 <InputRow label="Zensar Email *" placeholder="rahul@zensar.com" value={sEmail}
@@ -343,13 +343,13 @@ export default function AuthPage() {
               </div>
 
               {/* Row 3: Location + Department */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
                 <SelectRow label="Location" value={sLocation} onChange={setSLocation} options={LOCS} icon={MapPin} />
                 <SelectRow label="Department" value={sDept} onChange={setSDept} options={DEPTS} icon={Briefcase} />
               </div>
 
               {/* Row 4: Years IT + Years Zensar */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
                 <InputRow label="Years in IT" placeholder="e.g. 5" value={sYearsIT}
                   onChange={setSYearsIT} type="number" icon={Clock} dark={dark} T={{}} />
                 <InputRow label="Years at Zensar" placeholder="e.g. 2" value={sYearsZensar}
@@ -357,7 +357,7 @@ export default function AuthPage() {
               </div>
 
               {/* Row 5: Password + Confirm */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '20px' }}>
                 <InputRow label="Password *" placeholder="Min 6 chars" value={sPassword}
                   onChange={setSPassword} type={showPw ? 'text' : 'password'} icon={Lock} dark={dark} T={{}}
                   suffix={eyeBtn(showPw,  () => setShowPw(p => !p))} />

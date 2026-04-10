@@ -7,7 +7,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Upload, FileText, CheckSquare, Square, X, Save, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { SKILLS } from '@/lib/mockData';
-import { callLLM } from '@/lib/llm';
+import { callResumeLLM } from '@/lib/llm';
 import { toast } from '@/lib/ToastContext';
 import ZensarLoader from '@/components/ZensarLoader';
 import type { ProficiencyLevel, SkillRating } from '@/lib/types';
@@ -47,10 +47,18 @@ async function extractTextFromPDF(file: File): Promise<string> {
 }
 
 async function extractEverythingFromResume(resumeText: string): Promise<any> {
-  const prompt = `Extract profile, skills (0-3), education, certs, and projects from this resume.
-Resume: ${resumeText.slice(0, 2500)}
+  const prompt = `Act as an expert recruitment AI trained on diverse, unstructured resume formats. 
+Scan the following resume text and extract all professional details into the specified JSON format.
 
-Return ONLY JSON:
+CRITICAL INSTRUCTIONS:
+1. CAPTURE ALL CERTIFICATIONS: This includes Technical Licenses, Online Courses, and any items listed under headers like "Certifications", "Achievements", "Awards", "Professional Development", or "Licenses". If an achievement reflects a credential or skill mastery, list it in 'certifications'.
+2. PROJECTS: Extract all major work engagements/projects.
+3. FORMATS: Handle both structured (tables/headers) and unstructured (narrative) resume formats.
+
+Resume Content:
+${resumeText.slice(0, 4500)}
+
+Return ONLY a perfectly valid JSON object with this structure:
 {
   "profile": { "name":"", "email":"", "phone":"", "location":"", "designation":"", "yearsIT":0 },
   "skills": { "Selenium":0, "Appium":0, "JMeter":0, "Postman":0, "JIRA":0, "TestRail":0, "Python":0, "Java":0, "JavaScript":0, "TypeScript":0, "C#":0, "SQL":0, "API Testing":0, "Mobile Testing":0, "Performance Testing":0, "Security Testing":0, "Database Testing":0, "Banking":0, "Healthcare":0, "E-Commerce":0, "Insurance":0, "Telecom":0, "Manual Testing":0, "Automation Testing":0, "Regression Testing":0, "UAT":0, "Git":0, "Jenkins":0, "Docker":0, "Azure DevOps":0, "ChatGPT/Prompt Engineering":0, "AI Test Automation":0 },
@@ -58,9 +66,9 @@ Return ONLY JSON:
   "certifications": [ { "CertName":"", "Provider":"", "IssueDate":"" } ],
   "projects": [ { "ProjectName":"", "Role":"", "StartDate":"", "Description":"", "Outcome":"" } ]
 }
-0=absent, 1=basic, 2=intermediate, 3=expert. No markdown.`;
+Note: For skills, use 0=absent, 1=basic, 2=intermediate, 3=expert. Do not include markdown or conversational text.`;
 
-  const result = await callLLM(prompt);
+  const result = await callResumeLLM(prompt);
   if (result.error) {
     throw new Error(`AI Error: ${result.error}`);
   }
@@ -304,7 +312,8 @@ export default function AdminResumeUploadPage({
       // === DELETE UNCHECKED EXISTING SKILLS ===
       const skillsToDelete = existingData.skills?.filter((s: any) => s?.skillId && !existingSkillsSelected[s.skillId]);
       for (const skill of skillsToDelete || []) {
-        const res = await fetch(`${API_BASE}/skills/${dbEmployeeId}/${skill.skillId}`, { method: 'DELETE' });
+        const encodedSkillId = encodeURIComponent(skill.skillId);
+        const res = await fetch(`${API_BASE}/skills/${dbEmployeeId}/${encodedSkillId}`, { method: 'DELETE' });
         if (!res.ok) {
           const err = await res.text().catch(() => 'Unknown error');
           console.error('Failed to delete skill:', skill.skillId, err);
@@ -408,13 +417,10 @@ export default function AdminResumeUploadPage({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             employeeId: dbEmployeeId,
-            ZensarID: employeeId, 
-            EmployeeID: employeeId, 
-            EmployeeName: empName,
-            CertName: cert.CertName, 
-            Provider: cert.Provider, 
-            IssueDate: cert.IssueDate, 
-            IsAIExtracted: true
+            certName: cert.CertName, 
+            issuingOrganization: cert.Provider, 
+            issueDate: cert.IssueDate, 
+            isAIExtracted: true
           })
         });
         if (!res.ok) {
@@ -486,8 +492,15 @@ export default function AdminResumeUploadPage({
         };
         
         // Only add dates if they're valid
-        if (formattedStartDate) body.StartDate = formattedStartDate;
-        if (formattedEndDate) body.EndDate = formattedEndDate;
+        if (formattedStartDate) body.startDate = formattedStartDate;
+        if (formattedEndDate) body.endDate = formattedEndDate;
+        
+        // Ensure consistent field names for the backend
+        body.projectName = body.ProjectName; delete body.ProjectName;
+        body.role = body.Role; delete body.Role;
+        body.description = body.Description; delete body.Description;
+        body.outcome = body.Outcome; delete body.Outcome;
+        body.isAIExtracted = body.IsAIExtracted; delete body.IsAIExtracted;
         
         console.log('Project POST body:', body);
         const res = await fetch(`${API_BASE}/projects`, {
@@ -604,7 +617,7 @@ export default function AdminResumeUploadPage({
             
             {expandedSections.skills && (
               <div style={{ padding: 20 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                   {/* Existing Skills with Checkboxes */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -698,7 +711,7 @@ export default function AdminResumeUploadPage({
             
             {expandedSections.projects && (
               <div style={{ padding: 20 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                   {/* Existing Projects with Checkboxes */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -802,7 +815,7 @@ export default function AdminResumeUploadPage({
             
             {expandedSections.certifications && (
               <div style={{ padding: 20 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                   {/* Existing Certs with Checkboxes */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -905,7 +918,7 @@ export default function AdminResumeUploadPage({
             
             {expandedSections.education && (
               <div style={{ padding: 20 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                   {/* Existing Education with Checkboxes */}
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -1008,7 +1021,7 @@ export default function AdminResumeUploadPage({
               
               {expandedSections.profile && (
                 <div style={{ padding: 20 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
                     {/* Existing Profile with Checkboxes */}
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>

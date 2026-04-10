@@ -247,9 +247,16 @@ export default function SkillMatrixPage({
 
         {/* Header */}
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', marginBottom: '32px' }}>
-          <div>
-            <h1 style={{ fontSize: '30px', fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif", marginBottom: '4px' }}>Skill Matrix</h1>
-            <p style={{ color: T.sub, fontSize: '14px' }}>Rate your proficiency across 32 skills in 7 categories</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {!isPopup && (
+              <button onClick={() => navigate('/employee/dashboard')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: '9px', background: 'transparent', border: `1px solid ${T.bdr}`, color: T.sub, cursor: 'pointer', fontSize: '13px', fontWeight: 600, flexShrink: 0 }}>
+                <ChevronLeft size={15} /> Back
+              </button>
+            )}
+            <div>
+              <h1 style={{ fontSize: '30px', fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif", marginBottom: '4px' }}>Skill Matrix</h1>
+              <p style={{ color: T.sub, fontSize: '14px' }}>Rate your proficiency across 32 skills in 7 categories</p>
+            </div>
           </div>
           {!alreadySubmitted && (
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>

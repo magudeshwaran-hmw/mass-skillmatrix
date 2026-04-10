@@ -54,8 +54,8 @@ export default function AppHeader() {
 
   const innerStyle = {
     maxWidth: 1300, margin: '0 auto', height: '100%',
-    padding: '0 24px', display: 'flex',
-    alignItems: 'center', justifyContent: 'space-between', gap: 16,
+    padding: '0 4vw', display: 'flex',
+    alignItems: 'center', justifyContent: 'space-between', gap: 8,
   };
 
   const navBtn = (isActive: boolean): React.CSSProperties => ({
@@ -71,7 +71,7 @@ export default function AppHeader() {
       <div style={innerStyle}>
         {/* Left — Logo Aligned Left */}
         <div onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexShrink: 0 }}>
-          <ZensarLogo size="md" />
+          <ZensarLogo size="sm" />
         </div>
 
         {/* Center — Clean Nav */}
@@ -95,7 +95,7 @@ export default function AppHeader() {
         </nav>
 
         {/* Right — Active Session Details */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           
           {/* Theme */}
           <button onClick={toggleDark} style={{
@@ -107,35 +107,35 @@ export default function AppHeader() {
           </button>
 
           {isLoggedIn && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ 
                     width: 10, height: 10, borderRadius: '50%', 
                     background: llmStatus?.online ? '#10B981' : '#EF4444', 
                     boxShadow: llmStatus?.online ? '0 0 10px #10B981' : '0 0 10px #EF4444',
                     transition: '0.3s'
                   }} />
-                  <div style={{ fontSize: 14, fontWeight: 800, color: T.text, letterSpacing: -0.3 }}>{displayName}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: T.text, letterSpacing: -0.3, maxWidth: 90, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName.split(' ')[0]}</div>
                </div>
                <button 
                  onClick={() => { logout(); navigate('/'); }}
                  style={{ 
-                   display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 12, 
+                   display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, 
                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.1)', 
                    color: '#EF4444', fontWeight: 800, fontSize: 13, cursor: 'pointer', transition: '0.2s'
                  }}
                  title="Logout"
                >
                  <LogOut size={16} />
-                 <span>Exit</span>
+                 <span className="sk-hide-mobile">Exit</span>
                </button>
             </div>
           )}
 
           {!isLoggedIn && (
             <button onClick={() => navigate('/login')} style={{
-              padding: '10px 24px', borderRadius: 12, border: 'none', cursor: 'pointer',
-              background: '#3B82F6', color: '#fff', fontWeight: 800, fontSize: 14,
+              padding: '8px 16px', borderRadius: 12, border: 'none', cursor: 'pointer',
+              background: '#3B82F6', color: '#fff', fontWeight: 800, fontSize: 13,
               boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
             }}>Login</button>
           )}

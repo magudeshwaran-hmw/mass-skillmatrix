@@ -129,18 +129,18 @@ export default function EmployeeDashboard({
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
           
           {/* TOP SECTION — Hero Profile Card */}
-          <div style={{ ...cardStyle, background: 'linear-gradient(135deg, rgba(107,45,139,0.1), rgba(59,130,246,0.1))', border: `1px solid ${dark ? 'rgba(107,45,139,0.2)' : '#e5e7eb'}`, padding: '20px', position: 'relative', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #6B2D8B, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#fff' }}>
+          <div style={{ ...cardStyle, background: 'linear-gradient(135deg, rgba(107,45,139,0.1), rgba(59,130,246,0.1))', border: `1px solid ${dark ? 'rgba(107,45,139,0.2)' : '#e5e7eb'}`, padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #6B2D8B, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
                 {initials}
               </div>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 140 }}>
                 <h1 style={{ margin: '0 0 2px', fontSize: 22, fontWeight: 800, letterSpacing: -0.5 }}>{user.Name}</h1>
                 <div style={{ color: T.sub, fontSize: 13, fontWeight: 500 }}>
                   {user.Designation || 'Quality Engineer'} · <span style={{ opacity: 0.8 }}>ZENSAR-{user.ZensarID || user.EmployeeID || user.ID}</span>
                 </div>
               </div>
-              <div style={{ textAlign: 'right', minWidth: 160 }}>
+              <div style={{ textAlign: 'right', minWidth: 120 }}>
                 <div style={{ fontSize: 10, textTransform: 'uppercase', color: T.sub, fontWeight: 700, letterSpacing: 0.5, marginBottom: 4 }}>
                   Profile Score
                 </div>
@@ -154,7 +154,7 @@ export default function EmployeeDashboard({
               </div>
             </div>
             
-            <div style={{ display: 'flex', gap: 32, marginTop: 24, paddingTop: 20, borderTop: `1px solid ${T.bdr}`, fontSize: 14 }}>
+            <div style={{ display: 'flex', gap: 20, marginTop: 24, paddingTop: 20, borderTop: `1px solid ${T.bdr}`, fontSize: 14, flexWrap: 'wrap' }}>
               <div><span style={{ color: T.muted }}>Matrix Completion:</span> <span style={{ fontWeight: 600 }}>{completion}%</span></div>
               <div><span style={{ color: T.muted }}>Certifications:</span> <span style={{ fontWeight: 600 }}>{certifications.length}</span></div>
               <div><span style={{ color: T.muted }}>Projects:</span> <span style={{ fontWeight: 600 }}>{projects.length}</span></div>
@@ -172,7 +172,7 @@ export default function EmployeeDashboard({
                { label: 'Education', path: '/employee/education', icon: <GraduationCap size={20}/>, color: '#8B5CF6', desc: 'Academic heritage' },
                { label: 'Resume Upload', path: '/employee/resume-upload', icon: <Upload size={20}/>, color: '#3B82F6', desc: 'Import from resume' },
                { label: 'AI Coach', path: '/employee/ai', icon: <Bot size={20}/>, color: '#c084fc', desc: 'Career intelligence', hideInPopup: true },
-               { label: 'resume converter', path: '/employee/resume-builder', icon: <PenTool size={20}/>, color: '#ec4899', desc: 'AI Sync Data', hideInPopup: true },
+               { label: 'RESUME CONVERTER', path: '/employee/resume-builder', icon: <PenTool size={20}/>, color: '#ec4899', desc: 'AI Sync Data', hideInPopup: true },
              ].filter(item => !isPopup || !item.hideInPopup).map(item => (
                 <div key={item.label} style={{ ...actionCard, padding: '20px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }} onClick={() => isPopup && onTabChange ? onTabChange(item.path) : navigate(item.path)} className="hover:scale-105">
                    <div style={{ width: 44, height: 44, borderRadius: 12, background: `${item.color}15`, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
@@ -185,15 +185,15 @@ export default function EmployeeDashboard({
           </div>
 
           {/* BOTTOM SECTION */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 60%) minmax(0, 40%)', gap: 24 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
             {/* Left Col */}
-            <div style={{ ...cardStyle }}>
+            <div style={{ ...cardStyle, flex: '1 1 300px', minWidth: 0 }}>
               <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Skill Profile Overview</h3>
-              <div style={{ display: 'flex', gap: 24 }}>
-                <div style={{ width: 220, height: 220, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                <div style={{ width: 180, height: 180, flexShrink: 0 }}>
                   <Radar data={radarData} options={radarOptions} />
                 </div>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ flex: 1, minWidth: 120, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div>
                     <div style={{ fontSize: 12, color: T.muted, textTransform: 'uppercase', marginBottom: 8, letterSpacing: 1 }}>Top Strengths</div>
                     {expertSkills.length > 0 ? (
@@ -219,7 +219,7 @@ export default function EmployeeDashboard({
             </div>
 
             {/* Right Col */}
-            <div style={{ ...cardStyle, background: 'linear-gradient(135deg, rgba(59,130,246,0.05), transparent)' }}>
+            <div style={{ ...cardStyle, flex: '1 1 240px', minWidth: 0, background: 'linear-gradient(135deg, rgba(59,130,246,0.05), transparent)' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Bot size={18} color="#3B82F6" /> AI Highlights
               </h3>

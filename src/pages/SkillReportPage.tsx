@@ -10,6 +10,7 @@
  * 6. Strength vs Gap table + PDF download
  */
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/lib/AppContext';
 import { SKILL_NAMES, CATEGORIES } from '@/lib/appStore';
 import { callLLM } from '@/lib/llm';
@@ -387,9 +388,9 @@ function StrengthGapTable({ data }: { data: any }) {
           📥 Download PDF
         </button>
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:32 }}>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:32 }}>
         {/* STRENGTHS */}
-        <div>
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
           <div style={{ color:'#10B981', fontWeight:800, fontSize:18, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ background:'rgba(16,185,129,0.2)', padding:'6px', borderRadius:'10px' }}>🚀</div> Your Core Strengths
           </div>
@@ -423,7 +424,7 @@ function StrengthGapTable({ data }: { data: any }) {
         </div>
 
         {/* GAPS */}
-        <div>
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
           <div style={{ color:'#F59E0B', fontWeight:800, fontSize:18, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
             <div style={{ background:'rgba(245,158,11,0.2)', padding:'6px', borderRadius:'10px' }}>🎯</div> Areas for Growth
           </div>
@@ -497,11 +498,15 @@ function EmptyState() {
 // ─────────────────────────────────────────────────
 export default function SkillReportPage() {
   const { data, isLoading } = useApp();
+  const navigate = useNavigate();
 
   return (
     <div style={{ minHeight:'100vh', background:'#0a0a0f', color:'#fff', fontFamily:'Inter,sans-serif', padding:'32px 20px 80px', animation:'fadeIn 0.3s ease' }}>
       <div style={{ maxWidth:1100, margin:'0 auto' }}>
         <div style={{ marginBottom:28 }}>
+          <button onClick={() => navigate('/employee/dashboard')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+            ← Back to Dashboard
+          </button>
           <h1 style={{ fontFamily:'Inter,sans-serif', fontWeight:800, fontSize:'clamp(20px,3vw,30px)', margin:0 }}>Skills Report</h1>
           <p style={{ color:'rgba(255,255,255,0.5)', fontSize:14, margin:'4px 0 0' }}>
             Your complete QI skill profile · Zensar Technologies
@@ -517,9 +522,9 @@ export default function SkillReportPage() {
         ) : (
           <>
             <HeroStats data={data} />
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 }}>
-              <RadarSection data={data} />
-              <BarSection data={data} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+              <div style={{ flex: '1 1 300px', minWidth: 0 }}><RadarSection data={data} /></div>
+              <div style={{ flex: '1 1 300px', minWidth: 0 }}><BarSection data={data} /></div>
             </div>
             <HeatmapSection ratings={data.ratings} />
             <AISection data={data} />

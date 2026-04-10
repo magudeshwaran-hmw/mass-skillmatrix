@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, SkipForward, Loader2, AlertCircle, Edit2, Trash2 } from 'lucide-react';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { SKILLS } from '@/lib/mockData';
-import { callLLM } from '@/lib/llm';
+import { callResumeLLM } from '@/lib/llm';
 import { useAuth } from '@/lib/authContext';
 import { useApp } from '@/lib/AppContext';
 import { getEmployee, saveSkillRatings, upsertEmployee } from '@/lib/localDB';
@@ -37,21 +37,29 @@ async function extractTextFromPDF(file: File): Promise<string> {
 }
 
 async function extractEverythingFromResume(resumeText: string): Promise<any> {
-  const prompt = `Extract profile, skills (0-3), education, certs, and projects from this resume. Identify gaps (career lulls or missing info).
-Resume: ${resumeText.slice(0, 2500)}
+  const prompt = `Act as an expert recruitment AI trained on diverse, unstructured resume formats. 
+Scan the following resume text and extract all professional details into the specified JSON format.
 
-Return ONLY JSON:
+CRITICAL INSTRUCTIONS:
+1. CAPTURE ALL CERTIFICATIONS: This includes Technical Licenses, Online Courses, and any items listed under headers like "Certifications", "Achievements", "Awards", "Professional Development", or "Licenses". If an achievement reflects a credential or skill mastery, list it in 'certifications'.
+2. PROJECTS: Extract all major work engagements/projects.
+3. FORMATS: Handle both structured (tables/headers) and unstructured (narrative) resume formats.
+
+Resume Content:
+${resumeText.slice(0, 4500)}
+
+Return ONLY a perfectly valid JSON object with this structure:
 {
-  "profile": { "name":"", "email":"", "phone":"", "location":"", "designation":"", "yearsIT":0 },
+  "profile": { "name":"", "email":"", "phone":"", "location":"", "designation":"", "yearsIT": 0 },
   "skills": { "Selenium":0, "Appium":0, "JMeter":0, "Postman":0, "JIRA":0, "TestRail":0, "Python":0, "Java":0, "JavaScript":0, "TypeScript":0, "C#":0, "SQL":0, "API Testing":0, "Mobile Testing":0, "Performance Testing":0, "Security Testing":0, "Database Testing":0, "Banking":0, "Healthcare":0, "E-Commerce":0, "Insurance":0, "Telecom":0, "Manual Testing":0, "Automation Testing":0, "Regression Testing":0, "UAT":0, "Git":0, "Jenkins":0, "Docker":0, "Azure DevOps":0, "ChatGPT/Prompt Engineering":0, "AI Test Automation":0 },
   "education": [ { "degree":"", "institution":"", "field":"", "year":"" } ],
   "certifications": [ { "CertName":"", "Provider":"", "IssueDate":"" } ],
   "projects": [ { "ProjectName":"", "Role":"", "StartDate":"", "Description":"", "Outcome":"" } ],
-  "gaps": ["identify any career gaps or missing core project data"]
+  "gaps": ["list any career gaps, missing info, or specific skills mention in Achievements/Awards that match our matrix"]
 }
-0=absent, 1=basic, 2=intermediate, 3=expert. No markdown.`;
+Note: For skills, use 0=absent, 1=basic, 2=intermediate, 3=expert. Do not include markdown or conversational text.`;
 
-  const result = await callLLM(prompt);
+  const result = await callResumeLLM(prompt);
   if (result.error || !result.data) return null;
   return typeof result.data === 'object' ? result.data : null;
 }
@@ -128,6 +136,25 @@ export default function ResumeUploadPage({
         managerRating: null, validated: false,
       }));
 
+      // Helper to parse dates from various formats (e.g. "Jun 2025", "2024", "Mar-Aug 2023") to YYYY-MM-DD
+      const parseDate = (dateStr: string): string | null => {
+        if (!dateStr || typeof dateStr !== 'string') return null;
+        const s = dateStr.trim().toLowerCase();
+        if (s.includes('present') || s.includes('ongoing') || s.includes('current')) return null;
+
+        const yearMatch = s.match(/\b(20\d{2}|19\d{2})\b/);
+        if (!yearMatch) return null;
+        const year = yearMatch[1];
+        
+        const monthMatch = s.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i);
+        const monthMap: Record<string, string> = {
+          jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+          jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+        };
+        const month = monthMatch ? monthMap[monthMatch[1].toLowerCase()] : '01';
+        return `${year}-${month}-01`;
+      };
+
       // Store in localDB
       if (emp) saveSkillRatings(employeeId, emp.name, ratings);
 
@@ -154,8 +181,11 @@ export default function ResumeUploadPage({
           await fetch(`${API_BASE}/certifications`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              ZensarID: employeeId, EmployeeID: employeeId, EmployeeName: emp?.name,
-              CertName: cert.CertName, Provider: cert.Provider, IssueDate: cert.IssueDate, IsAIExtracted: true
+              employeeId: employeeId,
+              certName: cert.CertName, 
+              issuingOrganization: cert.Provider, 
+              issueDate: parseDate(cert.IssueDate), 
+              isAIExtracted: true
             })
           }).catch(() => { });
         }
@@ -167,9 +197,14 @@ export default function ResumeUploadPage({
           await fetch(`${API_BASE}/projects`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              ZensarID: employeeId, EmployeeID: employeeId, EmployeeName: emp?.name,
-              ProjectName: proj.ProjectName, Role: proj.Role, StartDate: proj.StartDate, Description: proj.Description,
-              Outcome: proj.Outcome, IsAIExtracted: true
+              employeeId: employeeId,
+              projectName: proj.ProjectName, 
+              role: proj.Role, 
+              startDate: parseDate(proj.StartDate), 
+              endDate: parseDate(proj.EndDate),
+              description: proj.Description,
+              outcome: proj.Outcome, 
+              isAIExtracted: true
             })
           }).catch(() => { });
         }
@@ -213,7 +248,7 @@ export default function ResumeUploadPage({
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>🤖 AI Extracted Insights</h2>
           </div>
           <div style={{ padding: '24px' }}>
-            <div style={{ background: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 10, marginBottom: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: 16, borderRadius: 10, marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
               <div><span style={{ color: T.muted }}>Name:</span> {p.name || '—'}</div>
               <div><span style={{ color: T.muted }}>Role:</span> {p.designation || '—'}</div>
               <div><span style={{ color: T.muted }}>Experience:</span> {p.yearsIT ? p.yearsIT + ' years' : '—'}</div>
@@ -382,11 +417,11 @@ export default function ResumeUploadPage({
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 16 }}>
-              <button onClick={() => setStatus('idle')} style={{ flex: 1, padding: 12, background: 'transparent', border: `1px solid ${T.bdr}`, color: T.text, borderRadius: 10, cursor: 'pointer' }}>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <button onClick={() => setStatus('idle')} style={{ flex: 1, padding: 12, minWidth: 120, background: 'transparent', border: `1px solid ${T.bdr}`, color: T.text, borderRadius: 10, cursor: 'pointer' }}>
                 ← Re-upload
               </button>
-              <button onClick={onConfirmAndSave} style={{ flex: 2, padding: 12, background: '#3B82F6', border: 'none', color: '#fff', fontWeight: 600, borderRadius: 10, cursor: 'pointer' }}>Confirm & Save All →</button>
+              <button onClick={onConfirmAndSave} style={{ flex: 2, padding: 12, minWidth: 180, background: '#3B82F6', border: 'none', color: '#fff', fontWeight: 600, borderRadius: 10, cursor: 'pointer' }}>Confirm & Save All →</button>
             </div>
           </div>
         </div>

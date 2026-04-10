@@ -22,7 +22,16 @@ import { API_BASE } from '@/lib/api';
 // TO SWITCH: change AI_MODE to 'cloud' and add CLOUD_API_KEY
 // ─────────────────────────────────────────────────────────────
 
-const LOCAL_MODEL = 'minimax-m2.5:cloud';
+const LOCAL_MODEL = 'deepseek-v3.1:671b-cloud'; // Primary model
+const RESUME_MODELS = [
+  'deepseek-v3.1:671b-cloud',
+  'gemini-3-flash-preview:cloud',
+  'qwen3-coder:480b-cloud',
+  'glm-5.1:cloud',
+  'gemma4:cloud',
+  'nemotron-3-super:cloud',
+  'kimi-k2.5:cloud'
+];
 const AI_MODE: 'local' | 'cloud' = 'local';
 const CACHE_TTL = 3600 * 12; 
 
@@ -58,7 +67,7 @@ export interface LLMResult {
 // ─── MAIN LLM CALL ───────────────────────────────────────────
 export const callLLM = async (
   prompt: string,
-  _cacheKeyArg?: string   // kept for backwards-compat; ignored — key is auto-derived
+  modelOverride?: string
 ): Promise<LLMResult> => {
 
   const getPromptHash = (str: string) => {
@@ -97,7 +106,7 @@ export const callLLM = async (
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                model: LOCAL_MODEL,
+                model: modelOverride || LOCAL_MODEL,
                 prompt: prompt,
                 stream: false,
                 format: 'json',
@@ -241,6 +250,27 @@ export const clearLLMCache = () => {
 };
 
 export const getLLMMode = () => AI_MODE;
+
+/**
+ * ─── SMART EXTRACTOR ──────────────────────────────────────────
+ * Tries the new high-end models in sequence for best accuracy.
+ */
+export const callResumeLLM = async (prompt: string): Promise<LLMResult> => {
+  let lastResult: LLMResult | null = null;
+  
+  for (const model of RESUME_MODELS) {
+    try {
+      console.log(`🤖 [AI Audit] Attempting scan with ${model}...`);
+      const result = await callLLM(prompt, model);
+      if (result.data && !result.error) return result;
+      lastResult = result;
+    } catch (e) {
+      console.error(`❌ [AI Audit] ${model} failed:`, e);
+    }
+  }
+  
+  return lastResult || { data: null, fromCache: false, error: 'unknown', message: 'All models failed to extract data.' };
+};
 
 /** @deprecated Use checkLLMStatus() */
 export const pingLLM = async (): Promise<boolean> => {

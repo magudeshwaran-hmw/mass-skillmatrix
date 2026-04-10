@@ -115,14 +115,17 @@ export const transformRawToAppData = (
   allSkills: any[], 
   certifications: Certification[], 
   projects: Project[], 
-  education: EducationEntry[]
+  education: EducationEntry[],
+  passedSessionId?: string
 ): AppData => {
   const userId = String(user.zensar_id || '').trim().toLowerCase();
   const pkId = String(user.id || '').trim().toLowerCase();
+  const sessionId = passedSessionId || userId || pkId;
   
   const userSkillRows: any[] = (allSkills ?? []).filter((s: any) => {
     const sid = String(s.employee_id || s.employeeId || s.EmployeeID || '').trim().toLowerCase();
-    return (userId && sid === userId) || (pkId && sid === pkId);
+    return (userId && sid === userId) || (pkId && sid === pkId) ||
+           (sessionId && sid === sessionId.trim().toLowerCase());
   });
   
   const rawSkillsFlat: Record<string, number> = {};
@@ -234,7 +237,7 @@ export const loadAppData = async (overrideSessionId?: string): Promise<AppData |
       education = (await resp.json()).education || [];
     } catch { /* handle error */ }
 
-    return transformRawToAppData(user, allSkills, certifications, projects, education);
+    return transformRawToAppData(user, allSkills, certifications, projects, education, sessionId);
   } catch (err) {
     console.error('[loadAppData] failed:', err);
     return null;

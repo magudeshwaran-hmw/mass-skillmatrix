@@ -48,6 +48,8 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
 
       const res = await fetch('/api/employees');
       if (!res.ok) { setIsLoading(false); return; }
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) { setIsLoading(false); return; }
       const { employees, skills } = await res.json();
 
       const currentUser = (employees ?? []).find((e: any) =>

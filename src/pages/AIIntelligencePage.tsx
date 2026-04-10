@@ -4,11 +4,12 @@
  * Enhanced for both Light and Dark modes.
  * Features: Phased AI Generated Roadmap and AI Career Coach.
  */
-import { Map, TrendingUp, Search, MessageSquare, Send, Bot, RefreshCw, X, Award, Briefcase, Zap, ShieldCheck, Brain, Star, ChevronRight, Target, Info, Sparkles, ExternalLink, Globe, UserCheck, Loader2 } from 'lucide-react';
+import { Map, TrendingUp, Search, MessageSquare, Send, Bot, RefreshCw, X, Award, Briefcase, Zap, ShieldCheck, Brain, Star, ChevronRight, ChevronLeft, Target, Info, Sparkles, ExternalLink, Globe, UserCheck, Loader2 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/lib/AppContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { callLLM, checkLLMStatus } from '@/lib/llm';
+import { useNavigate } from 'react-router-dom';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement,
   BarController, Tooltip, Legend, PointElement, LineElement, Filler
@@ -116,19 +117,22 @@ function RoadmapTab({ data, T }: { data: any, T: any }) {
       const education = (data.education || []).map((e: any) => e.Degree || e.degree).join(', ');
       const designation = data.user?.Designation || 'Quality Engineer';
 
-      const prompt = `Generate a 3-Phase technical learning roadmap for ${data.user?.Name}, a ${designation} at Zensar.
+      const prompt = `Conduct a deeply analytical capability gap analysis and generate a 3-Phase technical learning roadmap for ${data.user?.Name}, a ${designation} at Zensar.
 Context:
-- Background: ${education}
-- Strong Skills: ${expertSkills}
-- Skill Gaps to Bridge: ${gapSkills}
+- Educational Background: ${education}
+- Strong Capabilities: ${expertSkills}
+- Identified Skill Gaps to Bridge: ${gapSkills}
+
+STRATEGY INSTRUCTION:
+Perform a deep gap analysis by correlating their current capabilities against the expected trajectory for a senior engineer. Base the roadmap not just on the gaps, but on building foundational prerequisites before advancing. Incorporate Zensar's focus on enterprise scale, robust QA strategies, AI test automation, and measurable metrics. Ensure Phase 1 bridges fundamental gaps rapidly, Phase 2 scales their capabilities to enterprise level, and Phase 3 positions them as a thought leader or architect in their domain.
 
 Format: Return a JSON object ONLY with a "steps" array containing 3 objects:
 [{
-  "title": "Phase title",
-  "phase": "Phase 01: Stabilization",
-  "text": "Detailed action plan reasoning",
-  "items": [{"skill": "Skill Name"}],
-  "time": "Est. duration",
+  "title": "Phase title mapping to the strategy (e.g., Foundational Synthesis)",
+  "phase": "Phase 0X: [Name]",
+  "text": "Detailed deep analysis and reasoning for this specific capability bridge.",
+  "items": [{"skill": "Skill Name to target"}],
+  "time": "Est. duration (e.g., 4-6 Weeks)",
   "color": "#HEX_COLOR (Orange/Blue/Green sequence)"
 }]`;
 
@@ -168,7 +172,7 @@ Format: Return a JSON object ONLY with a "steps" array containing 3 objects:
            
            <div style={{ display: 'flex', flexDirection: 'column', gap:0, background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 24, overflow: 'hidden' }}>
               {steps.map((s, idx) => (
-                 <div key={idx} style={{ padding: '24px 32px', borderBottom: idx === steps.length - 1 ? 'none' : `1px solid ${T.bdr}`, display: 'flex', gap: 24 }}>
+                 <div key={idx} style={{ padding: '24px 5vw', borderBottom: idx === steps.length - 1 ? 'none' : `1px solid ${T.bdr}`, display: 'flex', flexWrap: 'wrap', gap: 24 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44 }}>
                        <div style={{ width: 44, height: 44, borderRadius: 14, background: `${s.color || '#3B82F6'}15`, border: `1.5px solid ${s.color || '#3B82F6'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {idx === 0 ? <Zap color={s.color} /> : idx === 1 ? <Target color={s.color} /> : <Award color={s.color} />}
@@ -234,6 +238,7 @@ export default function AIIntelligencePage({
   
   const { dark } = useDark();
   const T = mkTheme(dark);
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('coach');
 
   if (isLoading) return <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.sub }}>Syncing Intelligence Profile...</div>;
@@ -242,24 +247,29 @@ export default function AIIntelligencePage({
   return (
     <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '24px 16px 80px' }}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
+
+        {/* Back Button */}
+        <button onClick={() => navigate('/employee/dashboard')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: `1px solid ${T.bdr}`, color: T.sub, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+          <ChevronLeft size={16} /> Back to Dashboard
+        </button>
         
-        {/* Elite Profile Dashboard Header — Scaled Down */}
-        <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 24, padding: '24px 32px', marginBottom: 24, position: 'relative', overflow: 'hidden' }}>
-           <div style={{ position: 'absolute', top: 0, right: 0, padding: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)' }}>
+        {/* Elite Profile Dashboard Header */}
+        <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 24, padding: '24px 32px', marginBottom: 24 }}>
+           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 99, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.2)', width: 'fit-content' }}>
                  <Sparkles size={12} color="#3B82F6" />
                  <span style={{ fontSize: 10, fontWeight: 800, color: '#3B82F6' }}>SECURE AI ANALYSIS</span>
               </div>
            </div>
            
-           <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-              <div style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(135deg, #6B2D8B, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, fontWeight: 900, color: '#fff' }}>{(data?.user?.Name || 'U')[0]}</div>
-              <div style={{ flex: 1 }}>
+           <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(135deg, #6B2D8B, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, fontWeight: 900, color: '#fff', flexShrink: 0 }}>{(data?.user?.Name || 'U')[0]}</div>
+              <div style={{ flex: 1, minWidth: 200 }}>
                  <div style={{ fontSize: 11, fontWeight: 800, color: '#3B82F6', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>Quality Intelligence Insights</div>
-                 <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800 }}>{data?.user?.Name || 'Qualitian Explorer'}</h1>
-                 <p style={{ margin: '2px 0 0', fontSize: 13, color: T.sub, fontWeight: 500 }}>{data?.user?.Designation || 'Quality Engineer'} · {data?.user?.Department || 'QI'}</p>
+                 <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, lineHeight: 1.2 }}>{data?.user?.Name || 'Qualitian Explorer'}</h1>
+                 <p style={{ margin: '4px 0 0', fontSize: 13, color: T.sub, fontWeight: 500 }}>{data?.user?.Designation || 'Quality Engineer'} · {data?.user?.Department || 'QI'}</p>
                  
-                 <div style={{ display: 'flex', gap: 24, marginTop: 16 }}>
+                 <div style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
                     <div>
                        <div style={{ fontSize: 20, fontWeight: 900 }}>{data?.overallScore || 0}%</div>
                        <div style={{ fontSize: 9, fontWeight: 700, color: T.muted }}>CAPABILITY</div>
@@ -277,8 +287,8 @@ export default function AIIntelligencePage({
            </div>
         </div>
 
-        {/* Dynamic Nav Tabs — Styled for clarity */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 24, padding: 4, background: T.card, borderRadius: 16, width: 'fit-content', border: `1px solid ${T.bdr}` }}>
+        {/* Dynamic Nav Tabs */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 24, padding: 4, background: T.card, borderRadius: 16, width: '100%', border: `1px solid ${T.bdr}` }}>
            {[
              { id: 'coach', label: 'AI Coach', icon: Bot },
              { id: 'map', label: 'Learning Roadmap', icon: Map },
@@ -288,7 +298,7 @@ export default function AIIntelligencePage({
                 key={t.id}
                 onClick={() => setActiveTab(t.id)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 12, border: 'none',
+                  flex: 1, minWidth: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px', borderRadius: 12, border: 'none',
                   background: activeTab === t.id ? '#3B82F6' : 'transparent',
                   color: activeTab === t.id ? '#fff' : T.sub,
                   fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: '0.2s'
@@ -301,37 +311,7 @@ export default function AIIntelligencePage({
 
         {activeTab === 'coach' && <CareerCoachTab data={data} T={T} />}
         {activeTab === 'map' && <RoadmapTab data={data} T={T} />}
-        {activeTab === 'gaps' && (
-           <div style={{ animation: 'fadeUp 0.4s' }}>
-              <div style={{ padding: 40, background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 32 }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 32 }}>
-                    <div style={{ width: 56, height: 56, borderRadius: 16, background: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       <Target size={32} color="#fff" />
-                    </div>
-                    <div>
-                       <div style={{ fontSize: 13, fontWeight: 800, color: '#EF4444', textTransform: 'uppercase' }}>Professional Void Audit</div>
-                       <div style={{ fontWeight: 900, fontSize: 24, letterSpacing:-0.5 }}>Tenure Modernity Analysis</div>
-                    </div>
-                 </div>
-                 <div style={{ display:'grid', gap:28 }}>
-                    <div style={{ padding: 24, background: 'rgba(239,68,68,0.05)', borderRadius: 20 }}>
-                       <div style={{ fontSize: 15, fontWeight: 900, color: '#EF4444', marginBottom: 12 }}>Cognitive Mismatch: Seniority Plateau</div>
-                       <div style={{ fontSize: 14, lineHeight: 1.7, color: T.text }}>
-                          {data.user?.YearsIT >= 15 ? 
-                             `Observation: Despite ${data.user?.YearsIT} years of engineering expertise, there is a structural silence regarding 'Agentic AI Workflows'. This seniority requires immediate modernization to maintain managerial authority.` :
-                             `Recommendation: With ${data.user?.YearsIT} years, focus on vertical depth in Banking/Insurance domains to transition from technologist to Domain Authority.`
-                          }
-                       </div>
-                    </div>
-                    <div style={{ display: 'flex', flexWrap:'wrap', gap:10 }}>
-                       {['Cloud Native Mastery', 'GenAI Security', 'LMM Orchestration', 'Agentic AI'].map(g => (
-                          <div key={g} style={{ padding:'8px 16px', borderRadius:10, border:'1px solid #EF4444', color:'#EF4444', fontSize:11, fontWeight:900 }}>{g} MISSING</div>
-                       ))}
-                    </div>
-                 </div>
-              </div>
-           </div>
-        )}
+        {activeTab === 'gaps' && <DeepGapAnalysisTab data={data} T={T} />}
 
       </div>
 
@@ -340,6 +320,132 @@ export default function AIIntelligencePage({
         .animate-spin { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────
+// TAB 3 — DEEP GAP ANALYSIS
+// ─────────────────────────────────────────────────
+function DeepGapAnalysisTab({ data, T }: { data: any, T: any }) {
+  const [analysis, setAnalysis] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    generateAnalysis();
+  }, []);
+
+  const generateAnalysis = async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const expertSkills = (data.expertSkills || []).join(', ');
+      const gapSkills = (data.gapSkills || []).map((g: any) => g.skill).join(', ');
+      const designation = data.user?.Designation || 'Quality Engineer';
+
+      const prompt = `Perform a deep capability diagnostic analysis for ${data.user?.Name}, a ${designation} at Zensar.
+Context:
+- Strong Capabilities: ${expertSkills}
+- Missing/Gap Capabilities: ${gapSkills}
+
+Format: Return ONLY a JSON object with a "gaps" array containing up to 5 items:
+{
+  "gaps": [
+    {
+      "title": "Clear gap title (e.g. Lack of modern automation testing experience)",
+      "impact": "Heavy reliance on manual testing impacts scalability...",
+      "fix": "Actionable way to fix this gap (e.g. Complete a practical certification...)"
+    }
+  ]
+}`;
+
+      const res = await callLLM(prompt);
+      if (res?.data?.gaps) {
+        setAnalysis(res.data.gaps);
+      } else {
+        throw new Error("Invalid response format");
+      }
+    } catch (err) {
+      console.error(err);
+      setError(true);
+      // Fallback
+      setAnalysis([
+        {
+          title: "Lack of modern automation testing experience (Selenium, Cypress, Playwright, etc.)",
+          impact: "Heavy reliance on manual testing limits scalability, efficiency, and market competitiveness, which expects QA roles moving towards SDET.",
+          fix: "Complete a practical Zensar bootcamp or course in Cypress, Java/Python basics with tool automation practice of 20 hrs. Implement automated light tests suites for current projects."
+        },
+        {
+          title: "Absence of API testing automation skills in deep usage proficiency",
+          impact: "Unable to effectively validate backend APIs, enterprise-sensitive scenarios, or integrate seamlessly with development CI/CD workflows.",
+          fix: "Learn RestAssured or Python requests through Udemy / Coursera, practice writing tests in Postman, contribute to API testing in local DevTest."
+        },
+        {
+          title: "No CI/CD pipeline integration experience",
+          impact: "Silos QA processes from modern DevOps workflows, bottlenecking rapid deployment cycles and quality orchestration.",
+          fix: "Engage with Jenkins/GitHub Actions fundamentals. Ask DevOps teams for shadowing on incorporating tests into pipeline triggers."
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ animation: 'fadeUp 0.4s' }}>
+      <div style={{ padding: '24px 32px', background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 24, paddingBottom: 40 }}>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Target size={24} color="#EF4444" />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 }}>Professional AI Diagnostic</div>
+            <div style={{ fontWeight: 900, fontSize: 22, color: T.text }}>Tenure Modernity Analysis</div>
+          </div>
+        </div>
+
+        <button 
+          onClick={generateAnalysis}
+          disabled={loading}
+          style={{ width: '100%', padding: '12px', background: '#EF4444', borderRadius: 10, border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, marginBottom: 24 }}
+        >
+          {loading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+          {loading ? 'Analyzing Voids...' : 'Fix Gaps'}
+        </button>
+
+        {error && !loading && <div style={{ marginBottom: 16, padding: '10px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#FCA5A5', borderRadius: 12, fontSize: 12, fontWeight: 700 }}>⚠️ AI Service unavailable. Showing fallback gap analysis.</div>}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {analysis.map((gap, i) => (
+            <div key={i} style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.12)', borderRadius: 16, padding: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#FCA5A5', marginBottom: 8, lineHeight: 1.5 }}>
+                {gap.title}
+              </div>
+              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, marginBottom: 16 }}>
+                <strong>Impact:</strong> {gap.impact}
+              </div>
+              <div style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: 12, padding: 16, display: 'flex', gap: 12 }}>
+                <div style={{ marginTop: 2 }}><Zap size={16} color="#22C55E" /></div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#22C55E', textTransform: 'uppercase', marginBottom: 4 }}>How to fix this gap</div>
+                  <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5, opacity: 0.9 }}>
+                    {gap.fix}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {loading && analysis.length === 0 && (
+             <div style={{ padding: 48, textAlign: 'center' }}>
+                <Loader2 className="animate-spin" size={32} color="#EF4444" style={{ margin: '0 auto 16px' }} />
+                <div style={{ fontWeight: 800, fontSize: 16, color: T.text }}>Diagnosing Modernity Voids...</div>
+             </div>
+          )}
+        </div>
+        
+      </div>
     </div>
   );
 }

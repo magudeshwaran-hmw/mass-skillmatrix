@@ -7,7 +7,8 @@ import { useState } from 'react';
 import { useApp } from '@/lib/AppContext';
 import { useAuth } from '@/lib/authContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
-import { Briefcase, Plus, Trash2, Edit2, Calendar, MapPin, Users, Target } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Briefcase, Plus, Trash2, Edit2, Calendar, MapPin, Users, Target, ChevronLeft } from 'lucide-react';
 import { toast } from '@/lib/ToastContext';
 
 
@@ -36,6 +37,7 @@ export default function ProjectsPage({
   const onTabChange = propOnTabChange || (() => {});
   
   const { employeeId } = useAuth();
+  const navigate = useNavigate();
   const activeEmpId = isPopup ? (data?.user?.id || data?.user?.ZensarID || employeeId) : employeeId;
   const [showModal, setShowModal] = useState(false);
   const [editingProj, setEditingProj] = useState<any>(null);
@@ -181,10 +183,17 @@ export default function ProjectsPage({
       <div style={pg}>
         <div style={{ maxWidth: 800, margin: '0 auto' }}>
           
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-            <div>
-              <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 6px' }}>My Projects</h1>
-              <div style={{ color: T.sub, fontSize: 14 }}>Your QI project portfolio</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32, flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {!isPopup && (
+                <button onClick={() => navigate('/employee/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: `1px solid ${T.bdr}`, color: T.sub, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                  <ChevronLeft size={16} /> Back
+                </button>
+              )}
+              <div>
+                <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 6px' }}>My Projects</h1>
+                <div style={{ color: T.sub, fontSize: 14 }}>Your QI project portfolio</div>
+              </div>
             </div>
             <button onClick={openNew} style={{ background: 'linear-gradient(135deg, #8B5CF6, #3B82F6)', border: 'none', padding: '10px 20px', borderRadius: 10, color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', boxShadow: '0 4px 15px rgba(139,92,246,0.3)' }}>
               <Plus size={16} /> Add Project
@@ -276,7 +285,7 @@ export default function ProjectsPage({
             <h2 style={{ fontSize: 20, fontWeight: 800, color: T.text, margin: '0 0 20px' }}>{editingProj ? 'Edit Project' : 'Add Project'}</h2>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 <div style={{ flex: 1 }}>
                   <label style={labelStyle}>Project Name</label>
                   <input required style={inputStyle} value={form.ProjectName} onChange={e => setForm({...form, ProjectName: e.target.value})} placeholder="e.g. Banking App Automation" />
@@ -287,7 +296,7 @@ export default function ProjectsPage({
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                 <div style={{ flex: 1 }}>
                   <label style={labelStyle}>Client / Employer</label>
                   <input style={inputStyle} value={form.Client} onChange={e => setForm({...form, Client: e.target.value})} placeholder="e.g. HDFC Bank" />
@@ -300,7 +309,7 @@ export default function ProjectsPage({
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <label style={labelStyle}>Start Date</label>
                   <input type="month" style={inputStyle} value={form.StartDate} onChange={e => setForm({...form, StartDate: e.target.value})} />

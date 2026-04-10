@@ -27,6 +27,7 @@ import EducationPage from './EducationPage';
 import AIIntelligencePage from './AIIntelligencePage';
 import AdminResumeUploadPage from './AdminResumeUploadPage';
 import ResumeBuilderPage from './ResumeBuilderPage';
+import { callResumeLLM } from '@/lib/llm';
 
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement,
@@ -180,7 +181,7 @@ export default function AdminDashboard() {
         return 0;
       })();
 
-      // Step 2: Try LLM (note: server returns field name 'response')
+      // Step 2: Try High-Fidelity LLM Extraction
       let llm: any = {};
       try {
         const prompt = `Extract employee info from this resume. Return ONLY a JSON object, no markdown, no explanation.
@@ -188,22 +189,10 @@ Format: {"name":"","email":"","phone":"","designation":"","location":"","departm
 Resume: ${resumeText.slice(0, 3000)}
 JSON:`;
 
-        const res = await fetch(`${API_BASE}/llm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt, model: 'llama3' })
-        });
-        if (res.ok) {
-          const d = await res.json();
-          // Server returns { response: "..." } for all providers
-          const raw = (d.response || d.text || d.content || d.result || '').trim();
-          console.log('[Resume Scan] LLM raw:', raw.slice(0, 400));
-          const m = raw.match(/\{[\s\S]*\}/);
-          if (m) {
-            try { llm = JSON.parse(m[0]); }
-            catch { try { llm = JSON.parse(m[0].replace(/[\x00-\x1F\x7F]/g, ' ')); } catch { /**/ } }
-          }
-          console.log('[Resume Scan] LLM parsed:', llm);
+        const result = await callResumeLLM(prompt);
+        if (result.data) {
+          llm = result.data;
+          console.log('[Resume Scan] High-Fidelity LLM Success:', llm);
         }
       } catch (e) { console.warn('[Resume Scan] LLM failed:', e); }
 
@@ -549,17 +538,17 @@ JSON:`;
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '24px 40px 40px', fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '24px 5vw 40px', fontFamily: "'Inter', sans-serif" }}>
 
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         
         {/* Title & Actions */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 40 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 30 }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: -0.5 }}>Admin Dashboard</h1>
             <p style={{ margin: '4px 0 0', color: T.sub, fontSize: 14, fontWeight: 500 }}>Global team capability analytics</p>
           </div>
-          <div style={{ display: 'flex', gap: 14 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
             <button onClick={loadAllData} style={{ padding: '10px 22px', borderRadius: 12, background: T.card, border: `1px solid ${T.bdr}`, color: T.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
                <RefreshCw size={16} className={loading?'animate-spin':''} /> Sync
             </button>
@@ -570,7 +559,7 @@ JSON:`;
         </div>
 
         {/* Hero Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 24 }}>
           <StatCard label="Team Size" value={stats.teamSize} sub="Total employees" icon={Users} color="#3B82F6" />
           <StatCard label="Submitted" value={stats.submitted} sub={`${stats.submitted}/${stats.teamSize} total`} icon={CheckCircle2} color="#10B981" />
           <StatCard label="Avg Readiness" value={`${stats.avgComp}%`} sub="Team benchmark" icon={TrendingUp} color="#8B5CF6" />
@@ -578,9 +567,9 @@ JSON:`;
         </div>
 
         {/* Main Viewport */}
-        <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 20, padding: 24 }}>
+        <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 20, padding: '24px 5vw', maxWidth: '100%', boxSizing: 'border-box' }}>
           
-          <div style={{ display: 'flex', gap: 6, background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)', padding: 4, borderRadius: 12, width: 'fit-content', marginBottom: 24, border: `1px solid ${T.bdr}` }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)', padding: 4, borderRadius: 12, width: 'fit-content', maxWidth: '100%', marginBottom: 24, border: `1px solid ${T.bdr}` }}>
             {[
               { id: 'Overview', icon: BarChart3 },
               { id: 'Employees', icon: Users },
@@ -594,7 +583,7 @@ JSON:`;
                   display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', borderRadius: 8, border: 'none',
                   background: activeTab === t.id ? '#3B82F6' : 'transparent',
                   color: activeTab === t.id ? '#fff' : T.sub,
-                  fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: '0.2s'
+                  fontWeight: 600, fontSize: 13, cursor: 'pointer', transition: '0.2s', flexShrink: 0
                 }}
               >
                 <t.icon size={14} /> {t.id}
@@ -603,16 +592,16 @@ JSON:`;
           </div>
 
           {activeTab === 'Overview' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: 50, animation: 'fadeIn 0.4s ease' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 30, animation: 'fadeIn 0.4s ease' }}>
               <div>
                 <h3 style={{ margin: '0 0 32px', fontSize: 18, fontWeight: 800, display:'flex', alignItems:'center', gap:12 }}><BarChart3 size={20} color="#3B82F6" /> Distribution</h3>
                 <div style={{ height: 350 }}>
                   <Bar
                     data={{
                       labels: ['Tool', 'Tech', 'App', 'Dom', 'Test', 'Devs', 'AI'],
-                      datasets: [{ label: 'Readiness', data: [2.1, 2.4, 1.8, 2.8, 2.3, 1.5, 2.0], backgroundColor: '#3B82F6', borderRadius: 6, barThickness: 40 }]
+                      datasets: [{ label: 'Readiness', data: [2.1, 2.4, 1.8, 2.8, 2.3, 1.5, 2.0], backgroundColor: '#3B82F6', borderRadius: 6, barThickness: 24 }]
                     }}
-                    options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }, ticks: { color: T.sub, font: { size: 11, weight: 600 } }, beginAtZero: true, max: 3 }, x: { grid: { display: false }, ticks: { color: T.sub, font: { size: 11, weight: 600 } } } } }}
+                    options={{ maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }, ticks: { color: T.sub, font: { size: 10, weight: 600 } }, beginAtZero: true, max: 3 }, x: { grid: { display: false }, ticks: { color: T.sub, font: { size: 10, weight: 600 } } } } }}
                   />
                 </div>
               </div>
@@ -741,30 +730,37 @@ JSON:`;
                     return 0;
                   })
                   .map(e => (
-                    <div key={e.id} style={{ background: T.bg, border: `1px solid ${T.bdr}`, borderRadius: 20, padding: '24px 30px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: '0.2s' }}>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-                          <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 900, boxShadow: '0 8px 16px rgba(59,130,246,0.2)' }}>
+                    <div key={e.id} style={{ background: T.bg, border: `1px solid ${T.bdr}`, borderRadius: 20, padding: '24px', display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', position: 'relative' }}>
+                       {/* Left Content: Identity */}
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: '1 1 300px' }}>
+                          <div style={{ width: 52, height: 52, borderRadius: 14, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, boxShadow: '0 8px 16px rgba(59,130,246,0.15)', flexShrink: 0 }}>
                             {e.name?.substring(0,2).toUpperCase()}
                           </div>
-                          <div>
-                             <div style={{ fontSize: 17, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 12 }}>
-                                {e.name}
-                                <span style={{ padding: '3px 10px', borderRadius: 6, background: e.submitted ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)', color: e.submitted ? '#10B981' : '#3B82F6', fontSize: 9, fontWeight: 900, letterSpacing: 0.5 }}>{e.submitted ? 'VALIDATED' : 'SENSING'}</span>
+                          <div style={{ minWidth: 0 }}>
+                             <div style={{ fontSize: 18, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name}</span>
+                                <span style={{ padding: '3px 8px', borderRadius: 6, background: e.submitted ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)', color: e.submitted ? '#10B981' : '#3B82F6', fontSize: 9, fontWeight: 900, textTransform: 'uppercase' }}>{e.submitted ? 'VALIDATED' : 'SENSING'}</span>
                              </div>
-                             <div style={{ fontSize: 12, color: T.sub, fontWeight: 600, marginTop: 4 }}>{e.email || 'no-email@zensar.com'} · <span style={{ color: '#3B82F6' }}>ID: {e.zensar_id || e.id}</span></div>
+                             <div style={{ fontSize: 12, color: T.sub, fontWeight: 500, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '4px 8px' }}>
+                               <span>{e.email || 'no-email@zensar.com'}</span>
+                               <span style={{ color: T.bdr }}>|</span>
+                               <span style={{ color: '#3B82F6', fontWeight: 700 }}>ID: {e.zensar_id || e.id}</span>
+                             </div>
                           </div>
                        </div>
 
-                       <div style={{ display: 'flex', alignItems: 'center', gap: 32 }}>
-                          <div style={{ textAlign: 'right' }}>
-                             <div style={{ fontSize: 22, fontWeight: 900, color: e.completion >= 75 ? '#10B981' : '#3B82F6' }}>{e.completion}%</div>
-                             <div style={{ width: 100, height: 5, borderRadius: 99, background: T.bdr, marginTop: 8, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${e.completion}%`, background: e.completion >= 75 ? '#10B981' : '#3B82F6', borderRadius: 99 }} />
+                       {/* Right Content: Stats & Actions */}
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 24, flex: '1 1 200px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <div style={{ flexShrink: 0 }}>
+                             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, justifyContent: 'flex-end' }}>
+                                <span style={{ fontSize: 24, fontWeight: 900, color: e.completion >= 75 ? '#10B981' : '#3B82F6' }}>{e.completion}</span>
+                                <span style={{ fontSize: 12, fontWeight: 800, color: T.sub }}>%</span>
+                             </div>
+                             <div style={{ width: 100, height: 6, borderRadius: 10, background: T.bdr, marginTop: 6, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${e.completion}%`, background: e.completion >= 75 ? '#10B981' : '#3B82F6', borderRadius: 10 }} />
                              </div>
                           </div>
-                          <div style={{ display:'flex', gap:10 }}>
-                             <button onClick={() => handleOpenPreview(e)} style={{ width: 42, height: 42, borderRadius: 12, background: T.card, border: `1px solid ${T.bdr}`, color: '#3B82F6', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}><Eye size={18}/></button>
-                          </div>
+                          <button onClick={() => handleOpenPreview(e)} style={{ width: 44, height: 44, borderRadius: 12, background: T.card, border: `1px solid ${T.bdr}`, color: '#3B82F6', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: '0.2s' }} aria-label="View Audit"><Eye size={20}/></button>
                        </div>
                     </div>
                   ))}
@@ -1138,36 +1134,36 @@ JSON:`;
                     return 0;
                   })
                   .map(e => (
-                    <div key={e.id} onClick={() => handleOpenPreview(e)} style={{ background: T.bg, border: `1px solid ${T.bdr}`, borderRadius: 20, padding: 24, cursor: 'pointer', transition: '0.2s' }} className="hover:scale-105">
-                       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-                          <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 900, color: '#fff' }}>
+                    <div key={e.id} onClick={() => handleOpenPreview(e)} style={{ background: T.bg, border: `1px solid ${T.bdr}`, borderRadius: 20, padding: 24, cursor: 'pointer', transition: '0.2s', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }} className="hover:scale-105">
+                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
+                          <div style={{ width: 48, height: 48, flexShrink: 0, borderRadius: 14, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#fff' }}>
                             {e.name?.substring(0,2).toUpperCase()}
                           </div>
-                          <div style={{ flex: 1 }}>
-                             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>{e.name}</div>
-                             <div style={{ fontSize: 12, color: T.sub }}>{e.zensar_id || e.id}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                             <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={e.name}>{e.name}</div>
+                             <div style={{ fontSize: 11, color: T.sub }}>{e.zensar_id || e.id}</div>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                             <div style={{ fontSize: 20, fontWeight: 900, color: e.completion >= 75 ? '#10B981' : '#3B82F6' }}>{e.completion}%</div>
-                             <div style={{ fontSize: 11, color: T.sub }}>Complete</div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                             <div style={{ fontSize: 18, fontWeight: 900, color: e.completion >= 75 ? '#10B981' : '#3B82F6', lineHeight: 1 }}>{e.completion}%</div>
+                             <div style={{ fontSize: 10, color: T.sub, marginTop: 4 }}>Complete</div>
                           </div>
                        </div>
                        
-                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                          <span style={{ padding: '4px 10px', borderRadius: 6, background: e.submitted ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)', color: e.submitted ? '#10B981' : '#3B82F6', fontSize: 10, fontWeight: 800 }}>{e.submitted ? 'VALIDATED' : 'SENSING'}</span>
-                          <span style={{ padding: '4px 10px', borderRadius: 6, background: T.card, color: T.sub, fontSize: 10, fontWeight: 600 }}>{e.designation || 'Employee'}</span>
+                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+                          <span style={{ padding: '3px 8px', borderRadius: 4, background: e.submitted ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)', color: e.submitted ? '#10B981' : '#3B82F6', fontSize: 9, fontWeight: 800 }}>{e.submitted ? 'VALIDATED' : 'SENSING'}</span>
+                          <span style={{ padding: '3px 8px', borderRadius: 4, background: T.card, color: T.sub, fontSize: 9, fontWeight: 600 }}>{e.designation?.substring(0, 20) || 'Employee'}</span>
                           {e.yearsExperience > 0 && (
-                            <span style={{ padding: '4px 10px', borderRadius: 6, background: T.card, color: T.sub, fontSize: 10, fontWeight: 600 }}>{e.yearsExperience} yrs exp</span>
+                            <span style={{ padding: '3px 8px', borderRadius: 4, background: T.card, color: T.sub, fontSize: 9, fontWeight: 600 }}>{e.yearsExperience} yrs exp</span>
                           )}
                        </div>
 
                        {/* Skills Preview */}
                        {e.skills && e.skills.filter((s: any) => s.selfRating > 0).length > 0 && (
-                         <div style={{ marginBottom: 12 }}>
-                           <div style={{ fontSize: 10, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>Top Skills</div>
+                         <div style={{ marginBottom: 16 }}>
+                           <div style={{ fontSize: 9, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: 700 }}>Top Skills</div>
                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                              {e.skills.filter((s: any) => s.selfRating > 0).slice(0, 4).map((s: any) => (
-                               <span key={s.skillId} style={{ padding: '2px 8px', borderRadius: 4, background: 'rgba(59,130,246,0.1)', color: '#3B82F6', fontSize: 10, fontWeight: 600 }}>
+                               <span key={s.skillId} style={{ padding: '2px 6px', borderRadius: 4, background: 'rgba(59,130,246,0.1)', color: '#3B82F6', fontSize: 9, fontWeight: 600 }}>
                                  {SKILLS.find(sk => sk.id === s.skillId)?.name}: {s.selfRating}
                                </span>
                              ))}
@@ -1175,10 +1171,10 @@ JSON:`;
                          </div>
                        )}
                        
-                       <div style={{ paddingTop: 12, borderTop: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ display: 'flex', gap: 12, fontSize: 11, color: T.muted }}>
-                            {e.projects?.length > 0 && <span>📁 {e.projects.length} projects</span>}
-                            {e.certifications?.length > 0 && <span>🏆 {e.certifications.length} certs</span>}
+                            {e.projects?.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>📁 {e.projects.length}</span>}
+                            {e.certifications?.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>🏆 {e.certifications.length}</span>}
                           </div>
                           <Eye size={16} color={T.muted} />
                        </div>
@@ -1210,26 +1206,27 @@ JSON:`;
 
       {/* Modal Popup for Intelligence Audit */}
       {previewUser && (
-        <div style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(0,0,0,0.9)' : 'rgba(0,0,0,0.6)', backdropFilter: 'blur(15px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 50 }}>
-          <div style={{ background: T.bg, borderRadius: 40, width: '100%', maxWidth: 1300, height: '90vh', overflow: 'hidden', border: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', boxShadow: '0 30px 60px rgba(0,0,0,0.5)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(0,0,0,0.92)' : 'rgba(0,0,0,0.65)', backdropFilter: 'blur(20px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2vh 2vw' }}>
+          <div style={{ background: T.bg, borderRadius: '24px', width: '100%', maxWidth: 1300, height: '96vh', overflow: 'hidden', border: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', boxShadow: '0 30px 80px rgba(0,0,0,0.6)' }}>
             
             {/* Modal Top Bar */}
-            <div style={{ padding: '24px 40px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: T.card }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: T.text }}>{previewUser.name}</div>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: T.sub, textTransform: 'uppercase', letterSpacing: 1 }}>{previewUser.zensar_id || previewUser.id}</span>
+            <div style={{ padding: '16px 4vw', borderBottom: `1px solid ${T.bdr}`, display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'center', background: T.card }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: T.text, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewUser.name}</div>
+                  <span style={{ fontSize: 10, fontWeight: 800, color: T.sub, textTransform: 'uppercase', opacity: 0.6 }}>{previewUser.zensar_id || previewUser.id}</span>
                </div>
                
-               <div style={{ display: 'flex', gap: 6, background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)', padding: 4, borderRadius: 12 }}>
+               <div style={{ display: 'flex', gap: 6, background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)', padding: 4, borderRadius: 12, overflowX: 'auto', flex: 1, minWidth: 200, WebkitOverflowScrolling: 'touch' }}>
                 {(['Dashboard', 'Skills', 'Certifications', 'Projects', 'Education', 'Resume Upload', 'Personal Details'] as const).map(tab => (
                    <button 
                      key={tab} 
                      onClick={() => setPopupActiveTab(tab)}
                      style={{
-                        padding: '10px 18px', borderRadius: 10, border: 'none', 
+                        padding: '8px 14px', borderRadius: 10, border: 'none', 
                         background: popupActiveTab === tab ? '#3B82F6' : 'transparent',
                         color: popupActiveTab === tab ? '#fff' : T.sub,
-                        fontSize: 12, fontWeight: 700, cursor: 'pointer', transition: '0.2s'
+                        fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: '0.2s',
+                        whiteSpace: 'nowrap'
                      }}
                    >
                      {tab}
@@ -1332,9 +1329,9 @@ JSON:`;
                     {popupActiveTab === 'Dashboard' && (
                       <div>
                         {/* ── Full Profile Summary Card ── */}
-                        <div style={{ padding: '28px 40px 0' }}>
-                          <div style={{ background: T.card, borderRadius: 20, border: `1px solid ${T.bdr}`, padding: 28, marginBottom: 24 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+                        <div style={{ padding: '20px 4vw 0' }}>
+                          <div style={{ background: T.card, borderRadius: 20, border: `1px solid ${T.bdr}`, padding: 'min(24px, 5vw)', marginBottom: 24 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 }}>
                               {/* Left: Identity */}
                               <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
                                 <div style={{ width: 64, height: 64, borderRadius: 18, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, fontWeight: 900, color: '#fff', flexShrink: 0 }}>
@@ -1354,9 +1351,9 @@ JSON:`;
                                   { l: 'Certs', v: previewUser.certifications?.length ?? 0, c: '#8B5CF6' },
                                   { l: 'Projects', v: previewUser.projects?.length ?? 0, c: '#F59E0B' },
                                 ].map(s => (
-                                  <div key={s.l} style={{ textAlign: 'center', background: dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: 12, padding: '10px 18px' }}>
-                                    <div style={{ fontSize: 20, fontWeight: 900, color: s.c }}>{s.v}</div>
-                                    <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, textTransform: 'uppercase', marginTop: 2 }}>{s.l}</div>
+                                  <div key={s.l} style={{ textAlign: 'center', background: dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: 12, padding: '10px 12px', flex: '1 1 100px', maxWidth: 140 }}>
+                                    <div style={{ fontSize: 18, fontWeight: 900, color: s.c }}>{s.v}</div>
+                                    <div style={{ fontSize: 9, fontWeight: 700, color: T.sub, textTransform: 'uppercase', marginTop: 2 }}>{s.l}</div>
                                   </div>
                                 ))}
                               </div>
@@ -1485,16 +1482,16 @@ JSON:`;
                     )}
                     
                     {popupActiveTab === 'Personal Details' && (
-                      <div style={{ padding: 40, maxWidth: 800, margin: '0 auto' }}>
-                         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:32 }}>
+                      <div style={{ padding: window.innerWidth < 600 ? 16 : 40, maxWidth: 800, margin: '0 auto' }}>
+                         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom: window.innerWidth < 600 ? 20 : 32 }}>
                             <Shield size={24} color="#3B82F6" />
-                            <h2 style={{ fontSize: 22, fontWeight: 900, margin: 0, color: T.text }}>Personnel Records</h2>
+                            <h2 style={{ fontSize: window.innerWidth < 600 ? 18 : 22, fontWeight: 900, margin: 0, color: T.text }}>Personnel Records</h2>
                          </div>
 
-                         <div style={{ display:'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                            <div style={{ gridColumn: 'span 2' }}>
+                         <div style={{ display:'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr', gap: 16 }}>
+                            <div style={{ gridColumn: window.innerWidth < 600 ? '1' : 'span 2' }}>
                                <label style={{ fontSize: 11, fontWeight: 800, color: T.sub, textTransform:'uppercase' }}>Full Name</label>
-                               <input value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})} style={{ width:'100%', background:T.input, border:`1px solid ${T.inputBdr}`, padding:14, borderRadius:10, color:T.text, marginTop:6, fontSize:14 }} />
+                               <input value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})} style={{ width:'100%', background:T.input, border:`1px solid ${T.inputBdr}`, padding:14, borderRadius:10, color:T.text, marginTop:6, fontSize:14, boxSizing:'border-box' as const }} />
                             </div>
                             
                             <div>
@@ -1542,15 +1539,15 @@ JSON:`;
                                <input value={editForm.primary_domain} onChange={e=>setEditForm({...editForm, primary_domain:e.target.value})} style={{ width:'100%', background:T.input, border:`1px solid ${T.inputBdr}`, padding:14, borderRadius:10, color:T.text, marginTop:6, fontSize:14 }} />
                             </div>
 
-                            <div style={{ gridColumn: 'span 2' }}>
+                            <div style={{ gridColumn: window.innerWidth < 600 ? '1' : 'span 2' }}>
                                <label style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', textTransform:'uppercase' }}>Password</label>
                                <div style={{ position:'relative', marginTop:6 }}>
                                   <Lock size={16} style={{ position:'absolute', left:14, top:16, color:'#EF4444' }} />
-                                  <input type="text" value={editForm.password} onChange={e=>setEditForm({...editForm, password:e.target.value})} style={{ width:'100%', background: dark ? 'rgba(239,68,68,0.05)' : '#FEF2F2', border:'1px solid rgba(239,68,68,0.2)', padding:'14px 14px 14px 42px', borderRadius:10, color:T.text, fontSize:14 }} />
+                                  <input type="text" value={editForm.password} onChange={e=>setEditForm({...editForm, password:e.target.value})} style={{ width:'100%', background: dark ? 'rgba(239,68,68,0.05)' : '#FEF2F2', border:'1px solid rgba(239,68,68,0.2)', padding:'14px 14px 14px 42px', borderRadius:10, color:T.text, fontSize:14, boxSizing:'border-box' as const }} />
                                </div>
                             </div>
 
-                            <div style={{ gridColumn: 'span 2', marginTop: 20 }}>
+                            <div style={{ gridColumn: window.innerWidth < 600 ? '1' : 'span 2', marginTop: 20 }}>
                                <button onClick={handleUpdateDetails} style={{ width:'100%', padding:'16px', borderRadius:12, background:'#3B82F6', border:'none', color:'#fff', fontWeight:800, fontSize:15, cursor:'pointer' }}>Update Personnel Records</button>
                             </div>
                          </div>
