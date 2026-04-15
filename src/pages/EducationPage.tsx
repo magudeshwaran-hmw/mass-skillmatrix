@@ -143,7 +143,7 @@ export default function EducationPage({
                 flexWrap: 'wrap'
               }}>
                 <GraduationCap size={window.innerWidth < 480 ? 32 : 40} color="#3B82F6" /> 
-                <span>Academic <span style={{ color: '#3B82F6' }}>Heritage</span></span>
+                <span>Academic <span style={{ color: '#3B82F6' }}>Background</span></span>
               </h1>
               <p style={{ margin: '6px 0 0', color: T.sub, fontSize: window.innerWidth < 480 ? 12 : 14, fontWeight: 500 }}>Manage your professional qualifications and academic journey.</p>
             </div>

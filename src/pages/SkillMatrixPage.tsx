@@ -255,7 +255,7 @@ export default function SkillMatrixPage({
             )}
             <div>
               <h1 style={{ fontSize: '30px', fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif", marginBottom: '4px' }}>Skill Matrix</h1>
-              <p style={{ color: T.sub, fontSize: '14px' }}>Rate your proficiency across 32 skills in 7 categories</p>
+              <p style={{ color: T.sub, fontSize: '14px' }}>Rate your proficiency across multiple skills</p>
             </div>
           </div>
           {!alreadySubmitted && (
@@ -389,7 +389,7 @@ export default function SkillMatrixPage({
         
       </div>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');
+        
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>

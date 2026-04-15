@@ -46,7 +46,7 @@ export default function AdminDashboard() {
   const { dark } = useDark();
   const T = mkTheme(dark);
 
-  const [activeTab, setActiveTab] = useState<'Overview' | 'Employees' | 'People' | 'Skill Heatmap'>('Overview');
+  const [activeTab, setActiveTab] = useState<'Overview' | 'Employees' | 'Manage People' | 'Skill Heatmap'>('Overview');
   const [sortOrder, setSortOrder] = useState<'A-Z' | 'Z-A' | 'Newest' | 'Oldest'>('A-Z');
   const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
   const [newEmployee, setNewEmployee] = useState({
@@ -573,7 +573,7 @@ JSON:`;
             {[
               { id: 'Overview', icon: BarChart3 },
               { id: 'Employees', icon: Users },
-              { id: 'People', icon: Users },
+              { id: 'Manage People', icon: Users },
               { id: 'Skill Heatmap', icon: Grid }
             ].map((t: any) => (
               <button
@@ -768,7 +768,7 @@ JSON:`;
             </div>
           )}
 
-          {activeTab === 'People' && (
+          {activeTab === 'Manage People' && (
             <div style={{ animation: 'fadeIn 0.4s ease' }}>
               {/* Search & Filter Bar */}
               <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -1485,7 +1485,7 @@ JSON:`;
                       <div style={{ padding: window.innerWidth < 600 ? 16 : 40, maxWidth: 800, margin: '0 auto' }}>
                          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom: window.innerWidth < 600 ? 20 : 32 }}>
                             <Shield size={24} color="#3B82F6" />
-                            <h2 style={{ fontSize: window.innerWidth < 600 ? 18 : 22, fontWeight: 900, margin: 0, color: T.text }}>Personnel Records</h2>
+                            <h2 style={{ fontSize: window.innerWidth < 600 ? 18 : 22, fontWeight: 900, margin: 0, color: T.text }}>Personal Details</h2>
                          </div>
 
                          <div style={{ display:'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr', gap: 16 }}>
@@ -1548,7 +1548,7 @@ JSON:`;
                             </div>
 
                             <div style={{ gridColumn: window.innerWidth < 600 ? '1' : 'span 2', marginTop: 20 }}>
-                               <button onClick={handleUpdateDetails} style={{ width:'100%', padding:'16px', borderRadius:12, background:'#3B82F6', border:'none', color:'#fff', fontWeight:800, fontSize:15, cursor:'pointer' }}>Update Personnel Records</button>
+                               <button onClick={handleUpdateDetails} style={{ width:'100%', padding:'16px', borderRadius:12, background:'#3B82F6', border:'none', color:'#fff', fontWeight:800, fontSize:15, cursor:'pointer' }}>Update Personal Details</button>
                             </div>
                          </div>
                       </div>

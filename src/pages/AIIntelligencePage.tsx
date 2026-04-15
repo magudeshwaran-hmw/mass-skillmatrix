@@ -401,8 +401,8 @@ Format: Return ONLY a JSON object with a "gaps" array containing up to 5 items:
             <Target size={24} color="#EF4444" />
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 }}>Professional AI Diagnostic</div>
-            <div style={{ fontWeight: 900, fontSize: 22, color: T.text }}>Tenure Modernity Analysis</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 }}>AI Diagnostic</div>
+            <div style={{ fontWeight: 900, fontSize: 22, color: T.text }}>Professional Gaps Analysis</div>
           </div>
         </div>
 

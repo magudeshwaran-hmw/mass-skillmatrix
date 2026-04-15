@@ -137,7 +137,7 @@ export default function EmployeeDashboard({
               <div style={{ flex: 1, minWidth: 140 }}>
                 <h1 style={{ margin: '0 0 2px', fontSize: 22, fontWeight: 800, letterSpacing: -0.5 }}>{user.Name}</h1>
                 <div style={{ color: T.sub, fontSize: 13, fontWeight: 500 }}>
-                  {user.Designation || 'Quality Engineer'} · <span style={{ opacity: 0.8 }}>ZENSAR-{user.ZensarID || user.EmployeeID || user.ID}</span>
+                  {user.Designation || 'Quality Engineer'}  <span style={{ opacity: 0.8 }}>{user.ZensarID || user.EmployeeID || user.ID}</span>
                 </div>
               </div>
               <div style={{ textAlign: 'right', minWidth: 120 }}>
@@ -172,7 +172,7 @@ export default function EmployeeDashboard({
                { label: 'Education', path: '/employee/education', icon: <GraduationCap size={20}/>, color: '#8B5CF6', desc: 'Academic heritage' },
                { label: 'Resume Upload', path: '/employee/resume-upload', icon: <Upload size={20}/>, color: '#3B82F6', desc: 'Import from resume' },
                { label: 'AI Coach', path: '/employee/ai', icon: <Bot size={20}/>, color: '#c084fc', desc: 'Career intelligence', hideInPopup: true },
-               { label: 'RESUME CONVERTER', path: '/employee/resume-builder', icon: <PenTool size={20}/>, color: '#ec4899', desc: 'AI Sync Data', hideInPopup: true },
+               { label: 'Resume Converter', path: '/employee/resume-builder', icon: <PenTool size={20}/>, color: '#ec4899', desc: 'AI Sync Data', hideInPopup: true },
              ].filter(item => !isPopup || !item.hideInPopup).map(item => (
                 <div key={item.label} style={{ ...actionCard, padding: '20px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }} onClick={() => isPopup && onTabChange ? onTabChange(item.path) : navigate(item.path)} className="hover:scale-105">
                    <div style={{ width: 44, height: 44, borderRadius: 12, background: `${item.color}15`, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>

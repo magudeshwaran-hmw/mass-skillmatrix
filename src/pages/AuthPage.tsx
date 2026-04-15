@@ -388,7 +388,7 @@ export default function AuthPage() {
       </div>
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');
+
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
         input::placeholder { color: rgba(255,255,255,0.30) !important; }
         select option { background: #1e293b; color: #fff; }
