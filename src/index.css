@@ -1,4 +1,5 @@
-
+/* ── Uniform Font — Space Grotesk across all pages ─────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -113,7 +114,7 @@
     overflow-x: hidden;
   }
   h1, h2, h3, h4 {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
   }
   
   select option {
@@ -239,5 +240,323 @@
   * {
     word-wrap: break-word !important;
     box-sizing: border-box;
+  }
+}
+
+/* ── Zen Page Layout Utilities ─────────────────────────────────────── */
+
+/* Standard page wrapper — use on every page's root div */
+.zen-page {
+  min-height: 100vh;
+  padding: 24px 24px 80px;
+}
+
+/* Standard content container */
+.zen-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Standard page header row */
+.zen-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+/* ── Responsive Grid Helpers ────────────────────────────────────────── */
+.zen-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.zen-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.zen-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.zen-grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+
+/* ── Tablet (≤ 1024px) ──────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .zen-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .zen-grid-3 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Mobile (≤ 640px) ───────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .zen-page { padding: 16px 16px 60px; }
+  .zen-grid-4, .zen-grid-3, .zen-grid-2 { grid-template-columns: 1fr; }
+  .zen-grid-auto { grid-template-columns: 1fr; }
+  .zen-page-header { flex-direction: column; align-items: flex-start; }
+
+  /* All inline grids collapse to 1 col on mobile */
+  div[style*="grid-template-columns: repeat(4"] { grid-template-columns: 1fr !important; }
+  div[style*="grid-template-columns: repeat(3"] { grid-template-columns: 1fr !important; }
+  div[style*="grid-template-columns: 1fr 1fr 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  div[style*="grid-template-columns: 1fr 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+
+  /* Flex rows become columns */
+  div[style*="display: flex"][style*="gap"] > * { min-width: 0; }
+
+  /* Modals full-screen on mobile */
+  div[style*="position: fixed"][style*="padding: 20"] { padding: 8px !important; }
+  div[style*="max-width: 540"], div[style*="max-width: 700"], div[style*="max-width: 800"] {
+    max-width: 100% !important;
+    border-radius: 16px !important;
+  }
+
+  /* Header nav overflow scroll */
+  nav[style*="justify-content: center"] {
+    overflow-x: auto;
+    justify-content: flex-start !important;
+    padding-bottom: 4px;
+  }
+
+  /* Buttons don't overflow */
+  button { max-width: 100%; }
+
+  /* Tables scroll horizontally */
+  table { display: block; overflow-x: auto; }
+
+  /* Font size floor */
+  h1 { font-size: clamp(20px, 5vw, 32px) !important; }
+  h2 { font-size: clamp(18px, 4vw, 28px) !important; }
+}
+
+/* ── Very small (≤ 380px) ───────────────────────────────────────────── */
+@media (max-width: 380px) {
+  .zen-page { padding: 12px 12px 60px; }
+  h1 { font-size: 18px !important; }
+}
+
+/* ── Resume Builder Sidebar ─────────────────────────────────────────── */
+@media (max-width: 1000px) {
+  .zen-resume-sidebar {
+    flex: 1 1 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    position: relative !important;
+    top: 0 !important;
+    margin-bottom: 20px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ZEN TYPOGRAPHY SCALE — Uniform across ALL pages
+   Do NOT change UI, only enforce consistent sizing
+   ═══════════════════════════════════════════════════════════════════
+
+   Scale:
+     Page H1 title   : 28px / weight 800
+     Section H2      : 20px / weight 800
+     Sub-section H3  : 16px / weight 700
+     Body text       : 14px / weight 400
+     Form label      : 12px / weight 700 / uppercase
+     Description     : 13px / weight 400
+     Badge / chip    : 11px / weight 700
+     Tiny meta       : 11px / weight 600
+*/
+
+/* ── Page-level H1 titles (Back + Title rows) ───────────────────── */
+.zen-h1 { font-size: clamp(22px, 3vw, 28px) !important; font-weight: 800 !important; margin: 0 !important; }
+
+/* ── Section headers ────────────────────────────────────────────── */
+.zen-h2 { font-size: 20px !important; font-weight: 800 !important; margin: 0 !important; }
+.zen-h3 { font-size: 16px !important; font-weight: 700 !important; margin: 0 !important; }
+
+/* ── Body / description ─────────────────────────────────────────── */
+.zen-body  { font-size: 14px !important; font-weight: 400 !important; line-height: 1.6 !important; }
+.zen-desc  { font-size: 13px !important; font-weight: 400 !important; line-height: 1.5 !important; }
+
+/* ── Form labels ────────────────────────────────────────────────── */
+.zen-label {
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  margin-bottom: 6px !important;
+  display: block !important;
+}
+
+/* ── Badges / chips ─────────────────────────────────────────────── */
+.zen-badge { font-size: 11px !important; font-weight: 700 !important; }
+
+/* ── Tiny meta / sub-labels ─────────────────────────────────────── */
+.zen-meta  { font-size: 11px !important; font-weight: 600 !important; }
+
+/* ── Stat card numbers ──────────────────────────────────────────── */
+.zen-stat-num { font-size: 24px !important; font-weight: 800 !important; line-height: 1 !important; }
+.zen-stat-lbl { font-size: 11px !important; font-weight: 700 !important; text-transform: uppercase !important; letter-spacing: 0.08em !important; }
+
+/* ── Card title / item title ────────────────────────────────────── */
+.zen-card-title { font-size: 15px !important; font-weight: 700 !important; }
+.zen-card-sub   { font-size: 12px !important; font-weight: 500 !important; }
+
+/* ── Input fields ───────────────────────────────────────────────── */
+.zen-input { font-size: 14px !important; padding: 10px 14px !important; border-radius: 10px !important; }
+
+/* ── Button text ────────────────────────────────────────────────── */
+.zen-btn-primary { font-size: 13px !important; font-weight: 700 !important; padding: 10px 20px !important; border-radius: 10px !important; }
+.zen-btn-ghost   { font-size: 13px !important; font-weight: 600 !important; padding: 8px 14px !important; border-radius: 9px !important; }
+
+/* ── Back button ────────────────────────────────────────────────── */
+.zen-back-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 8px 14px !important;
+  border-radius: 9px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+}
+
+/* ── Nav link text ──────────────────────────────────────────────── */
+.zen-nav-link { font-size: 13px !important; font-weight: 600 !important; }
+.zen-nav-link.active { font-weight: 700 !important; }
+
+:root {
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-body:    'Inter', 'Space Grotesk', sans-serif;
+}
+
+/* Apply Space Grotesk to all headings site-wide — clean weight */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* Apply Inter to body text */
+body, p, span, div, button, input, select, textarea, label {
+  font-family: var(--font-body);
+}
+
+/* Uniform card sizing */
+.zen-card {
+  border-radius: 16px;
+  padding: 24px;
+}
+
+/* Uniform button sizing */
+button {
+  font-family: var(--font-body);
+}
+
+/* ── Mobile-first responsive fixes ─────────────────────────────────── */
+
+/* AppHeader — compact on mobile */
+@media (max-width: 480px) {
+  /* Reduce header padding */
+  header > div { padding: 0 12px !important; }
+
+  /* Page containers */
+  .zen-page { padding: 12px 12px 60px !important; }
+
+  /* Profile card detail grid — 2 cols on mobile */
+  .profile-detail-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px 12px !important;
+  }
+
+  /* Action cards — 2 cols on mobile */
+  .action-cards-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  /* Bottom section — stack on mobile */
+  .bottom-section-flex {
+    flex-direction: column !important;
+  }
+
+  /* Radar chart — smaller on mobile */
+  .radar-chart-wrap { width: 140px !important; height: 140px !important; }
+
+  /* Stat cards — 2 cols */
+  div[style*="minmax(220px"] { grid-template-columns: repeat(2, 1fr) !important; }
+  div[style*="minmax(180px"] { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* BFSIDashboard cards */
+  div[style*="minmax(180px, 1fr)"] { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Modal full width */
+  div[style*="maxWidth: 1100"][style*="padding: '48px'"] {
+    padding: 16px !important;
+  }
+
+  /* Tables scroll */
+  table { font-size: 11px !important; }
+
+  /* Buttons — full width on mobile */
+  .zen-btn-full-mobile { width: 100% !important; }
+
+  /* Hide long text overflow */
+  .text-truncate-mobile {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 160px !important;
+  }
+}
+
+/* Tablet */
+@media (max-width: 768px) {
+  /* 2-col grids become 1-col */
+  div[style*="gridTemplateColumns: '1fr 1fr'"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* BFSIDashboard supply/demand panels */
+  div[style*="padding: '48px'"] {
+    padding: 20px !important;
+  }
+
+  /* Admin dashboard popup */
+  div[style*="maxWidth: '1100px'"][style*="padding: '40px 10vw'"] {
+    padding: 16px !important;
+  }
+
+  /* Landing page hero */
+  .sk-hero-wrap {
+    padding-top: 100px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  /* Flow modules */
+  .flow-module { max-width: 100% !important; }
+
+  /* ZenScan tree — scroll on small screens */
+  .flow-module > div { overflow-x: auto !important; }
+}
+
+/* Fix inline padding on all main page wrappers */
+@media (max-width: 640px) {
+  /* All pages with 7vw padding */
+  div[style*="padding: '40px 7vw'"],
+  div[style*="padding: '24px 7vw'"],
+  div[style*="padding: '32px 7vw'"],
+  div[style*="padding: '36px 7vw'"] {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* Landing page sections */
+  div[style*="padding:'100px 28px'"],
+  div[style*="padding: '100px 28px'"],
+  div[style*="padding: '90px 28px'"] {
+    padding: 48px 16px !important;
+  }
+
+  /* Auth card */
+  div[style*="padding: '40px 36px'"] {
+    padding: 24px 18px !important;
+  }
+
+  /* Skill matrix categories — scroll */
+  div[style*="minWidth: '600px'"] {
+    min-width: 100% !important;
+    overflow-x: auto !important;
   }
 }

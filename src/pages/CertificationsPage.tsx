@@ -118,7 +118,7 @@ export default function CertificationsPage({
     setShowModal(true);
   };
 
-  const pg = { minHeight: '100vh', background: T.bg, color: T.text, padding: '32px 20px', fontFamily: "'Inter', sans-serif" };
+  const pg = { minHeight: '100vh', background: T.bg, color: T.text, padding: '32px 7vw', fontFamily: "'Inter', sans-serif" };
   const cardStyle = { background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 16, padding: 24, position: 'relative' as const };
   const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 8, background: dark? 'rgba(255,255,255,0.06)' : '#fff', border: `1px solid ${T.bdr}`, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const };
   const labelStyle = { fontSize: 12, color: T.sub, marginBottom: 6, display: 'block', fontWeight: 600 };
@@ -129,7 +129,7 @@ export default function CertificationsPage({
     <>
       
       <div style={pg}>
-        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -139,8 +139,8 @@ export default function CertificationsPage({
                 </button>
               )}
               <div>
-                <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 6px' }}>My Certifications</h1>
-                <div style={{ color: T.sub, fontSize: 14 }}>Track your professional qualifications</div>
+                <h1 style={{ fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, margin: '0 0 4px' }}>My Certifications</h1>
+                <div style={{ color: T.sub, fontSize: 13 }}>Track your professional qualifications</div>
               </div>
             </div>
             <button onClick={openNew} style={{ background: 'linear-gradient(135deg, #10B981, #3B82F6)', border: 'none', padding: '10px 20px', borderRadius: 10, color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', boxShadow: '0 4px 15px rgba(16,185,129,0.3)' }}>
@@ -152,19 +152,19 @@ export default function CertificationsPage({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 16, marginBottom: 32 }}>
             <div style={{ ...cardStyle, padding: 20 }}>
               <div style={{ fontSize: 12, textTransform: 'uppercase', color: T.sub, letterSpacing: 1, marginBottom: 8 }}>Total</div>
-              <div style={{ fontSize: 32, fontWeight: 800 }}>{certs.length}</div>
+              <div style={{ fontSize: 24, fontWeight: 800 }}>{certs.length}</div>
             </div>
             <div style={{ ...cardStyle, padding: 20, borderLeft: '3px solid #10B981' }}>
               <div style={{ fontSize: 12, textTransform: 'uppercase', color: T.sub, letterSpacing: 1, marginBottom: 8 }}>Active</div>
-              <div style={{ fontSize: 32, fontWeight: 800, color: '#10B981' }}>{activeCount}</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#10B981' }}>{activeCount}</div>
             </div>
             <div style={{ ...cardStyle, padding: 20, borderLeft: '3px solid #F59E0B' }}>
               <div style={{ fontSize: 12, textTransform: 'uppercase', color: T.sub, letterSpacing: 1, marginBottom: 8 }}>Expiring Soon</div>
-              <div style={{ fontSize: 32, fontWeight: 800, color: '#F59E0B' }}>{expiringCount}</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#F59E0B' }}>{expiringCount}</div>
             </div>
             <div style={{ ...cardStyle, padding: 20, borderLeft: '3px solid #EF4444' }}>
               <div style={{ fontSize: 12, textTransform: 'uppercase', color: T.sub, letterSpacing: 1, marginBottom: 8 }}>Expired</div>
-              <div style={{ fontSize: 32, fontWeight: 800, color: '#EF4444' }}>{expiredCount}</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#EF4444' }}>{expiredCount}</div>
             </div>
           </div>
 
@@ -223,8 +223,8 @@ export default function CertificationsPage({
       </div>
 
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div onClick={() => setShowModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: dark ? '#0f0f1a' : '#f5f5f5' }}>
+          <div onClick={() => setShowModal(false)} style={{ position: 'absolute', inset: 0 }} />
           <form onSubmit={handleSave} style={{ position: 'relative', background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 20, width: '100%', maxWidth: 540, padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.5)', fontFamily: "'Inter', sans-serif" }}>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: T.text, margin: '0 0 20px' }}>{editingCert ? 'Edit Certification' : 'Add Certification'}</h2>
             

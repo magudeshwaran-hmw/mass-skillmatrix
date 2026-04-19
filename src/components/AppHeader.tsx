@@ -1,6 +1,6 @@
 import { useAuth } from '@/lib/authContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Menu, X, Sun, Moon, LayoutDashboard, User } from 'lucide-react';
+import { LogOut, Menu, X, Sun, Moon, LayoutDashboard, User, Landmark } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { checkLLMStatus } from '@/lib/llm';
 import { ZensarLogo } from '@/components/ZensarLogo';
@@ -28,24 +28,26 @@ export default function AppHeader() {
   const active       = (p: string) => location.pathname === p;
 
   const empNavItems = [
-    { label: 'Dashboard',       path: '/employee/dashboard' },
-    { label: 'My Skills',       path: '/employee/skills' },
-    { label: 'Certifications',  path: '/employee/certifications' },
-    { label: 'Projects',        path: '/employee/projects' },
-    { label: 'Education',       path: '/employee/education' },
-    { label: 'AI Coach',        path: '/employee/ai' },
+    { label: 'ZenRadar',      path: '/employee/dashboard' },
+    { label: 'ZenMatrix',     path: '/employee/skills' },
+    { label: 'ZenAICoach',    path: '/employee/ai' },
+    { label: 'My Projects',   path: '/employee/projects' },
+    { label: 'My Education',  path: '/employee/education' },
+    { label: 'My Certification', path: '/employee/certifications' },
+    { label: 'My Awards',     path: '/employee/achievements' },
   ];
 
   const adminNavItems = [
-    { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+    { label: 'ZenRadar', path: '/admin', icon: LayoutDashboard },
+    { label: 'ZenTalenHub', path: '/admin/bfsi', icon: Landmark },
   ];
 
   const navItems = role === 'admin' ? adminNavItems : empNavItems;
 
   const headerStyle = {
     position: 'sticky' as const, top: 0, zIndex: 100,
-    height: 70,
-    background: dark ? 'rgba(10,10,15,0.85)' : '#ffffff', // Solid white in light mode for max visibility
+    height: 60,
+    background: dark ? 'rgba(10,10,15,0.92)' : '#ffffff',
     borderBottom: `1px solid ${T.bdr}`,
     boxShadow: dark ? 'none' : '0 1px 10px rgba(0,0,0,0.05)',
     backdropFilter: 'blur(20px)',
@@ -53,29 +55,30 @@ export default function AppHeader() {
   };
 
   const innerStyle = {
-    maxWidth: 1300, margin: '0 auto', height: '100%',
-    padding: '0 4vw', display: 'flex',
+    maxWidth: '100%', margin: '0', height: '100%',
+    padding: '0 40px', display: 'flex',
     alignItems: 'center', justifyContent: 'space-between', gap: 8,
   };
 
   const navBtn = (isActive: boolean): React.CSSProperties => ({
-    padding: '8px 16px', borderRadius: 12, border: 'none', cursor: 'pointer',
+    padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
     background: isActive ? (dark ? 'rgba(59,130,246,0.15)' : '#EFF6FF') : 'transparent',
     color: isActive ? '#3B82F6' : T.sub,
-    fontSize: 14, fontWeight: isActive ? 700 : 500, transition: 'all 0.2s',
-    display: 'flex', alignItems: 'center', gap: 8
+    fontSize: 12, fontWeight: isActive ? 700 : 500, transition: 'all 0.2s',
+    display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
   });
 
   return (
     <header style={headerStyle}>
       <div style={innerStyle}>
-        {/* Left — Logo Aligned Left */}
-        <div onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', flexShrink: 0 }}>
+        {/* Left — Logo pinned to far left */}
+        <div onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', flexShrink: 0, marginRight: 8 }}>
           <ZensarLogo size="sm" />
         </div>
 
-        {/* Center — Clean Nav */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, justifyContent: 'center' }} className="sk-hide-mobile">
+        {/* Nav — scrollable row, left-aligned after logo */}
+        <nav style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, overflowX: 'auto', scrollbarWidth: 'none' }} className="sk-hide-mobile">
           {isLoggedIn ? (
             navItems.map(item => (
               <button key={item.path}
@@ -95,7 +98,7 @@ export default function AppHeader() {
         </nav>
 
         {/* Right — Active Session Details */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           
           {/* Theme */}
           <button onClick={toggleDark} style={{
@@ -115,7 +118,7 @@ export default function AppHeader() {
                     boxShadow: llmStatus?.online ? '0 0 10px #10B981' : '0 0 10px #EF4444',
                     transition: '0.3s'
                   }} />
-                  <div style={{ fontSize: 13, fontWeight: 800, color: T.text, letterSpacing: -0.3, maxWidth: 90, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayName.split(' ')[0]}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: T.text, letterSpacing: -0.3, whiteSpace: 'nowrap' }}>{displayName.split(' ')[0]}</div>
                </div>
                <button 
                  onClick={() => { logout(); navigate('/'); }}
@@ -150,16 +153,16 @@ export default function AppHeader() {
       </div>
 
       {mobileOpen && isLoggedIn && (
-        <div style={{ background: T.card, borderTop: `1px solid ${T.bdr}`, padding: '16px', position: 'absolute', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.1)' }}>
+        <div style={{ background: T.card, borderTop: `1px solid ${T.bdr}`, padding: '12px 16px', position: 'fixed', top: 60, left: 0, right: 0, zIndex: 99, boxShadow: '0 20px 40px rgba(0,0,0,0.15)', maxHeight: 'calc(100vh - 60px)', overflowY: 'auto' }}>
           {navItems.map(item => (
             <button key={item.path}
               onClick={() => { navigate(item.path); setMobileOpen(false); }}
               style={{
-                display: 'block', width: '100%', textAlign: 'left', padding: '14px',
-                borderRadius: 12, marginBottom: 8,
+                display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px',
+                borderRadius: 10, marginBottom: 6,
                 background: active(item.path) ? '#3B82F6' : 'transparent',
                 color: active(item.path) ? '#fff' : T.sub,
-                border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 700
+                border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700
               }}>
               {item.label}
             </button>
@@ -170,6 +173,8 @@ export default function AppHeader() {
       <style>{`
         @media(max-width:900px){.sk-hide-mobile{display:none!important}}
         @media(min-width:901px){.sk-show-mobile{display:none!important}}
+        nav::-webkit-scrollbar { display: none; }
+        nav { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
     </header>
   );

@@ -25,11 +25,11 @@ function InputRow({
   const [focused, setFocused] = useState(false);
   return (
     <div>
-      <label style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>
+      <label style={{ fontSize: '11px', fontWeight: 700, color: dark ? 'rgba(255,255,255,0.55)' : 'rgba(15,23,42,0.55)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>
         {label}
       </label>
       <div style={{ position: 'relative' }}>
-        <Icon size={15} color={focused ? '#60A5FA' : 'rgba(255,255,255,0.38)'} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
+        <Icon size={15} color={focused ? '#60A5FA' : (dark ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.38)')} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
         <input
           type={type}
           value={value}
@@ -42,9 +42,9 @@ function InputRow({
             width: '100%', boxSizing: 'border-box',
             padding: suffix ? '11px 44px 11px 40px' : '11px 14px 11px 40px',
             borderRadius: '10px', fontSize: '14px',
-            background: focused ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.08)',
+            background: focused ? (dark ? 'rgba(255,255,255,0.14)' : 'rgba(59,130,246,0.08)') : (dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)'),
             border: `1.5px solid ${focused ? 'rgba(96,165,250,0.70)' : 'rgba(255,255,255,0.18)'}`,
-            color: '#fff', outline: 'none',
+            color: dark ? '#fff' : '#0f172a', outline: 'none',
             transition: 'border-color 0.2s, background 0.2s',
           }}
         />
@@ -58,22 +58,22 @@ function InputRow({
   );
 }
 
-function SelectRow({ label, value, onChange, options, icon: Icon }: {
+function SelectRow({ label, value, onChange, options, icon: Icon, dark = false }: {
   label: string; value: string; onChange: (v: string) => void;
-  options: string[]; icon: React.ElementType;
+  options: string[]; icon: React.ElementType; dark?: boolean;
 }) {
   return (
     <div>
-      <label style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>
+      <label style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(100,116,139,0.9)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>
         {label}
       </label>
       <div style={{ position: 'relative' }}>
-        <Icon size={15} color="rgba(255,255,255,0.38)" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+        <Icon size={15} color="rgba(100,116,139,0.7)" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
         <select value={value} onChange={e => onChange(e.target.value)} style={{
           width: '100%', boxSizing: 'border-box' as const,
           padding: '11px 14px 11px 40px', borderRadius: '10px', fontSize: '14px',
-          background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.18)',
-          color: '#fff', outline: 'none', appearance: 'none' as const,
+          background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', border: dark ? '1.5px solid rgba(255,255,255,0.18)' : '1.5px solid rgba(59,130,246,0.25)',
+          color: dark ? '#fff' : '#0f172a', outline: 'none', appearance: 'none' as const,
         }}>
           {options.map(o => <option key={o} value={o} style={{ background: '#1e293b' }}>{o}</option>)}
         </select>
@@ -243,8 +243,8 @@ export default function AuthPage() {
     }}>
       {/* Background image */}
       <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${BG})`, backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0 }} />
-      {/* Dark overlay */}
-      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(140deg,rgba(4,9,28,0.88),rgba(10,20,60,0.82))', zIndex: 1 }} />
+      {/* Overlay — darker in dark mode, lighter in light mode */}
+      <div style={{ position: 'absolute', inset: 0, background: dark ? 'linear-gradient(140deg,rgba(4,9,28,0.88),rgba(10,20,60,0.82))' : 'linear-gradient(140deg,rgba(240,245,255,0.82),rgba(220,235,255,0.78))', zIndex: 1 }} />
       {/* Glow accents */}
       <div style={{ position: 'absolute', top: '10%', left: '5%', width: '38%', height: '55%', background: 'radial-gradient(circle,rgba(59,130,246,0.22) 0%,transparent 65%)', zIndex: 1, pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', bottom: '5%', right: '5%', width: '34%', height: '45%', background: 'radial-gradient(circle,rgba(139,92,246,0.20) 0%,transparent 65%)', zIndex: 1, pointerEvents: 'none' }} />
@@ -255,39 +255,21 @@ export default function AuthPage() {
         margin: '0 auto', padding: '24px 16px', boxSizing: 'border-box'
       }}>
         <div style={{
-          background: 'rgba(10,15,40,0.70)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)',
-          border: '1px solid rgba(255,255,255,0.14)', borderRadius: '24px', padding: '40px 36px',
-          boxShadow: '0 30px 80px rgba(0,0,0,0.6)', boxSizing: 'border-box'
+          background: dark ? 'rgba(10,15,40,0.75)' : 'rgba(255,255,255,0.88)',
+          backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)',
+          border: dark ? '1px solid rgba(255,255,255,0.14)' : '1px solid rgba(59,130,246,0.2)',
+          borderRadius: '24px', padding: '40px 36px',
+          boxShadow: dark ? '0 30px 80px rgba(0,0,0,0.6)' : '0 30px 80px rgba(59,130,246,0.15)',
+          boxSizing: 'border-box'
         }}>
-          {/* Logo + title */}
-          <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-              <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>⚡</div>
-              <span style={{ fontSize: '18px', fontWeight: 800, color: '#fff', fontFamily: "'Space Grotesk',sans-serif", letterSpacing: '0.02em' }}>Skill Navigator</span>
-            </div>
-            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)' }}>Zensar Quality Intelligence</div>
-          </div>
-
-          {/* Tab switcher */}
-          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: '12px', padding: '4px', marginBottom: '28px' }}>
-            {(['login', 'signup'] as Mode[]).map(m => (
-              <button key={m} onClick={() => setMode(m)} style={{
-                flex: 1, padding: '9px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, transition: 'all 0.25s',
-                background: mode === m ? 'linear-gradient(135deg,#3B82F6,#8B5CF6)' : 'transparent',
-                color: mode === m ? '#fff' : 'rgba(255,255,255,0.5)',
-                boxShadow: mode === m ? '0 2px 14px rgba(59,130,246,0.4)' : 'none',
-              }}>
-                {m === 'login' ? '🔑 Login' : '📝 Sign Up'}
-              </button>
-            ))}
-          </div>
+          {/* Tab switcher removed — use inline links below instead */}
 
           {/* ── LOGIN FORM ── */}
           {mode === 'login' && (
             <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#fff', fontFamily: "'Space Grotesk',sans-serif" }}>Welcome Back</div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)', marginTop: '4px' }}>Login with Zensar ID, email, or phone</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: dark ? '#fff' : '#0f172a', fontFamily: "'Space Grotesk',sans-serif" }}>Welcome Back</div>
+                <div style={{ fontSize: '13px', color: dark ? 'rgba(255,255,255,0.50)' : 'rgba(15,23,42,0.50)', marginTop: '4px' }}>Login with Zensar ID, email, or phone</div>
               </div>
 
               <InputRow label="Zensar ID / Email / Phone" placeholder="123456 or name@zensar.com or mobile" value={lZensarId}
@@ -308,7 +290,7 @@ export default function AuthPage() {
                 {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <><ArrowRight size={16} /> Login</>}
               </button>
 
-              <div style={{ textAlign: 'center', fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+              <div style={{ textAlign: 'center', fontSize: '13px', color: dark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.45)', marginTop: '4px' }}>
                 New here?{' '}
                 <span onClick={() => setMode('signup')} style={{ color: '#60A5FA', cursor: 'pointer', fontWeight: 600 }}>
                   Create an account →
@@ -321,8 +303,8 @@ export default function AuthPage() {
           {mode === 'signup' && (
             <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: '#fff', fontFamily: "'Space Grotesk',sans-serif" }}>Create Account</div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)', marginTop: '4px' }}>Register with your Zensar details</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: dark ? '#fff' : '#0f172a', fontFamily: "'Space Grotesk',sans-serif" }}>Create Account</div>
+                <div style={{ fontSize: '13px', color: dark ? 'rgba(255,255,255,0.50)' : 'rgba(15,23,42,0.50)', marginTop: '4px' }}>Register with your Zensar details</div>
               </div>
 
               {/* Row 1: Zensar ID + Name */}
@@ -344,8 +326,8 @@ export default function AuthPage() {
 
               {/* Row 3: Location + Department */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '14px' }}>
-                <SelectRow label="Location" value={sLocation} onChange={setSLocation} options={LOCS} icon={MapPin} />
-                <SelectRow label="Department" value={sDept} onChange={setSDept} options={DEPTS} icon={Briefcase} />
+                <SelectRow label="Location" value={sLocation} onChange={setSLocation} options={LOCS} icon={MapPin} dark={dark} />
+                <SelectRow label="Department" value={sDept} onChange={setSDept} options={DEPTS} icon={Briefcase} dark={dark} />
               </div>
 
               {/* Row 4: Years IT + Years Zensar */}
@@ -376,7 +358,7 @@ export default function AuthPage() {
                 {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <>Create Account & Continue <ArrowRight size={16} /></>}
               </button>
 
-              <div style={{ textAlign: 'center', fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginTop: '14px' }}>
+              <div style={{ textAlign: 'center', fontSize: '13px', color: dark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.45)', marginTop: '14px' }}>
                 Already registered?{' '}
                 <span onClick={() => setMode('login')} style={{ color: '#60A5FA', cursor: 'pointer', fontWeight: 600 }}>
                   Login →

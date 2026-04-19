@@ -30,6 +30,8 @@ import CertificationsPage from "@/pages/CertificationsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import EducationPage from "@/pages/EducationPage";
 import ResumeUploadPage from "@/pages/ResumeUploadPage";
+import AchievementsPage from "@/pages/AchievementsPage";
+import BFSIDashboard from "@/pages/BFSIDashboard";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -66,6 +68,7 @@ function AppRoutes() {
         <Route path="/employee/certifications" element={isLoggedIn ? <CertificationsPage /> : <Navigate to="/login" />} />
         <Route path="/employee/projects"       element={isLoggedIn ? <ProjectsPage />       : <Navigate to="/login" />} />
         <Route path="/employee/education"      element={isLoggedIn ? <EducationPage />      : <Navigate to="/login" />} />
+        <Route path="/employee/achievements"   element={isLoggedIn ? <AchievementsPage />   : <Navigate to="/login" />} />
         <Route path="/employee/resume-upload"  element={isLoggedIn ? <ResumeUploadPage />   : <Navigate to="/login" />} />
 
         {/* Legacy URL redirects and fallbacks */}
@@ -76,6 +79,7 @@ function AppRoutes() {
 
         {/* Admin routes, fallback to specific Admin login */}
         <Route path="/admin"              element={isLoggedIn && role === 'admin' ? <AdminDashboard />   : <AdminLoginPage />} />
+        <Route path="/admin/bfsi"         element={isLoggedIn && role === 'admin' ? <BFSIDashboard />    : <Navigate to="/admin" />} />
         <Route path="/admin/employee/:id" element={isLoggedIn && role === 'admin' ? <EmployeeDetailPage /> : <Navigate to="/admin" />} />
         <Route path="/setup"              element={isLoggedIn && role === 'admin' ? <SetupGuidePage /> : <Navigate to="/admin" />} />
 

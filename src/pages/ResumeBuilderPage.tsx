@@ -1,12 +1,13 @@
 import { useApp } from '@/lib/AppContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
-import { FileText, Download, Printer, RefreshCw, ChevronLeft, Award, Briefcase, GraduationCap, User, BarChart3, Mail, MapPin, Globe, CheckCircle2, Circle, Sparkles, Settings2, Trash2, Edit3, Plus, Search, Zap, LogOut } from 'lucide-react';
+import { FileText, Download, Printer, RefreshCw, ChevronLeft, Award, Briefcase, GraduationCap, User, BarChart3, Mail, MapPin, Globe, CheckCircle2, Circle, Sparkles, Settings2, Trash2, Edit3, Plus, Search, LogOut, AlertCircle, CheckCircle, XCircle, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from '@/lib/ToastContext';
 import { AppData, Project, Certification, EducationEntry } from '@/lib/appStore';
 import { API_BASE } from '@/lib/api';
 import { callLLM } from '@/lib/llm';
+import { SKILLS } from '@/lib/mockData';
 
 export default function ResumeBuilderPage({ 
   isPopup: propIsPopup, 
@@ -31,7 +32,6 @@ export default function ResumeBuilderPage({
   
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
-  const [fullGenLoading, setFullGenLoading] = useState(false);
 
   // --- Editable States ---
   const [editableUser, setEditableUser] = useState<any>({});
@@ -40,6 +40,46 @@ export default function ResumeBuilderPage({
   const [visibleProjects, setVisibleProjects] = useState<Record<string, boolean>>({});
   const [visibleCerts, setVisibleCerts] = useState<Record<string, boolean>>({});
   const [visibleEdu, setVisibleEdu] = useState<Record<string, boolean>>({});
+
+  // --- Gap Analysis ---
+  const [showGapAnalysis, setShowGapAnalysis] = useState(false);
+  const [gapIssues, setGapIssues] = useState<{text: string; type: 'warning' | 'success'; item?: {id: string; type: 'project' | 'cert' | 'edu'}}[]>([]);
+
+  // --- Edit Modals ---
+  const [editProject, setEditProject] = useState<Project | null>(null);
+  const [editCert, setEditCert] = useState<Certification | null>(null);
+  const [editEdu, setEditEdu] = useState<EducationEntry | null>(null);
+  const [editProjectForm, setEditProjectForm] = useState<Partial<Project>>({});
+  const [editCertForm, setEditCertForm] = useState<Partial<Certification>>({});
+  const [editEduForm, setEditEduForm] = useState<Partial<EducationEntry>>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // --- Add Skill Modal ---
+  const [showAddSkillModal, setShowAddSkillModal] = useState(false);
+  const [newSkillName, setNewSkillName] = useState('');
+  const [newSkillRating, setNewSkillRating] = useState<number>(2);
+  const [savingSkill, setSavingSkill] = useState(false);
+
+  // --- Inline skill add (sidebar) ---
+  const [customSkills, setCustomSkills] = useState<string[]>([]);
+  const [showAddSkill, setShowAddSkill] = useState(false);
+  const [newSkillInput, setNewSkillInput] = useState('');
+
+  // --- Inline Quick Add Forms ---
+  const [showAddProject, setShowAddProject] = useState(false);
+  const [showAddCert, setShowAddCert] = useState(false);
+  const [showAddEdu, setShowAddEdu] = useState(false);
+  const [showAddAchievement, setShowAddAchievement] = useState(false);
+  
+  // Track newly added skills (to show in yellow)
+  const [newlyAddedSkills, setNewlyAddedSkills] = useState<string[]>([]);
+  
+  // Add new item forms
+  const [newProjectForm, setNewProjectForm] = useState<Partial<Project>>({});
+  const [newCertForm, setNewCertForm] = useState<Partial<Certification>>({});
+  const [newEduForm, setNewEduForm] = useState<Partial<EducationEntry>>({});
+  const [newAchForm, setNewAchForm] = useState<any>({});
+  const [savingNew, setSavingNew] = useState(false);
 
   useEffect(() => {
     if (rawData?.user) {
@@ -158,70 +198,78 @@ export default function ResumeBuilderPage({
     }
   };
 
-  // ✅ FULL PROFESSIONAL RESUME GENERATOR
-  const handleFullGenerate = async () => {
-    setFullGenLoading(true);
-    toast.info?.('Generating advanced professional resume...');
-    try {
-      const activeSkills = Object.keys(visibleSkills).filter(k => visibleSkills[k]);
-      const expertSkills = activeSkills.filter(s => rawData?.ratings?.[s] === 3);
-      const midSkills = activeSkills.filter(s => rawData?.ratings?.[s] === 2);
-      const activeProjects = (rawData?.projects || []).filter(p => visibleProjects[p.ID]);
-      const activeCerts = (rawData?.certifications || []).filter(c => visibleCerts[c.ID]);
-
-      const projectSummary = activeProjects.slice(0, 3).map(p => 
-        `${p.ProjectName} (${p.Role || 'Contributor'}): ${p.Description?.slice(0, 100) || ''}`
-      ).join('; ');
-
-      const prompt = `You are writing a premium professional resume summary for a Zensar Technologies employee.
-
-Profile:
-- Name: ${editableUser.Name}
-- Role: ${editableUser.Designation}
-- IT Experience: ${editableUser.YearsIT || 5} years (Zensar: ${editableUser.YearsZensar || 3} years)
-- Expert Skills: ${expertSkills.slice(0, 5).join(', ') || 'Software Engineering'}
-- Intermediate Skills: ${midSkills.slice(0, 4).join(', ')}
-- Certifications: ${activeCerts.map(c => c.CertName).join(', ') || 'None'}
-- Projects: ${projectSummary}
-
-Write a 4-5 sentence executive-level professional summary. Be specific, use strong action verbs, mention measurable impact, highlight leadership and collaboration. Sound senior and highly skilled. Return ONLY the summary paragraph, no labels.`;
-
-      const res = await fetch(`${API_BASE}/llm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt })
-      });
-      const data = await res.json();
-      if (data.text && data.text.length > 50) {
-        setSummary(data.text.trim());
-        toast.success('✅ Advanced AI resume generated!');
-      } else {
-        // Fallback: generate a rich summary locally
-        const fallback = `Highly accomplished ${editableUser.Designation || 'Technology Professional'} at Zensar Technologies with ${editableUser.YearsIT || 5}+ years of comprehensive IT experience, including ${editableUser.YearsZensar || 3}+ years of dedicated service at Zensar driving enterprise-grade solutions. Demonstrates deep technical mastery across ${expertSkills.slice(0, 3).join(', ') || activeSkills.slice(0, 3).join(', ')}, consistently delivering results that exceed stakeholder expectations and align with organizational objectives. Successfully led and contributed to ${activeProjects.length} strategic projects${activeCerts.length > 0 ? `, holding ${activeCerts.length} industry-recognized certification${activeCerts.length > 1 ? 's' : ''} including ${activeCerts[0]?.CertName}` : ''}, with a demonstrated ability to bridge technical execution with business strategy. Recognized for fostering cross-functional collaboration, mentoring peers, and implementing best practices in agile software development, quality assurance, and continuous delivery pipelines.`;
-        setSummary(fallback);
-        toast.success('✅ Professional resume generated!');
-      }
-    } catch (e) {
-      // Fallback to local generation
-      const activeSkills = Object.keys(visibleSkills).filter(k => visibleSkills[k]);
-      const expertSkills = activeSkills.filter(s => rawData?.ratings?.[s] === 3);
-      const activeProjects = (rawData?.projects || []).filter(p => visibleProjects[p.ID]);
-      const activeCerts = (rawData?.certifications || []).filter(c => visibleCerts[c.ID]);
-      const fallback = `Highly accomplished ${editableUser.Designation || 'Technology Professional'} at Zensar Technologies with ${editableUser.YearsIT || 5}+ years of comprehensive IT experience across enterprise environments. Demonstrates deep expertise in ${expertSkills.slice(0, 3).join(', ') || activeSkills.slice(0, 3).join(', ')}, consistently delivering high-impact solutions that align with organizational goals. Led ${activeProjects.length || 2} strategic project${activeProjects.length !== 1 ? 's' : ''}${activeCerts.length > 0 ? ` and holds ${activeCerts.length} industry certification${activeCerts.length > 1 ? 's' : ''}` : ''}, with a proven track record of on-time delivery and quality excellence. Known for cross-functional collaboration, agile execution, and mentoring teams toward continuous improvement and innovation.`;
-      setSummary(fallback);
-      toast.success('✅ Professional resume generated!');
-    } finally {
-      setFullGenLoading(false);
-    }
-  };
-
   const handleExit = () => {
     if (onClose) { onClose(); return; }
     if (isPopup) { onTabChange('/employee/dashboard'); return; }
     navigate(-1);
   };
 
-  const sectionStyle: React.CSSProperties = { marginBottom: 24, breakInside: 'avoid' };
+  // --- Safe Date Formatter for Input ---
+  const formatDateForInput = (dateValue: any): string => {
+    if (!dateValue) return '';
+    try {
+      const date = new Date(dateValue);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
+  // --- Gap Analysis Function ---
+  const analyzeResumeGaps = () => {
+    const issues: {text: string; type: 'warning' | 'success'; item?: {id: string; type: 'project' | 'cert' | 'edu'}}[] = [];
+    
+    // Check skills
+    const activeSkills = Object.keys(visibleSkills).filter(k => visibleSkills[k]);
+    if (activeSkills.length < 3) {
+      issues.push({ text: `⚠️ Only ${activeSkills.length} skills selected. Add at least ${3 - activeSkills.length} more skills.`, type: 'warning' });
+    }
+    
+    // Check projects
+    const activeProjects = (rawData?.projects || []).filter(p => visibleProjects[p.ID]);
+    if (activeProjects.length === 0) {
+      issues.push({ text: "⚠️ No projects selected. Add at least 1 project.", type: 'warning' });
+    } else {
+      activeProjects.forEach(p => {
+        if (!p.StartDate && !p.EndDate) {
+          issues.push({ text: `⚠️ Project "${p.ProjectName}" has no dates.`, type: 'warning', item: { id: p.ID, type: 'project' } });
+        }
+        if (!p.Description || p.Description.length < 20) {
+          issues.push({ text: `⚠️ Project "${p.ProjectName}" needs better description.`, type: 'warning', item: { id: p.ID, type: 'project' } });
+        }
+      });
+    }
+    
+    // Check certifications
+    const activeCerts = (rawData?.certifications || []).filter(c => visibleCerts[c.ID]);
+    activeCerts.forEach(c => {
+      if (!c.IssueDate) {
+        issues.push({ text: `⚠️ Certification "${c.CertName}" has no issue date.`, type: 'warning', item: { id: c.ID, type: 'cert' } });
+      }
+    });
+    
+    // Check education
+    const activeEdu = (rawData?.education || []).filter(e => visibleEdu[e.ID]);
+    if (activeEdu.length === 0) {
+      issues.push({ text: "⚠️ No education entries selected.", type: 'warning' });
+    }
+    
+    // Check summary
+    if (!summary || summary.length < 50) {
+      issues.push({ text: "⚠️ Professional summary is too short.", type: 'warning' });
+    }
+    
+    if (issues.length === 0) {
+      issues.push({ text: "✅ Resume looks good! No major gaps found.", type: 'success' });
+    }
+    
+    setGapIssues(issues);
+    setShowGapAnalysis(true);
+    toast.success(`Analysis complete: ${issues.length === 1 && issues[0].type === 'success' ? 'All good!' : issues.length + ' issues found'}`);
+  };
+
+  const sectionStyle: React.CSSProperties = { marginBottom: 16, breakInside: 'avoid' };
   const headerStyle: React.CSSProperties = {
     fontSize: 11,
     fontWeight: 800,
@@ -270,31 +318,31 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
   const beginGroup  = activeSkillsForResume.filter(s => rawData?.ratings?.[s] === 1);
 
   return (
-    <div style={{ minHeight: '100vh', background: isPopup ? 'transparent' : T.bg, color: T.text, padding: isPopup ? 0 : '20px' }}>
+    <div style={{ minHeight: '100vh', background: isPopup ? 'transparent' : T.bg, color: T.text, padding: isPopup ? 0 : '20px 24px' }}>
       <div style={{ maxWidth: 1300, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 28 }}>
         
         {/* --- LEFT SIDEBAR: AI COMMAND CENTER --- */}
-        <div className="no-print" style={{ 
-          flex: (isPopup || window.innerWidth < 1000) ? '1 1 100%' : '1 1 320px', 
-          maxWidth: (isPopup || window.innerWidth < 1000) ? '100%' : 450,
+        <div className="no-print zen-resume-sidebar" style={{ 
+          flex: '1 1 320px', 
+          maxWidth: 450,
           background: T.card, 
           border: `1px solid ${T.bdr}`, 
           borderRadius: 20, 
-          padding: window.innerWidth < 600 ? 16 : 24, 
-          height: (isPopup || window.innerWidth < 1000) ? 'auto' : 'calc(100vh - 40px)', 
+          padding: 24, 
+          height: isPopup ? 'auto' : 'calc(100vh - 40px)', 
           overflowY: 'auto',
-          position: (isPopup || window.innerWidth < 1000) ? 'relative' : 'sticky',
+          position: isPopup ? 'relative' : 'sticky',
           top: 20,
           boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
-          marginBottom: (isPopup || window.innerWidth < 1000) ? 20 : 0
+          marginBottom: isPopup ? 20 : 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
               <Settings2 size={22} />
             </div>
             <div>
-              <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>Resume Workstation</h2>
-              <p style={{ fontSize: 11, color: T.sub, margin: 0 }}>Professional resume converter</p>
+              <h2 style={{ fontSize: 16, fontWeight: 900, margin: 0 }}>ZenAlign</h2>
+              <p style={{ fontSize: 11, color: T.sub, margin: 0 }}>Convert your resume to Zensar standard</p>
             </div>
           </div>
 
@@ -314,27 +362,20 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
             <LogOut size={16} /> Exit Builder
           </button>
 
-          {/* ✅ Generate Full Professional Resume Button */}
+          {/* 🔍 Analyze Resume Gaps Button */}
           <button
-            onClick={handleFullGenerate}
-            disabled={fullGenLoading}
+            onClick={analyzeResumeGaps}
             style={{
-              width: '100%', padding: '13px 16px', borderRadius: 12,
-              border: 'none',
-              background: fullGenLoading
-                ? '#6B7280'
-                : 'linear-gradient(135deg, #7C3AED, #3B82F6)',
-              color: '#fff', fontWeight: 800, cursor: fullGenLoading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-              marginBottom: 20, fontSize: 13,
-              boxShadow: fullGenLoading ? 'none' : '0 8px 24px rgba(124,58,237,0.35)',
-              transition: 'all 0.2s',
-              letterSpacing: 0.3
+              width: '100%', padding: '11px 16px', borderRadius: 12,
+              border: `2px solid ${dark ? '#F59E0B' : '#F59E0B'}`,
+              background: dark ? 'rgba(245,158,11,0.1)' : '#fffbeb',
+              color: '#F59E0B', fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              marginBottom: 20, fontSize: 12,
+              transition: 'all 0.2s'
             }}
           >
-            {fullGenLoading
-              ? <><RefreshCw size={16} className="animate-spin" /> Generating Advanced Resume...</>
-              : <><Zap size={16} /> Generate Full Professional Resume</>}
+            <AlertCircle size={16} /> 🔍 Analyze Resume
           </button>
 
           {/* Section: Identity */}
@@ -374,64 +415,182 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
           {/* Content Checklist */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', color: '#3B82F6', marginBottom: 10 }}>Content Checklist</div>
-            
-            <details open style={{ marginBottom: 8 }}>
-              <summary style={{ fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', userSelect: 'none' }}>
-                <BarChart3 size={13} /> Skills ({Object.values(visibleSkills).filter(Boolean).length})
-              </summary>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '8px 0' }}>
-                {Object.keys(visibleSkills).map(s => (
-                  <button key={s} onClick={() => setVisibleSkills({ ...visibleSkills, [s]: !visibleSkills[s] })} style={{ fontSize: 10, padding: '3px 7px', borderRadius: 5, border: '1px solid', borderColor: visibleSkills[s] ? LEVEL_COLOR[rawData?.ratings?.[s] || 1] : (dark ? '#333' : '#eee'), background: visibleSkills[s] ? `${LEVEL_COLOR[rawData?.ratings?.[s] || 1]}18` : 'transparent', color: visibleSkills[s] ? LEVEL_COLOR[rawData?.ratings?.[s] || 1] : T.sub, cursor: 'pointer' }}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </details>
 
-            <details open style={{ marginBottom: 8 }}>
-              <summary style={{ fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', userSelect: 'none' }}>
-                <Briefcase size={13} /> Projects ({Object.values(visibleProjects).filter(Boolean).length})
-              </summary>
-              <div style={{ display: 'grid', gap: 5, padding: '8px 0' }}>
+            {/* SKILLS */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <BarChart3 size={13} /> Skills ({Object.values(visibleSkills).filter(Boolean).length} selected)
+                </div>
+                <button onClick={e => { e.preventDefault(); setShowAddSkill(v => !v); }} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, background: showAddSkill ? 'rgba(245,158,11,0.25)' : 'rgba(245,158,11,0.12)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)', fontWeight: 700, cursor: 'pointer' }}>
+                  {showAddSkill ? '✕ Close' : '+ Add Skill'}
+                </button>
+              </div>
+              <div style={{ padding: '8px 0' }}>
+                {showAddSkill && (() => {
+                  // Show skills that are NOT in DB yet OR were just added in this session
+                  const unrated = SKILLS.filter(sk => {
+                    const inDB = (rawData?.ratings?.[sk.name] ?? 0) > 0;
+                    const justAdded = newlyAddedSkills.includes(sk.name);
+                    return !inDB || justAdded; // Show if not in DB, or if just added
+                  });
+                  return unrated.length > 0 ? (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 10, color: '#F59E0B', fontWeight: 600, marginBottom: 6 }}>Click to add → saves immediately</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {unrated.map(sk => {
+                          const justAdded = newlyAddedSkills.includes(sk.name);
+                          return (
+                            <button key={sk.id}
+                              onClick={async () => {
+                                if (justAdded) return; // Already added, do nothing
+                                const empId = rawData?.user?.zensar_id || rawData?.user?.ZensarID || rawData?.user?.id;
+                                if (!empId) return;
+                                try {
+                                  const payload: Record<string, any> = { employeeName: rawData?.user?.Name || '' };
+                                  SKILLS.forEach(s => { if ((rawData?.ratings?.[s.name] ?? 0) > 0) payload[s.name] = rawData!.ratings[s.name]; });
+                                  payload[sk.name] = 1; // Add new skill with level 1
+                                  const res = await fetch(`${API_BASE}/employees/${empId}/skills`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                                  if (res.ok) { 
+                                    setVisibleSkills(prev => ({ ...prev, [sk.name]: true })); 
+                                    setNewlyAddedSkills(prev => [...prev, sk.name]); // Track as newly added
+                                    toast.success(`✅ "${sk.name}" added at Level 1!`);
+                                    // Reload page after short delay to show updated data
+                                    setTimeout(() => window.location.reload(), 800);
+                                  } else {
+                                    toast.error('Failed to save skill');
+                                  }
+                                } catch { toast.error('Failed to save'); }
+                              }}
+                              style={{ 
+                                fontSize: 10, padding: '4px 9px', borderRadius: 7, fontWeight: 600, 
+                                border: justAdded ? '2px solid #10B981' : '1px solid rgba(245,158,11,0.5)', 
+                                background: justAdded ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.08)', 
+                                color: justAdded ? '#10B981' : '#F59E0B', 
+                                cursor: justAdded ? 'default' : 'pointer',
+                                opacity: justAdded ? 0.7 : 1
+                              }}
+                              onMouseEnter={e => { if (!justAdded) e.currentTarget.style.background = 'rgba(245,158,11,0.22)'; }}
+                              onMouseLeave={e => { if (!justAdded) e.currentTarget.style.background = 'rgba(245,158,11,0.08)'; }}
+                            >{justAdded ? '✓ Added' : `+ ${sk.name}`}</button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
+                    </div>
+                  ) : <div style={{ fontSize: 11, color: '#10B981', marginBottom: 8 }}>All skills in your profile ✓</div>;
+                })()}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                  {SKILLS.map(sk => {
+                    const inDB = (rawData?.ratings?.[sk.name] ?? 0) > 0;
+                    const isSelected = visibleSkills[sk.name] ?? false;
+                    const isNewlyAdded = newlyAddedSkills.includes(sk.name);
+                    if (!inDB) return null;
+                    
+                    // Newly added skills show in yellow, existing skills show in green
+                    const chipColor = isNewlyAdded ? '#F59E0B' : '#10B981';
+                    const chipBg = isNewlyAdded 
+                      ? (isSelected ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.05)')
+                      : (isSelected ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.05)');
+                    const chipBorder = isNewlyAdded
+                      ? (isSelected ? '2px solid #F59E0B' : '1px solid rgba(245,158,11,0.35)')
+                      : (isSelected ? '2px solid #10B981' : '1px solid rgba(16,185,129,0.35)');
+                    
+                    return (
+                      <button key={sk.id}
+                        onClick={() => setVisibleSkills(prev => ({ ...prev, [sk.name]: !prev[sk.name] }))}
+                        style={{ fontSize: 10, padding: '4px 9px', borderRadius: 7, fontWeight: 700, border: chipBorder, background: chipBg, color: chipColor, cursor: 'pointer' }}
+                      >{isSelected ? '✓ ' : ''}{sk.name}</button>
+                    );
+                  })}
+                  {customSkills.map(sk => {
+                    const isSelected = visibleSkills[sk] ?? true;
+                    return (
+                      <button key={sk}
+                        onClick={() => { setVisibleSkills(prev => ({ ...prev, [sk]: !prev[sk] })); if (isSelected) setCustomSkills(prev => prev.filter(s => s !== sk)); }}
+                        style={{ fontSize: 10, padding: '4px 9px', borderRadius: 7, fontWeight: 700, border: isSelected ? '2px solid #F59E0B' : '1px solid rgba(245,158,11,0.4)', background: isSelected ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.05)', color: '#F59E0B', cursor: 'pointer' }}
+                      >{isSelected ? '✓ ' : ''}{sk} ✨</button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* PROJECTS */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Briefcase size={13} /> Projects ({Object.values(visibleProjects).filter(Boolean).length})
+                </div>
+                <button onClick={e => { e.preventDefault(); setShowAddProject(true); }} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, background: 'rgba(59,130,246,0.12)', color: '#3B82F6', border: '1px solid rgba(59,130,246,0.3)', fontWeight: 700, cursor: 'pointer' }}>+ Add</button>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
                 {(rawData.projects || []).map(p => (
-                  <div key={p.ID} onClick={() => setVisibleProjects({ ...visibleProjects, [p.ID]: !visibleProjects[p.ID] })} style={{ fontSize: 11, padding: '8px 10px', borderRadius: 7, background: visibleProjects[p.ID] ? 'rgba(59,130,246,0.06)' : 'transparent', border: `1px solid ${visibleProjects[p.ID] ? '#3B82F640' : (dark ? '#333' : '#eee')}`, cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    {visibleProjects[p.ID] ? <CheckCircle2 size={13} color="#3B82F6" style={{ flexShrink: 0, marginTop: 1 }} /> : <Circle size={13} color={T.muted} style={{ flexShrink: 0, marginTop: 1 }} />}
-                    <span style={{ fontWeight: 600, lineHeight: 1.4 }}>{p.ProjectName}</span>
+                  <div key={p.ID} style={{ padding: '10px 12px', borderRadius: 10, background: visibleProjects[p.ID] ? (dark ? 'rgba(59,130,246,0.1)' : '#eff6ff') : (dark ? 'rgba(255,255,255,0.03)' : '#f5f5f5'), border: `1.5px solid ${visibleProjects[p.ID] ? '#3B82F6' : (dark ? '#333' : '#e5e5e5')}`, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+                    onClick={() => setVisibleProjects(prev => ({ ...prev, [p.ID]: !prev[p.ID] }))}>
+                    {visibleProjects[p.ID] ? <CheckCircle2 size={14} color="#3B82F6" /> : <Circle size={14} color={T.muted} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 11, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.ProjectName}</div>
+                      <div style={{ fontSize: 10, color: T.sub }}>{p.Role}</div>
+                    </div>
+                    <button onClick={e => { e.stopPropagation(); setEditProject(p); setEditProjectForm({ ...p }); }} style={{ padding: '3px 8px', borderRadius: 5, border: 'none', background: dark ? 'rgba(255,255,255,0.08)' : '#e5e5e5', color: T.sub, fontSize: 9, cursor: 'pointer' }}>Edit</button>
                   </div>
                 ))}
               </div>
-            </details>
+            </div>
 
-            <details style={{ marginBottom: 8 }}>
-              <summary style={{ fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', userSelect: 'none' }}>
-                <Award size={13} /> Certifications ({Object.values(visibleCerts).filter(Boolean).length})
-              </summary>
-              <div style={{ display: 'grid', gap: 5, padding: '8px 0' }}>
+            {/* CERTIFICATIONS */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Award size={13} /> Certifications ({Object.values(visibleCerts).filter(Boolean).length})
+                </div>
+                <button onClick={e => { e.preventDefault(); setShowAddCert(true); }} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, background: 'rgba(16,185,129,0.12)', color: '#10B981', border: '1px solid rgba(16,185,129,0.3)', fontWeight: 700, cursor: 'pointer' }}>+ Add</button>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
                 {(rawData.certifications || []).map(c => (
-                  <div key={c.ID} onClick={() => setVisibleCerts({ ...visibleCerts, [c.ID]: !visibleCerts[c.ID] })} style={{ fontSize: 11, padding: '7px 9px', borderRadius: 7, background: visibleCerts[c.ID] ? 'rgba(59,130,246,0.06)' : 'transparent', border: `1px solid ${visibleCerts[c.ID] ? '#3B82F640' : (dark ? '#333' : '#eee')}`, cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {visibleCerts[c.ID] ? <CheckCircle2 size={12} color="#3B82F6" /> : <Circle size={12} color={T.muted} />}
-                    {c.CertName}
+                  <div key={c.ID} style={{ padding: '10px 12px', borderRadius: 10, background: visibleCerts[c.ID] ? (dark ? 'rgba(16,185,129,0.1)' : '#f0fdf4') : (dark ? 'rgba(255,255,255,0.03)' : '#f5f5f5'), border: `1.5px solid ${visibleCerts[c.ID] ? '#10B981' : (dark ? '#333' : '#e5e5e5')}`, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+                    onClick={() => setVisibleCerts(prev => ({ ...prev, [c.ID]: !prev[c.ID] }))}>
+                    {visibleCerts[c.ID] ? <CheckCircle2 size={14} color="#10B981" /> : <Circle size={14} color={T.muted} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 11, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.CertName}</div>
+                      <div style={{ fontSize: 10, color: T.sub }}>{c.Provider}</div>
+                    </div>
+                    <button onClick={e => { e.stopPropagation(); setEditCert(c); setEditCertForm({ ...c }); }} style={{ padding: '3px 8px', borderRadius: 5, border: 'none', background: dark ? 'rgba(255,255,255,0.08)' : '#e5e5e5', color: T.sub, fontSize: 9, cursor: 'pointer' }}>Edit</button>
                   </div>
                 ))}
               </div>
-            </details>
+            </div>
 
-            <details style={{ marginBottom: 8 }}>
-              <summary style={{ fontSize: 12, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', userSelect: 'none' }}>
-                <GraduationCap size={13} /> Education ({Object.values(visibleEdu).filter(Boolean).length})
-              </summary>
-              <div style={{ display: 'grid', gap: 5, padding: '8px 0' }}>
+            {/* EDUCATION */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <GraduationCap size={13} /> Education ({Object.values(visibleEdu).filter(Boolean).length})
+                </div>
+                <button onClick={e => { e.preventDefault(); setShowAddEdu(true); }} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 6, background: 'rgba(139,92,246,0.12)', color: '#8B5CF6', border: '1px solid rgba(139,92,246,0.3)', fontWeight: 700, cursor: 'pointer' }}>+ Add</button>
+              </div>
+              <div style={{ display: 'grid', gap: 6 }}>
                 {(rawData.education || []).map(e => (
-                  <div key={e.ID} onClick={() => setVisibleEdu({ ...visibleEdu, [e.ID]: !visibleEdu[e.ID] })} style={{ fontSize: 11, padding: '7px 9px', borderRadius: 7, background: visibleEdu[e.ID] ? 'rgba(59,130,246,0.06)' : 'transparent', border: `1px solid ${visibleEdu[e.ID] ? '#3B82F640' : (dark ? '#333' : '#eee')}`, cursor: 'pointer', display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {visibleEdu[e.ID] ? <CheckCircle2 size={12} color="#3B82F6" /> : <Circle size={12} color={T.muted} />}
-                    {e.Degree} — {e.Institution}
+                  <div key={e.ID} style={{ padding: '10px 12px', borderRadius: 10, background: visibleEdu[e.ID] ? (dark ? 'rgba(139,92,246,0.1)' : '#faf5ff') : (dark ? 'rgba(255,255,255,0.03)' : '#f5f5f5'), border: `1.5px solid ${visibleEdu[e.ID] ? '#8B5CF6' : (dark ? '#333' : '#e5e5e5')}`, cursor: 'pointer' }}
+                    onClick={() => setVisibleEdu(prev => ({ ...prev, [e.ID]: !prev[e.ID] }))}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                      {visibleEdu[e.ID] ? <CheckCircle2 size={14} color="#8B5CF6" style={{ marginTop: 2, flexShrink: 0 }} /> : <Circle size={14} color={T.muted} style={{ marginTop: 2, flexShrink: 0 }} />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 11, color: T.text, lineHeight: 1.4, marginBottom: 4 }}>{e.Degree}</div>
+                        <div style={{ fontSize: 10, color: T.sub }}>{e.Institution}</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button onClick={evt => { evt.stopPropagation(); setEditEdu(e); setEditEduForm({ ...e }); }} style={{ padding: '3px 8px', borderRadius: 5, border: 'none', background: dark ? 'rgba(255,255,255,0.08)' : '#e5e5e5', color: T.sub, fontSize: 9, cursor: 'pointer' }}>Edit</button>
+                    </div>
                   </div>
                 ))}
               </div>
-            </details>
+            </div>
+
           </div>
         </div>
-
         {/* --- RIGHT SIDE: LIVE RESUME PREVIEW --- */}
         <div style={{ flex: '2 1 500px', position: 'relative', overflowX: 'auto', paddingBottom: 40 }}>
           
@@ -449,16 +608,16 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
           <div id="zensar-resume" style={{
             background: '#fff',
             color: '#1a1a1a',
-            padding: '40px 48px', // Fixed document padding
+            padding: '30px 36px', // Reduced padding
             borderRadius: 4,
             boxShadow: '0 4px 32px rgba(0,0,0,0.1)',
             fontFamily: "'Calibri', 'Segoe UI', Arial, sans-serif",
             fontSize: 11,
-            lineHeight: 1.65,
+            lineHeight: 1.55, // Slightly reduced line height
             minHeight: 1122
           }}>
             {/* ── HEADER ── */}
-            <div className="res-header" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap-reverse', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2.5px solid #000', paddingBottom: 18, marginBottom: 20, gap: 16 }}>
+            <div className="res-header" style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap-reverse', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2.5px solid #000', paddingBottom: 12, marginBottom: 14, gap: 12 }}>
               <div style={{ flex: '1 1 300px', minWidth: 0 }}>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700, letterSpacing: -0.3, color: '#000', lineHeight: 1.1 }}>
                   {editableUser.Name || 'Employee Name'}
@@ -484,7 +643,7 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
             {/* ── PROFESSIONAL SUMMARY ── */}
             <div style={sectionStyle}>
               <div style={headerStyle}>Professional Summary</div>
-              <p style={{ margin: 0, fontSize: 11, lineHeight: 1.75, color: '#222', textAlign: 'justify' }}>{summary}</p>
+              <p style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: '#222', textAlign: 'justify' }}>{summary}</p>
             </div>
 
             {/* ── CORE COMPETENCIES ── */}
@@ -523,7 +682,7 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
             {(rawData.projects || []).filter(p => visibleProjects[p.ID]).length > 0 && (
               <div style={sectionStyle}>
                 <div style={headerStyle}>Professional Experience &amp; Projects</div>
-                <div style={{ display: 'grid', gap: 18 }}>
+                <div style={{ display: 'grid', gap: 14 }}>
                   {(rawData.projects || []).filter(p => visibleProjects[p.ID]).map((p, i) => {
                     const start = formatDate(p.StartDate);
                     const end = p.IsOngoing ? 'Present' : formatDate(p.EndDate);
@@ -562,7 +721,7 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
             {(rawData.certifications || []).filter(c => visibleCerts[c.ID]).length > 0 && (
               <div style={sectionStyle}>
                 <div style={headerStyle}>Certifications &amp; Credentials</div>
-                <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gap: 10 }}>
                   {(rawData.certifications || []).filter(c => visibleCerts[c.ID]).map((c, i) => (
                     <div key={i} className="res-cert" style={{ borderLeft: '2px solid #999', paddingLeft: 14, breakInside: 'avoid' }}>
                       <div className="res-cert-name" style={{ fontWeight: 700, fontSize: 11.5, color: '#000' }}>{c.CertName || '—'}</div>
@@ -590,7 +749,7 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
             {(rawData.education || []).filter(e => visibleEdu[e.ID]).length > 0 && (
               <div style={sectionStyle}>
                 <div style={headerStyle}>Education</div>
-                <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gap: 10 }}>
                   {(rawData.education || []).filter(e => visibleEdu[e.ID]).map((e, i) => (
                     <div key={i} className="res-edu" style={{ borderLeft: '2px solid #999', paddingLeft: 14, breakInside: 'avoid' }}>
                       <div style={{ fontWeight: 700, fontSize: 11.5, color: '#000' }}>{e.Degree}</div>
@@ -609,7 +768,7 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
             )}
 
             {/* ── FOOTER ── */}
-            <div className="res-footer" style={{ marginTop: 32, borderTop: '1px solid #ccc', paddingTop: 10, display: 'flex', justifyContent: 'space-between', fontSize: 8.5, color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 600 }}>
+            <div className="res-footer" style={{ marginTop: 24, borderTop: '1px solid #ccc', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 8.5, color: '#888', textTransform: 'uppercase', letterSpacing: 0.8, fontWeight: 600 }}>
               <div>Zensar Technologies Ltd. • Global Delivery Center</div>
               <div>Skill Navigator™ • Confidential HR Document</div>
             </div>
@@ -652,6 +811,786 @@ Write a 4-5 sentence executive-level professional summary. Be specific, use stro
         .animate-spin { animation: spin 1s linear infinite; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
+
+      {/* ============================================ */}
+      {/* ALL MODALS - RENDERED AT ROOT LEVEL          */}
+      {/* (ensures they appear above all other content) */}
+      {/* ============================================ */}
+
+      {/* Gap Analysis Popup */}
+      {showGapAnalysis && (
+        <div style={{ 
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          background: dark ? 'rgba(15,15,26,0.85)' : 'rgba(245,245,245,0.85)', zIndex: 99999, 
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => setShowGapAnalysis(false)}>
+          <div style={{ 
+            background: dark ? '#1a1a2e' : '#ffffff', borderRadius: 20, padding: 28, 
+            maxWidth: 500, width: '90%', maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.4)', border: `1px solid ${dark ? '#2d2d44' : '#e5e5e5'}`
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #F59E0B, #D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertCircle size={24} color="#fff" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Resume Analysis</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: T.sub }}>Gap analysis for resume completeness</p>
+                </div>
+              </div>
+              <button onClick={() => setShowGapAnalysis(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: T.sub }}>×</button>
+            </div>
+            
+            <div style={{ display: 'grid', gap: 10 }}>
+              {gapIssues.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: T.sub }}>No issues found!</div>
+              ) : (
+                gapIssues.map((issue, i) => (
+                  <div key={i} style={{ 
+                    padding: '12px 16px', borderRadius: 10, 
+                    background: issue.type === 'success' ? (dark ? 'rgba(16,185,129,0.1)' : '#ecfdf5') : (dark ? 'rgba(245,158,11,0.1)' : '#fffbeb'),
+                    border: `1px solid ${issue.type === 'success' ? '#10B981' : '#F59E0B'}`,
+                    display: 'flex', alignItems: 'center', gap: 10
+                  }}>
+                    {issue.type === 'success' ? <CheckCircle size={18} color="#10B981" /> : <AlertCircle size={18} color="#F59E0B" />}
+                    <span style={{ fontSize: 13, color: T.text, flex: 1 }}>{issue.text}</span>
+                    {issue.item && (
+                      <button
+                        onClick={() => {
+                          setShowGapAnalysis(false);
+                          if (issue.item?.type === 'project') {
+                            const p = rawData?.projects?.find(proj => proj.ID === issue.item?.id);
+                            if (p) { setEditProject(p); setEditProjectForm({ ...p }); }
+                          } else if (issue.item?.type === 'cert') {
+                            const c = rawData?.certifications?.find(cert => cert.ID === issue.item?.id);
+                            if (c) { setEditCert(c); setEditCertForm({ ...c }); }
+                          }
+                        }}
+                        style={{
+                          padding: '6px 12px', borderRadius: 6, border: 'none',
+                          background: issue.type === 'success' ? '#10B981' : '#F59E0B',
+                          color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <Edit3 size={12} /> Fix
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+            
+            <button 
+              onClick={() => setShowGapAnalysis(false)} 
+              style={{ 
+                width: '100%', marginTop: 20, padding: '12px', 
+                background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', 
+                color: '#fff', border: 'none', borderRadius: 10, 
+                fontWeight: 700, cursor: 'pointer'
+              }}
+            >
+              Got it, thanks!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit/Add Project Modal */}
+      {(editProject || showAddProject) && (
+        <div style={{ 
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          background: dark ? 'rgba(15,15,26,0.85)' : 'rgba(245,245,245,0.85)', zIndex: 99999, 
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => { setEditProject(null); setShowAddProject(false); setNewProjectForm({}); }}>
+          <div style={{ 
+            background: dark ? '#1a1a2e' : '#ffffff', borderRadius: 20, padding: 28, 
+            maxWidth: 550, width: '90%', maxHeight: '85vh', overflowY: 'auto',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.4)', border: `1px solid ${dark ? '#2d2d44' : '#e5e5e5'}`
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Briefcase size={24} color="#fff" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{editProject ? 'Edit Project' : 'Add New Project'}</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: T.sub }}>{editProject ? 'Update project details' : 'Add a new project to your profile'}</p>
+                </div>
+              </div>
+              <button onClick={() => { setEditProject(null); setShowAddProject(false); setNewProjectForm({}); }} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: T.sub }}>×</button>
+            </div>
+            
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Project Name *</label>
+                <input 
+                  type="text" 
+                  value={editProject ? (editProjectForm.ProjectName || '') : (newProjectForm.ProjectName || '')} 
+                  onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, ProjectName: e.target.value }) : setNewProjectForm({ ...newProjectForm, ProjectName: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="Enter project name"
+                />
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Your Role</label>
+                  <input 
+                    type="text" 
+                    value={editProject ? (editProjectForm.Role || '') : (newProjectForm.Role || '')} 
+                    onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, Role: e.target.value }) : setNewProjectForm({ ...newProjectForm, Role: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                    placeholder="e.g. Developer"
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Client</label>
+                  <input 
+                    type="text" 
+                    value={editProject ? (editProjectForm.Client || '') : (newProjectForm.Client || '')} 
+                    onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, Client: e.target.value }) : setNewProjectForm({ ...newProjectForm, Client: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                    placeholder="e.g. ABC Corp"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Start Date</label>
+                  <input 
+                    type="date" 
+                    value={editProject ? formatDateForInput(editProjectForm.StartDate) : formatDateForInput(newProjectForm.StartDate)} 
+                    onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, StartDate: e.target.value }) : setNewProjectForm({ ...newProjectForm, StartDate: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>End Date</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input 
+                      type="date" 
+                      value={editProject ? (!editProjectForm.IsOngoing ? formatDateForInput(editProjectForm.EndDate) : '') : (!newProjectForm.IsOngoing ? formatDateForInput(newProjectForm.EndDate) : '')} 
+                      onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, EndDate: e.target.value, IsOngoing: false }) : setNewProjectForm({ ...newProjectForm, EndDate: e.target.value, IsOngoing: false })}
+                      disabled={editProject ? editProjectForm.IsOngoing : newProjectForm.IsOngoing}
+                      style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                    />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: T.sub, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={editProject ? (editProjectForm.IsOngoing || false) : (newProjectForm.IsOngoing || false)} 
+                        onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, IsOngoing: e.target.checked, EndDate: e.target.checked ? undefined : editProjectForm.EndDate }) : setNewProjectForm({ ...newProjectForm, IsOngoing: e.target.checked, EndDate: e.target.checked ? undefined : newProjectForm.EndDate })}
+                      />
+                      Ongoing
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Description</label>
+                <textarea 
+                  value={editProject ? (editProjectForm.Description || '') : (newProjectForm.Description || '')} 
+                  onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, Description: e.target.value }) : setNewProjectForm({ ...newProjectForm, Description: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13, minHeight: 80, resize: 'vertical' }}
+                  placeholder="Describe your role and responsibilities..."
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Outcome / Achievement</label>
+                <input 
+                  type="text" 
+                  value={editProject ? (editProjectForm.Outcome || '') : (newProjectForm.Outcome || '')} 
+                  onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, Outcome: e.target.value }) : setNewProjectForm({ ...newProjectForm, Outcome: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="e.g. Improved performance by 40%"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Domain</label>
+                  <input 
+                    type="text" 
+                    value={editProject ? (editProjectForm.Domain || '') : (newProjectForm.Domain || '')} 
+                    onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, Domain: e.target.value }) : setNewProjectForm({ ...newProjectForm, Domain: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                    placeholder="e.g. Banking"
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Team Size</label>
+                  <input 
+                    type="number" 
+                    value={editProject ? (editProjectForm.TeamSize || '') : (newProjectForm.TeamSize || '')} 
+                    onChange={e => editProject ? setEditProjectForm({ ...editProjectForm, TeamSize: parseInt(e.target.value) || 0 }) : setNewProjectForm({ ...newProjectForm, TeamSize: parseInt(e.target.value) || 0 })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                    placeholder="e.g. 5"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <button 
+                onClick={() => { setEditProject(null); setShowAddProject(false); setNewProjectForm({}); }} 
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: dark ? 'rgba(255,255,255,0.1)' : '#f3f4f6', 
+                  color: T.text, border: 'none', borderRadius: 10, 
+                  fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  setSavingEdit(true);
+                  try {
+                    const fixDate = (d: any) => {
+                      if (!d) return null;
+                      if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+                      try {
+                        const date = new Date(d);
+                        if (isNaN(date.getTime())) return null;
+                        return date.toISOString().split('T')[0];
+                      } catch { return null; }
+                    };
+                    const empId = rawData?.user?.zensar_id || rawData?.user?.ZensarID || rawData?.user?.id;
+                    const formData = editProject ? editProjectForm : newProjectForm;
+                    const res = await fetch(`${API_BASE}/projects`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        id: editProject?.ID,
+                        EmployeeID: empId,
+                        employeeId: empId,
+                        ProjectName: formData.ProjectName,
+                        Client: formData.Client,
+                        Domain: formData.Domain || 'Other',
+                        Role: formData.Role,
+                        StartDate: fixDate(formData.StartDate),
+                        EndDate: formData.IsOngoing ? null : fixDate(formData.EndDate),
+                        IsOngoing: formData.IsOngoing,
+                        Description: formData.Description,
+                        TeamSize: formData.TeamSize,
+                        Outcome: formData.Outcome,
+                        SkillsUsed: formData.SkillsUsed,
+                        Technologies: formData.Technologies,
+                      })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      toast.success(editProject ? 'Project updated successfully' : 'Project added successfully');
+                      setEditProject(null);
+                      setShowAddProject(false);
+                      setNewProjectForm({});
+                      window.location.reload();
+                    } else {
+                      toast.error(data.error || `Failed to ${editProject ? 'update' : 'add'} project`);
+                    }
+                  } catch (err) {
+                    toast.error(`Error ${editProject ? 'updating' : 'adding'} project`);
+                  } finally {
+                    setSavingEdit(false);
+                  }
+                }}
+                disabled={savingEdit}
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)', 
+                  color: '#fff', border: 'none', borderRadius: 10, 
+                  fontWeight: 700, cursor: savingEdit ? 'not-allowed' : 'pointer',
+                  opacity: savingEdit ? 0.7 : 1
+                }}
+              >
+                {savingEdit ? 'Saving...' : (editProject ? 'Save Changes' : 'Add Project')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit/Add Certification Modal */}
+      {(editCert || showAddCert) && (
+        <div style={{ 
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          background: dark ? 'rgba(15,15,26,0.85)' : 'rgba(245,245,245,0.85)', zIndex: 99999, 
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => { setEditCert(null); setShowAddCert(false); setNewCertForm({}); }}>
+          <div style={{ 
+            background: dark ? '#1a1a2e' : '#ffffff', borderRadius: 20, padding: 28, 
+            maxWidth: 500, width: '90%', maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.4)', border: `1px solid ${dark ? '#2d2d44' : '#e5e5e5'}`
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #F59E0B, #D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Award size={24} color="#fff" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{editCert ? 'Edit Certification' : 'Add New Certification'}</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: T.sub }}>{editCert ? 'Update certification details' : 'Add a new certification to your profile'}</p>
+                </div>
+              </div>
+              <button onClick={() => { setEditCert(null); setShowAddCert(false); setNewCertForm({}); }} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: T.sub }}>×</button>
+            </div>
+            
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Certification Name *</label>
+                <input 
+                  type="text" 
+                  value={editCert ? (editCertForm.CertName || '') : (newCertForm.CertName || '')} 
+                  onChange={e => editCert ? setEditCertForm({ ...editCertForm, CertName: e.target.value }) : setNewCertForm({ ...newCertForm, CertName: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="e.g. AWS Solutions Architect"
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Provider</label>
+                <input 
+                  type="text" 
+                  value={editCert ? (editCertForm.Provider || '') : (newCertForm.Provider || '')} 
+                  onChange={e => editCert ? setEditCertForm({ ...editCertForm, Provider: e.target.value }) : setNewCertForm({ ...newCertForm, Provider: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="e.g. Amazon Web Services"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Issue Date</label>
+                  <input 
+                    type="date" 
+                    value={editCert ? formatDateForInput(editCertForm.IssueDate) : formatDateForInput(newCertForm.IssueDate)} 
+                    onChange={e => editCert ? setEditCertForm({ ...editCertForm, IssueDate: e.target.value }) : setNewCertForm({ ...newCertForm, IssueDate: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Expiry Date</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input 
+                      type="date" 
+                      value={editCert ? (!editCertForm.NoExpiry ? formatDateForInput(editCertForm.ExpiryDate) : '') : (!newCertForm.NoExpiry ? formatDateForInput(newCertForm.ExpiryDate) : '')} 
+                      onChange={e => editCert ? setEditCertForm({ ...editCertForm, ExpiryDate: e.target.value, NoExpiry: false }) : setNewCertForm({ ...newCertForm, ExpiryDate: e.target.value, NoExpiry: false })}
+                      disabled={editCert ? editCertForm.NoExpiry : newCertForm.NoExpiry}
+                      style={{ flex: 1, padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                    />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: T.sub, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={editCert ? (editCertForm.NoExpiry || false) : (newCertForm.NoExpiry || false)} 
+                        onChange={e => editCert ? setEditCertForm({ ...editCertForm, NoExpiry: e.target.checked }) : setNewCertForm({ ...newCertForm, NoExpiry: e.target.checked })}
+                      />
+                      No Expiry
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Credential ID</label>
+                <input 
+                  type="text" 
+                  value={editCert ? (editCertForm.CredentialID || '') : (newCertForm.CredentialID || '')} 
+                  onChange={e => editCert ? setEditCertForm({ ...editCertForm, CredentialID: e.target.value }) : setNewCertForm({ ...newCertForm, CredentialID: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="e.g. ABC123XYZ"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Credential URL</label>
+                <input 
+                  type="url" 
+                  value={editCert ? (editCertForm.CredentialURL || '') : (newCertForm.CredentialURL || '')} 
+                  onChange={e => editCert ? setEditCertForm({ ...editCertForm, CredentialURL: e.target.value }) : setNewCertForm({ ...newCertForm, CredentialURL: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="https://..."
+                />
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <button 
+                onClick={() => { setEditCert(null); setShowAddCert(false); setNewCertForm({}); }} 
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: dark ? 'rgba(255,255,255,0.1)' : '#f3f4f6', 
+                  color: T.text, border: 'none', borderRadius: 10, 
+                  fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  setSavingEdit(true);
+                  try {
+                    const fixDate = (d: any) => {
+                      if (!d) return null;
+                      if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+                      try {
+                        const date = new Date(d);
+                        if (isNaN(date.getTime())) return null;
+                        return date.toISOString().split('T')[0];
+                      } catch { return null; }
+                    };
+                    const empId = rawData?.user?.zensar_id || rawData?.user?.ZensarID || rawData?.user?.id;
+                    const formData = editCert ? editCertForm : newCertForm;
+                    const res = await fetch(`${API_BASE}/certifications`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        id: editCert?.ID,
+                        EmployeeID: empId,
+                        employeeId: empId,
+                        CertName: formData.CertName,
+                        Provider: formData.Provider,
+                        IssueDate: fixDate(formData.IssueDate),
+                        ExpiryDate: formData.NoExpiry ? null : fixDate(formData.ExpiryDate),
+                        CredentialID: formData.CredentialID,
+                        CredentialURL: formData.CredentialURL,
+                        NoExpiry: formData.NoExpiry
+                      })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      toast.success(editCert ? 'Certification updated successfully' : 'Certification added successfully');
+                      setEditCert(null);
+                      setShowAddCert(false);
+                      setNewCertForm({});
+                      window.location.reload();
+                    } else {
+                      toast.error(data.error || `Failed to ${editCert ? 'update' : 'add'} certification`);
+                    }
+                  } catch (err) {
+                    toast.error(`Error ${editCert ? 'updating' : 'adding'} certification`);
+                  } finally {
+                    setSavingEdit(false);
+                  }
+                }}
+                disabled={savingEdit}
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: 'linear-gradient(135deg, #F59E0B, #D97706)', 
+                  color: '#fff', border: 'none', borderRadius: 10, 
+                  fontWeight: 700, cursor: savingEdit ? 'not-allowed' : 'pointer',
+                  opacity: savingEdit ? 0.7 : 1
+                }}
+              >
+                {savingEdit ? 'Saving...' : (editCert ? 'Save Changes' : 'Add Certification')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit/Add Education Modal */}
+      {(editEdu || showAddEdu) && (
+        <div style={{ 
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          background: dark ? 'rgba(15,15,26,0.85)' : 'rgba(245,245,245,0.85)', zIndex: 99999, 
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => { setEditEdu(null); setShowAddEdu(false); setNewEduForm({}); }}>
+          <div style={{ 
+            background: dark ? '#1a1a2e' : '#ffffff', borderRadius: 20, padding: 28, 
+            maxWidth: 500, width: '90%', maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.4)', border: `1px solid ${dark ? '#2d2d44' : '#e5e5e5'}`
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <GraduationCap size={24} color="#fff" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{editEdu ? 'Edit Education' : 'Add New Education'}</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: T.sub }}>{editEdu ? 'Update education details' : 'Add a new education entry to your profile'}</p>
+                </div>
+              </div>
+              <button onClick={() => { setEditEdu(null); setShowAddEdu(false); setNewEduForm({}); }} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: T.sub }}>×</button>
+            </div>
+            
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Degree *</label>
+                <input 
+                  type="text" 
+                  value={editEdu ? (editEduForm.Degree || '') : (newEduForm.Degree || '')} 
+                  onChange={e => editEdu ? setEditEduForm({ ...editEduForm, Degree: e.target.value }) : setNewEduForm({ ...newEduForm, Degree: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="e.g. Bachelor of Technology"
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Institution *</label>
+                <input 
+                  type="text" 
+                  value={editEdu ? (editEduForm.Institution || '') : (newEduForm.Institution || '')} 
+                  onChange={e => editEdu ? setEditEduForm({ ...editEduForm, Institution: e.target.value }) : setNewEduForm({ ...newEduForm, Institution: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="e.g. University Name"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Field of Study</label>
+                <input 
+                  type="text" 
+                  value={editEdu ? (editEduForm.FieldOfStudy || '') : (newEduForm.FieldOfStudy || '')} 
+                  onChange={e => editEdu ? setEditEduForm({ ...editEduForm, FieldOfStudy: e.target.value }) : setNewEduForm({ ...newEduForm, FieldOfStudy: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="e.g. Computer Science"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Start Date</label>
+                  <input 
+                    type="date" 
+                    value={editEdu ? formatDateForInput(editEduForm.StartDate) : formatDateForInput(newEduForm.StartDate)} 
+                    onChange={e => editEdu ? setEditEduForm({ ...editEduForm, StartDate: e.target.value }) : setNewEduForm({ ...newEduForm, StartDate: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>End Date</label>
+                  <input 
+                    type="date" 
+                    value={editEdu ? formatDateForInput(editEduForm.EndDate) : formatDateForInput(newEduForm.EndDate)} 
+                    onChange={e => editEdu ? setEditEduForm({ ...editEduForm, EndDate: e.target.value }) : setNewEduForm({ ...newEduForm, EndDate: e.target.value })}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Grade / GPA</label>
+                <input 
+                  type="text" 
+                  value={editEdu ? (editEduForm.Grade || '') : (newEduForm.Grade || '')} 
+                  onChange={e => editEdu ? setEditEduForm({ ...editEduForm, Grade: e.target.value }) : setNewEduForm({ ...newEduForm, Grade: e.target.value })}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 13 }}
+                  placeholder="e.g. 8.5 CGPA or First Class"
+                />
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <button 
+                onClick={() => { setEditEdu(null); setShowAddEdu(false); setNewEduForm({}); }} 
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: dark ? 'rgba(255,255,255,0.1)' : '#f3f4f6', 
+                  color: T.text, border: 'none', borderRadius: 10, 
+                  fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  setSavingEdit(true);
+                  try {
+                    const fixDate = (d: any) => {
+                      if (!d) return null;
+                      if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+                      try {
+                        const date = new Date(d);
+                        if (isNaN(date.getTime())) return null;
+                        return date.toISOString().split('T')[0];
+                      } catch { return null; }
+                    };
+                    const employeeId = rawData?.user?.zensar_id || rawData?.user?.ZensarID || rawData?.user?.id;
+                    const formData = editEdu ? editEduForm : newEduForm;
+                    const res = await fetch(`${API_BASE}/education`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        id: editEdu?.ID,
+                        EmployeeID: employeeId,
+                        employeeId: employeeId,
+                        Degree: formData.Degree,
+                        Institution: formData.Institution,
+                        FieldOfStudy: formData.FieldOfStudy,
+                        StartDate: fixDate(formData.StartDate),
+                        EndDate: fixDate(formData.EndDate),
+                        Grade: formData.Grade,
+                        Description: formData.Description
+                      })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      toast.success(editEdu ? 'Education updated successfully' : 'Education added successfully');
+                      setEditEdu(null);
+                      setShowAddEdu(false);
+                      setNewEduForm({});
+                      window.location.reload();
+                    } else {
+                      toast.error(data.error || `Failed to ${editEdu ? 'update' : 'add'} education`);
+                    }
+                  } catch (err) {
+                    toast.error(`Error ${editEdu ? 'updating' : 'adding'} education`);
+                  } finally {
+                    setSavingEdit(false);
+                  }
+                }}
+                disabled={savingEdit}
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)', 
+                  color: '#fff', border: 'none', borderRadius: 10, 
+                  fontWeight: 700, cursor: savingEdit ? 'not-allowed' : 'pointer',
+                  opacity: savingEdit ? 0.7 : 1
+                }}
+              >
+                {savingEdit ? 'Saving...' : (editEdu ? 'Save Changes' : 'Add Education')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Skill Modal */}
+      {showAddSkillModal && (
+        <div style={{ 
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+          background: dark ? 'rgba(15,15,26,0.85)' : 'rgba(245,245,245,0.85)', zIndex: 99999, 
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }} onClick={() => setShowAddSkillModal(false)}>
+          <div style={{ 
+            background: dark ? '#1a1a2e' : '#ffffff', borderRadius: 20, padding: 28, 
+            maxWidth: 450, width: '90%', maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.4)', border: `1px solid ${dark ? '#2d2d44' : '#e5e5e5'}`
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg, #8B5CF6, #6366F1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Zap size={24} color="#fff" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Add New Skill</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: 12, color: T.sub }}>Create a new skill for your profile</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAddSkillModal(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: T.sub }}>×</button>
+            </div>
+            
+            <div style={{ display: 'grid', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Skill Name *</label>
+                <input 
+                  type="text" 
+                  value={newSkillName} 
+                  onChange={e => setNewSkillName(e.target.value)}
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: `1px solid ${dark ? '#333' : '#ddd'}`, background: dark ? '#1a1a1a' : '#fff', color: T.text, fontSize: 14 }}
+                  placeholder="e.g. React Native, Kubernetes, etc."
+                  autoFocus
+                />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: T.text }}>Proficiency Level</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[
+                    { value: 1, label: '⭐ Beginner', color: '#6B7280' },
+                    { value: 2, label: '⭐⭐ Intermediate', color: '#374151' },
+                    { value: 3, label: '⭐⭐⭐ Expert', color: '#000' }
+                  ].map(({ value, label, color }) => (
+                    <button
+                      key={value}
+                      onClick={() => setNewSkillRating(value)}
+                      style={{
+                        flex: 1, padding: '10px 12px', borderRadius: 8, border: '2px solid',
+                        borderColor: newSkillRating === value ? color : (dark ? '#333' : '#ddd'),
+                        background: newSkillRating === value ? color : (dark ? '#1a1a1a' : '#fff'),
+                        color: newSkillRating === value ? '#fff' : (dark ? '#888' : '#666'),
+                        fontSize: 11, fontWeight: newSkillRating === value ? 700 : 500,
+                        cursor: 'pointer', textAlign: 'center'
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <button 
+                onClick={() => setShowAddSkillModal(false)} 
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: dark ? 'rgba(255,255,255,0.1)' : '#f3f4f6', 
+                  color: T.text, border: 'none', borderRadius: 10, 
+                  fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  if (!newSkillName.trim()) {
+                    toast.error('Please enter a skill name');
+                    return;
+                  }
+                  setSavingSkill(true);
+                  try {
+                    const token = localStorage.getItem('token');
+                    const employeeId = rawData?.user?.zensar_id || rawData?.user?.ZensarID || rawData?.user?.id;
+                    const res = await fetch(`${API_BASE}/api/skills`, {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                      },
+                      body: JSON.stringify({
+                        employeeId: employeeId,
+                        skillName: newSkillName.trim(),
+                        rating: newSkillRating,
+                        includeInResume: true
+                      })
+                    });
+                    if (res.ok) {
+                      toast.success(`Skill "${newSkillName}" added successfully!`);
+                      // Add to visible skills
+                      setVisibleSkills({ ...visibleSkills, [newSkillName.trim()]: true });
+                      setShowAddSkillModal(false);
+                      window.location.reload();
+                    } else {
+                      const err = await res.json().catch(() => ({}));
+                      toast.error(err.error || 'Failed to add skill');
+                    }
+                  } catch (err) {
+                    toast.error('Error adding skill');
+                  } finally {
+                    setSavingSkill(false);
+                  }
+                }}
+                disabled={savingSkill}
+                style={{ 
+                  flex: 1, padding: '12px', 
+                  background: 'linear-gradient(135deg, #8B5CF6, #6366F1)', 
+                  color: '#fff', border: 'none', borderRadius: 10, 
+                  fontWeight: 700, cursor: savingSkill ? 'not-allowed' : 'pointer',
+                  opacity: savingSkill ? 0.7 : 1
+                }}
+              >
+                {savingSkill ? 'Saving...' : 'Add Skill'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

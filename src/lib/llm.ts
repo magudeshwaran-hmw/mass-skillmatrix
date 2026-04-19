@@ -136,7 +136,7 @@ export const callLLM = async (
           },
           body: JSON.stringify({
             model: CLOUD_MODEL,
-            max_tokens: 1024,
+            max_tokens: 4096,
             messages: [{ role: 'user', content: prompt }],
           }),
         }),
@@ -149,17 +149,46 @@ export const callLLM = async (
     }
 
     // ── PARSE JSON RESPONSE ───────────────────────────────────
-    // Some models (especially local/small ones) wrap the result in conversation.
-    // We try to extract the first/largest JSON object or array.
-    const extractJSON = (txt: string) => {
-      const match = txt.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-      return match ? match[0] : txt;
+    // Some models wrap the result in conversation or truncate it.
+    // We try to extract and repair the JSON before parsing.
+    const extractJSON = (txt: string): string => {
+      // Remove markdown code fences
+      let t = txt.replace(/```json/g, '').replace(/```/g, '').trim();
+      // Find the outermost { ... } block
+      const start = t.indexOf('{');
+      if (start === -1) return t;
+      // Find matching closing brace (handle nesting)
+      let depth = 0;
+      let end = -1;
+      for (let i = start; i < t.length; i++) {
+        if (t[i] === '{') depth++;
+        else if (t[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+      }
+      if (end !== -1) return t.slice(start, end + 1);
+      // JSON was truncated — attempt to close all open braces/brackets
+      const partial = t.slice(start);
+      let repaired = partial;
+      let openBraces = 0, openBrackets = 0;
+      let inString = false, escape = false;
+      for (const ch of partial) {
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"') { inString = !inString; continue; }
+        if (inString) continue;
+        if (ch === '{') openBraces++;
+        else if (ch === '}') openBraces--;
+        else if (ch === '[') openBrackets++;
+        else if (ch === ']') openBrackets--;
+      }
+      // Remove trailing comma before closing
+      repaired = repaired.replace(/,\s*$/, '');
+      // Close open brackets then braces
+      repaired += ']'.repeat(Math.max(0, openBrackets));
+      repaired += '}'.repeat(Math.max(0, openBraces));
+      return repaired;
     };
 
-    const clean = extractJSON(rawText)
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .trim();
+    const clean = extractJSON(rawText).trim();
 
     let parsed;
     try {

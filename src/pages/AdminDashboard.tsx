@@ -9,7 +9,7 @@ import { SKILLS, MOCK_EMPLOYEES } from '@/lib/mockData';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, TrendingUp, AlertTriangle, Award, Download, Edit2, Plus,
-  BarChart3, CheckCircle2, Search, Eye, FileSpreadsheet, RefreshCw, Grid, X, Settings, Shield, Lock, Mail, Phone, Calendar, Briefcase, Filter, Upload, Sparkles, FileUp, Trash2
+  BarChart3, CheckCircle2, Search, Eye, FileSpreadsheet, RefreshCw, Grid, X, Settings, Shield, Lock, Mail, Phone, Calendar, Briefcase, Filter, Upload, Sparkles, FileUp, Trash2, GraduationCap, Info
 } from 'lucide-react';
 
 import { toast } from '@/lib/ToastContext';
@@ -24,6 +24,7 @@ import SkillMatrixPage from './SkillMatrixPage';
 import CertificationsPage from './CertificationsPage';
 import ProjectsPage from './ProjectsPage';
 import EducationPage from './EducationPage';
+import AchievementsPage from './AchievementsPage';
 import AIIntelligencePage from './AIIntelligencePage';
 import AdminResumeUploadPage from './AdminResumeUploadPage';
 import ResumeBuilderPage from './ResumeBuilderPage';
@@ -46,7 +47,7 @@ export default function AdminDashboard() {
   const { dark } = useDark();
   const T = mkTheme(dark);
 
-  const [activeTab, setActiveTab] = useState<'Overview' | 'Employees' | 'Manage People' | 'Skill Heatmap'>('Overview');
+  const [activeTab, setActiveTab] = useState<'Overview' | 'Manage Employees' | 'Skill Heatmap'>('Overview');
   const [sortOrder, setSortOrder] = useState<'A-Z' | 'Z-A' | 'Newest' | 'Oldest'>('A-Z');
   const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
   const [newEmployee, setNewEmployee] = useState({
@@ -57,6 +58,16 @@ export default function AdminDashboard() {
   const [resumeScanLoading, setResumeScanLoading] = useState(false);
   const [resumeScanned, setResumeScanned] = useState(false);
   const [emailWarningConfirmed, setEmailWarningConfirmed] = useState(false);
+  const [showEmployeeDetails, setShowEmployeeDetails] = useState(false);
+  const [showResumeUploadPage, setShowResumeUploadPage] = useState(false);
+  const [createdEmployeeId, setCreatedEmployeeId] = useState<string>('');
+  const [extractedDetails, setExtractedDetails] = useState({
+    skills: [] as { name: string; rating: number }[],
+    projects: [] as { name: string; description: string; technologies: string[]; duration: string }[],
+    certificates: [] as { name: string; issuer: string; date: string }[],
+    education: [] as { degree: string; institution: string; year: string }[]
+  });
+  const [rawExtractedData, setRawExtractedData] = useState<any>(null);
   const resumeFileRef = useRef<HTMLInputElement>(null);
 
   // ── Extract text from PDF (with proper visual line detection) ──
@@ -196,6 +207,125 @@ JSON:`;
         }
       } catch (e) { console.warn('[Resume Scan] LLM failed:', e); }
 
+      // Step 2b: Extract Skills, Projects, Certificates, Education, Achievements (COMPREHENSIVE)
+      let detailsExtraction: any = {};
+      try {
+        const detailsPrompt = `🚨 CRITICAL EXTRACTION TASK - READ CAREFULLY 🚨
+
+You are extracting data from a PROFESSIONAL RESUME. Extract ALL skills, projects, achievements, certifications, and education.
+
+STEP 1: EXTRACT SKILLS FROM PREDEFINED LIST ONLY (CRITICAL)
+⚠️ ONLY extract skills that EXACTLY MATCH these 32 predefined skills:
+
+TOOLS: Selenium, Appium, JMeter, Postman, JIRA, TestRail
+TECHNOLOGIES: Python, Java, JavaScript, TypeScript, C#, SQL
+APPLICATIONS: API Testing, Mobile Testing, Performance Testing, Security Testing, Database Testing
+DOMAINS: Banking, Healthcare, E-Commerce, Insurance, Telecom
+TESTING TYPES: Functional Testing, Automation Testing, Regression Testing, UAT
+DEVOPS: Git, Jenkins, Docker, Azure DevOps
+AI: ChatGPT/Prompt Engineering, AI Test Automation
+
+EXTRACTION RULES:
+- Look in "Core competencies/skills", "Tools", "Databases", "Domains", "Expertise" sections
+- ONLY extract skills that EXACTLY match the 32 names above (case-sensitive)
+- DO NOT extract: AWS, GCP, Oracle, DB2, Postgres, Test Management, Scrum Master, HP ALM, ACCELQ, or any other skills not in the list
+- Rate each skill 1-5 based on prominence (Primary skills = 4-5, Secondary = 2-3, Mentioned = 1-2)
+- Extract AT LEAST 5-10 matching skills from the resume
+
+CRITICAL: If you extract less than 5 skills, YOU HAVE FAILED.
+
+STEP 2: EXTRACT ALL PROJECTS
+- Look for "PROFESSIONAL EXPERIENCE" section
+- Each line starting with "Project -" is a SEPARATE project
+- Extract: name, client, role, startDate, endDate, description, technologies, duration
+
+STEP 3: EXTRACT ALL ACHIEVEMENTS
+⚠️ STRICT RULE - Only extract REAL awards/recognitions. DO NOT extract project metrics or outcomes.
+
+✅ VALID achievements (extract these):
+- Named awards: Pegasus, Gold Award, Silver Award, Bronze Medal, Best Team Award, Star Award
+- External recognitions: Kaggle medals, hackathon wins, competition rankings
+- Client appreciation: "Appreciated by client for quality and timely delivery"
+
+❌ INVALID - DO NOT extract these as achievements:
+- Project metrics: "Reduced false positive rate by 20%", "Improved accuracy to 82%"
+- Project outcomes: "Data Quality Improvement", "Page Load Speed Improvement"
+- Technical improvements: "Reduced manual review time", "Experiment time reduction"
+- Anything that is a project result/KPI/metric
+
+WHERE TO LOOK:
+- "Awards" section: extract named awards (Pegasus, Gold, Silver, etc.)
+- "Major achievements" in each project: ONLY if it is a NAMED AWARD, not a metric
+- "Any client appreciation" in each project: extract client appreciation text
+
+IF NO AWARDS EXIST IN THE RESUME → return empty achievements array []
+
+STEP 4: EXTRACT ALL CERTIFICATIONS
+- Look in "Certifications" section
+- Extract each bullet point as separate certification
+
+STEP 5: EXTRACT EDUCATION
+- Look in "Education" section
+
+RESUME TEXT (${resumeText.length} characters):
+${resumeText.slice(0, 50000)}
+
+OUTPUT FORMAT (STRICT JSON):
+{
+  "skills": [
+    {"name": "JIRA", "rating": 4},
+    {"name": "Azure DevOps", "rating": 4},
+    {"name": "GCP", "rating": 3},
+    {"name": "AWS", "rating": 3},
+    {"name": "HP ALM", "rating": 3},
+    {"name": "Test Management", "rating": 5},
+    {"name": "Scrum Master", "rating": 5},
+    {"name": "Project Management", "rating": 4},
+    {"name": "Banking", "rating": 4},
+    {"name": "Insurance", "rating": 3},
+    {"name": "Healthcare", "rating": 2},
+    {"name": "Oracle", "rating": 3},
+    {"name": "DB2", "rating": 3},
+    {"name": "Postgres SQL", "rating": 3}
+  ],
+  "projects": [
+    {
+      "name": "Tesco Bank - IT Infrastructure Testing",
+      "client": "Tesco Bank",
+      "role": "Test Manager",
+      "description": "IT Infrastructure testing for banking systems...",
+      "duration": "Sep 2025 to Feb 2026",
+      "technologies": ["AWS", "Azure", "Google Cloud"]
+    }
+  ],
+  "certifications": [
+    {"name": "Google Cloud Digital Leader", "issuer": "Google", "date": ""}
+  ],
+  "education": [
+    {"degree": "B. Tech in Information Technology", "institution": "", "year": "2003-2007"}
+  ],
+  "achievements": [
+    {"title": "Pegasus Award", "type": "Pegasus", "description": "", "project": ""}
+  ]
+}
+
+CRITICAL REQUIREMENTS:
+- Extract ONLY skills from the 32 predefined skills list (JIRA, Python, Banking, etc.)
+- Extract AT LEAST 5-10 matching skills from the predefined list
+- Extract AT LEAST 5 projects if resume has work experience
+- Extract ALL certifications and achievements
+- Rate skills 1-5: Primary skills = 4-5, Secondary skills = 2-3, Mentioned = 1-2
+- YOU FAIL if you extract less than 5 skills OR if you extract skills not in the predefined list
+
+Return ONLY valid JSON. NO markdown. NO explanations.`;
+
+        const detailsResult = await callResumeLLM(detailsPrompt);
+        if (detailsResult.data) {
+          detailsExtraction = detailsResult.data;
+          console.log('[Resume Scan] Comprehensive Details Extraction Success:', detailsExtraction);
+        }
+      } catch (e) { console.warn('[Resume Scan] Details extraction failed:', e); }
+
       // Step 3: Merge — LLM fills where regex couldn't, regex wins for email/phone
       const final = {
         name:        (llm.name?.trim()        || rxName        || ''),
@@ -209,7 +339,7 @@ JSON:`;
       };
       console.log('[Resume Scan] Final:', final);
 
-      // Step 4: Apply
+      // Step 4: Apply basic info
       const filled: string[] = [];
       const updates: Record<string, string> = {};
       if (final.name)        { updates.name        = final.name.slice(0, 60);         filled.push('Name'); }
@@ -221,10 +351,75 @@ JSON:`;
       if (final.yearsIT)     { updates.yearsIT     = String(final.yearsIT);           filled.push('Years IT'); }
       if (final.yearsZensar) { updates.yearsZensar = String(final.yearsZensar); }
 
-      if (filled.length > 0) {
+      // Apply extracted details - FILTER TO ONLY PREDEFINED 32 SKILLS
+      const PREDEFINED_SKILLS = [
+        'Selenium', 'Appium', 'JMeter', 'Postman', 'JIRA', 'TestRail',
+        'Python', 'Java', 'JavaScript', 'TypeScript', 'C#', 'SQL',
+        'API Testing', 'Mobile Testing', 'Performance Testing', 'Security Testing', 'Database Testing',
+        'Banking', 'Healthcare', 'E-Commerce', 'Insurance', 'Telecom',
+        'Functional Testing', 'Automation Testing', 'Regression Testing', 'UAT',
+        'Git', 'Jenkins', 'Docker', 'Azure DevOps',
+        'ChatGPT/Prompt Engineering', 'AI Test Automation'
+      ];
+      
+      const extractedSkills = Array.isArray(detailsExtraction.skills) 
+        ? detailsExtraction.skills
+            .map((s: any) => {
+              if (typeof s === 'string') return { name: s, rating: 3 };
+              if (typeof s === 'object' && s !== null) return { name: s.name || s.skill || '', rating: s.rating || s.level || 3 };
+              return { name: String(s), rating: 3 };
+            })
+            .filter((s: any) => PREDEFINED_SKILLS.includes(s.name)) // ONLY KEEP PREDEFINED SKILLS
+        : [];
+      const extractedProjects = Array.isArray(detailsExtraction.projects) ? detailsExtraction.projects.map((p: any) => ({ name: p.name || '', description: p.description || '', technologies: p.technologies || [], duration: p.duration || '' })) : [];
+      // Handle both 'certifications' and 'certificates' field names from LLM
+      const certsList = detailsExtraction.certifications || detailsExtraction.certificates || [];
+      const extractedCertificates = Array.isArray(certsList) ? certsList.map((c: any) => ({ name: c.name || '', issuer: c.issuer || '', date: c.date || '' })) : [];
+      const extractedEducation = Array.isArray(detailsExtraction.education) ? detailsExtraction.education.map((e: any) => ({ degree: e.degree || '', institution: e.institution || '', year: e.year || '' })) : [];
+
+      setExtractedDetails({
+        skills: extractedSkills,
+        projects: extractedProjects,
+        certificates: extractedCertificates,
+        education: extractedEducation
+      });
+
+      // Save raw extracted data for comparison page (COMPREHENSIVE FORMAT)
+      // Determine primary and secondary skills from extracted skills (highest rated)
+      const sortedSkills = [...extractedSkills].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      const primarySkill = sortedSkills[0]?.name || '';
+      const secondarySkill = sortedSkills[1]?.name || '';
+      
+      setRawExtractedData({
+        skills: detailsExtraction.skills || [],
+        projects: detailsExtraction.projects || [],
+        certifications: detailsExtraction.certifications || detailsExtraction.certificates || [],
+        education: detailsExtraction.education || [],
+        achievements: detailsExtraction.achievements || [],
+        profile: {
+          name: final.name,
+          email: final.email,
+          phone: final.phone,
+          designation: final.designation,
+          location: final.location,
+          yearsIT: final.yearsIT,
+          yearsZensar: final.yearsZensar,
+          primarySkill: primarySkill,
+          secondarySkill: secondarySkill
+        }
+      });
+
+      if (filled.length > 0 || extractedSkills.length > 0 || extractedProjects.length > 0) {
         setNewEmployee(prev => ({ ...prev, ...updates }));
         setResumeScanned(true);
-        toast.success(`✅ Auto-filled: ${filled.join(' · ')}`);
+        const allFilled = [...filled];
+        if (extractedSkills.length > 0) allFilled.push(`${extractedSkills.length} Skills`);
+        if (extractedProjects.length > 0) allFilled.push(`${extractedProjects.length} Projects`);
+        if (extractedCertificates.length > 0) allFilled.push(`${extractedCertificates.length} Certificates`);
+        if (extractedEducation.length > 0) allFilled.push(`${extractedEducation.length} Education`);
+        const achievementsCount = Array.isArray(detailsExtraction.achievements) ? detailsExtraction.achievements.length : 0;
+        if (achievementsCount > 0) allFilled.push(`${achievementsCount} Achievements`);
+        toast.success(`✅ Auto-filled: ${allFilled.join(' · ')}`);
       } else {
         toast.error('Could not extract details. Please fill the form manually.');
       }
@@ -261,7 +456,7 @@ JSON:`;
   const [previewUser, setPreviewUser] = useState<any | null>(null);
   const [previewData, setPreviewData] = useState<AppData | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [popupActiveTab, setPopupActiveTab] = useState<'Dashboard' | 'Skills' | 'Certifications' | 'Projects' | 'Education' | 'Resume Upload' | 'Personal Details'>('Dashboard');
+  const [popupActiveTab, setPopupActiveTab] = useState<'ZenRadar' | 'ZenScan' | 'ZenMatrix' | 'My Education' | 'My Projects' | 'My Certification' | 'My Achievements' | 'ZenProfile'>('ZenRadar');
   const [deleteConfirming, setDeleteConfirming] = useState(false);
 
   // ── DELETE employee ──
@@ -306,7 +501,7 @@ JSON:`;
     setIsPreviewLoading(true);
     setGlobalLoading('Accessing Employee Portfolio...');
     setPreviewUser(emp);
-    setPopupActiveTab('Dashboard');
+    setPopupActiveTab('ZenRadar');
     setEditForm({
       name: emp.name || emp.Name || '',
       zensar_id: emp.zensar_id || emp.ZensarID || emp.id || '',
@@ -367,17 +562,38 @@ JSON:`;
           return sid === eid || (zid && sid === zid);
         });
 
-        const ratingsArray = SKILLS.map(sk => {
+        // Map predefined skills
+        const predefinedRatings = SKILLS.map(sk => {
           const raw = eSkillsRaw.find((s: any) =>
             String(s.skill_name || '').toLowerCase() === sk.name.toLowerCase()
           );
           return {
             skillId: sk.id,
+            skillName: sk.name,
             selfRating: (raw?.self_rating || 0) as any,
             managerRating: raw?.manager_rating || null,
-            validated: raw?.validated || false
+            validated: raw?.validated || false,
+            isCustom: false
           };
         });
+
+        // Find custom skills (not in predefined list) with ratings > 0
+        const predefinedSkillNames = new Set(SKILLS.map(sk => sk.name.toLowerCase()));
+        const customSkills = eSkillsRaw
+          .filter((s: any) => {
+            const skillName = String(s.skill_name || '').toLowerCase();
+            return !predefinedSkillNames.has(skillName) && (s.self_rating > 0 || s.manager_rating > 0);
+          })
+          .map((s: any, idx: number) => ({
+            skillId: `custom_${idx}_${String(s.skill_name).replace(/\s+/g, '_')}`,
+            skillName: s.skill_name,
+            selfRating: s.self_rating || 0,
+            managerRating: s.manager_rating || null,
+            validated: s.validated || false,
+            isCustom: true
+          }));
+
+        const ratingsArray = [...predefinedRatings, ...customSkills];
 
         const eCerts = certifications.filter((c: any) => {
           const cid = String(c.EmployeeID || c.employee_id || '').toLowerCase();
@@ -441,7 +657,7 @@ JSON:`;
     }
   };
 
-  const handleAddEmployee = async () => {
+  const handleAddEmployee = async (openDetails = false, skipEmailCheck = false) => {
     // Validation
     if (!newEmployee.employeeId || !newEmployee.name || !newEmployee.email || !newEmployee.password) {
       toast.error('Zensar ID, Full Name, Email and Password are required');
@@ -451,74 +667,85 @@ JSON:`;
       toast.error('Zensar ID must be exactly 6 digits');
       return;
     }
-    if (!newEmployee.email.includes('@')) {
-      toast.error('Please enter a valid email address');
-      return;
-    }
-    if (!newEmployee.email.includes('@zensar.com') && !emailWarningConfirmed) {
-      setEmailWarningConfirmed(true); // show inline warning — don't proceed yet
-      return;
-    }
-    if (newEmployee.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
-      return;
-    }
+    // Check password match
     if (newEmployee.password !== newEmployee.confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
-    setGlobalLoading('Creating employee record...');
-    try {
-      const res = await fetch(`${API_BASE}/employees`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ZensarID: newEmployee.employeeId.trim(),
-          EmployeeName: newEmployee.name.trim(),
-          Email: newEmployee.email.trim(),
-          Phone: newEmployee.phone.trim(),
-          Designation: newEmployee.designation.trim() || 'Employee',
-          Location: newEmployee.location.trim() || 'India',
-          department: newEmployee.department.trim(),
-          yearsIT: parseInt(newEmployee.yearsIT) || 0,
-          yearsZensar: parseInt(newEmployee.yearsZensar) || 0,
-          password: newEmployee.password,
-        })
-      });
-      if (res.ok) {
-        toast.success(`✅ Employee "${newEmployee.name}" created! Switching to employee list...`);
-        setShowAddEmployeeModal(false);
-        setResumeScanned(false);
-        setEmailWarningConfirmed(false);
-        setNewEmployee({ name: '', email: '', designation: '', employeeId: '', location: '', phone: '', department: '', yearsIT: '', yearsZensar: '', password: '', confirmPassword: '' });
-        setSearch('');
-        setFilters({
-          role: '',
-          minExperience: '',
-          maxExperience: '',
-          minProjects: '',
-          minCertifications: '',
-          skillLevel: '',
-          completionRange: '',
-          hasProjects: false,
-          hasCertifications: false,
-          isValidated: false,
-          selectedSkills: [],
-        });
-        setActiveTab('Employees');
-        await loadAllData();
-      } else {
-        const err = await res.json().catch(() => ({ error: 'Failed to create employee' }));
-        toast.error(err.error || 'Failed to create employee');
-      }
-    } catch (e) {
-      toast.error('Network error while creating employee');
-    } finally {
-      setGlobalLoading(null);
+    // If email is not @zensar.com and warning not yet confirmed, show warning
+    if (!newEmployee.email.includes('@zensar.com') && !skipEmailCheck && !emailWarningConfirmed) {
+      setEmailWarningConfirmed(true);
+      return;
+    }
+    // Create employee account with extracted resume data
+    // Determine primary skill and domain from extracted skills
+    const sortedSkills = [...extractedDetails.skills].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    const primarySkill = sortedSkills[0]?.name || '';
+    const domainSkills = ['Banking', 'Insurance', 'Healthcare', 'E-Commerce', 'Telecom', 'Retail', 'Energy & Utilities'];
+    const primaryDomain = extractedDetails.skills.find(s => domainSkills.includes(s.name))?.name || '';
+    
+    const payload = {
+      name: newEmployee.name,
+      email: newEmployee.email,
+      employeeId: newEmployee.employeeId,
+      phone: newEmployee.phone,
+      designation: newEmployee.designation,
+      department: newEmployee.department,
+      location: newEmployee.location,
+      yearsIT: parseFloat(newEmployee.yearsIT) || 0,
+      yearsZensar: parseFloat(newEmployee.yearsZensar) || 0,
+      password: newEmployee.password,
+      primarySkill: primarySkill,
+      primaryDomain: primaryDomain,
+      // Include extracted resume data
+      skills: extractedDetails.skills,
+      projects: extractedDetails.projects,
+      certificates: extractedDetails.certificates,
+      education: extractedDetails.education
+    };
+    
+    const res = await fetch(`${API_BASE}/admin/create-employee`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const errorMsg = err.error || err.message || 'Failed to create employee';
+      toast.error(errorMsg);
+      setEmailWarningConfirmed(false);
+      return;
+    }
+    
+    const result = await res.json();
+    const savedCounts = {
+      skills: payload.skills?.length || 0,
+      projects: payload.projects?.length || 0,
+      certificates: payload.certificates?.length || 0,
+      education: payload.education?.length || 0
+    };
+    
+    toast.success(`✅ "${newEmployee.name}" created — ${savedCounts.skills} skills, ${savedCounts.projects} projects, ${savedCounts.certificates} certs!`);
+
+    if (openDetails && rawExtractedData) {
+      // Employee now exists in DB — open comparison page with correct ID
+      setCreatedEmployeeId(newEmployee.employeeId);
+      setShowAddEmployeeModal(false);
+      setEmailWarningConfirmed(false);
+      setShowResumeUploadPage(true);
+    } else {
+      setShowAddEmployeeModal(false);
+      setResumeScanned(false);
+      setEmailWarningConfirmed(false);
+      setShowEmployeeDetails(false);
+      setNewEmployee({ name: '', email: '', designation: '', employeeId: '', location: '', phone: '', department: '', yearsIT: '', yearsZensar: '', password: '', confirmPassword: '' });
+      setExtractedDetails({ skills: [] as {name: string; rating: number}[], projects: [], certificates: [], education: [] });
+      setRawExtractedData(null);
+      setActiveTab('Employees');
+      loadAllData();
     }
   };
-
-
   const stats = {
     teamSize: employees.length,
     submitted: employees.filter(e => e.submitted).length,
@@ -538,15 +765,15 @@ JSON:`;
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '24px 5vw 40px', fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '24px 7vw 40px', fontFamily: "'Inter', sans-serif" }}>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         
         {/* Title & Actions */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 30 }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: -0.5 }}>Admin Dashboard</h1>
-            <p style={{ margin: '4px 0 0', color: T.sub, fontSize: 14, fontWeight: 500 }}>Global team capability analytics</p>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: -0.5 }}>ZenRadar</h1>
+            <p style={{ margin: '4px 0 0', color: T.sub, fontSize: 14, fontWeight: 500 }}>Strategic visibility into team capabilities, performance metrics, and skill distribution for informed decision-making.</p>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
             <button onClick={loadAllData} style={{ padding: '10px 22px', borderRadius: 12, background: T.card, border: `1px solid ${T.bdr}`, color: T.text, fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -567,13 +794,12 @@ JSON:`;
         </div>
 
         {/* Main Viewport */}
-        <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 20, padding: '24px 5vw', maxWidth: '100%', boxSizing: 'border-box' }}>
+        <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 20, padding: '24px 7vw', maxWidth: '100%', boxSizing: 'border-box' }}>
           
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)', padding: 4, borderRadius: 12, width: 'fit-content', maxWidth: '100%', marginBottom: 24, border: `1px solid ${T.bdr}` }}>
             {[
               { id: 'Overview', icon: BarChart3 },
-              { id: 'Employees', icon: Users },
-              { id: 'Manage People', icon: Users },
+              { id: 'Manage Employees', icon: Users },
               { id: 'Skill Heatmap', icon: Grid }
             ].map((t: any) => (
               <button
@@ -753,7 +979,7 @@ JSON:`;
                        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flex: '1 1 200px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                           <div style={{ flexShrink: 0 }}>
                              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, justifyContent: 'flex-end' }}>
-                                <span style={{ fontSize: 24, fontWeight: 900, color: e.completion >= 75 ? '#10B981' : '#3B82F6' }}>{e.completion}</span>
+                                <span style={{ fontSize: 20, fontWeight: 800, color: e.completion >= 75 ? '#10B981' : '#3B82F6' }}>{e.completion}</span>
                                 <span style={{ fontSize: 12, fontWeight: 800, color: T.sub }}>%</span>
                              </div>
                              <div style={{ width: 100, height: 6, borderRadius: 10, background: T.bdr, marginTop: 6, overflow: 'hidden' }}>
@@ -768,7 +994,7 @@ JSON:`;
             </div>
           )}
 
-          {activeTab === 'Manage People' && (
+          {activeTab === 'Manage Employees' && (
             <div style={{ animation: 'fadeIn 0.4s ease' }}>
               {/* Search & Filter Bar */}
               <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -1206,7 +1432,7 @@ JSON:`;
 
       {/* Modal Popup for Intelligence Audit */}
       {previewUser && (
-        <div style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(0,0,0,0.92)' : 'rgba(0,0,0,0.65)', backdropFilter: 'blur(20px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2vh 2vw' }}>
+        <div style={{ position: 'fixed', inset: 0, background: dark ? 'rgba(10,10,18,0.9)' : 'rgba(229,229,229,0.9)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2vh 2vw' }}>
           <div style={{ background: T.bg, borderRadius: '24px', width: '100%', maxWidth: 1300, height: '96vh', overflow: 'hidden', border: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', boxShadow: '0 30px 80px rgba(0,0,0,0.6)' }}>
             
             {/* Modal Top Bar */}
@@ -1217,7 +1443,7 @@ JSON:`;
                </div>
                
                <div style={{ display: 'flex', gap: 6, background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.05)', padding: 4, borderRadius: 12, overflowX: 'auto', flex: 1, minWidth: 200, WebkitOverflowScrolling: 'touch' }}>
-                {(['Dashboard', 'Skills', 'Certifications', 'Projects', 'Education', 'Resume Upload', 'Personal Details'] as const).map(tab => (
+                {(['ZenRadar', 'ZenScan', 'ZenMatrix', 'My Education', 'My Projects', 'My Certification', 'My Achievements', 'ZenProfile'] as const).map(tab => (
                    <button 
                      key={tab} 
                      onClick={() => setPopupActiveTab(tab)}
@@ -1298,13 +1524,14 @@ JSON:`;
                   isLoading: false, 
                   isPopup: true,
                     onTabChange: (path: any) => {
-                      const tabMap: Record<string, 'Dashboard' | 'Skills' | 'Certifications' | 'Projects' | 'Education' | 'Resume Upload' | 'Personal Details'> = {
-                        '/employee/skills': 'Skills',
-                        '/employee/certifications': 'Certifications',
-                        '/employee/projects': 'Projects',
-                        '/employee/education': 'Education',
-                        '/employee/resume-upload': 'Resume Upload',
-                                                '/employee/personal-details': 'Personal Details'
+                      const tabMap: Record<string, 'ZenRadar' | 'ZenScan' | 'ZenMatrix' | 'My Education' | 'My Projects' | 'My Certification' | 'My Achievements' | 'ZenProfile'> = {
+                        '/employee/skills': 'ZenMatrix',
+                        '/employee/certifications': 'My Certification',
+                        '/employee/projects': 'My Projects',
+                        '/employee/education': 'My Education',
+                        '/employee/resume-upload': 'ZenScan',
+                        '/employee/achievements': 'My Achievements',
+                        '/employee/personal-details': 'ZenProfile'
                       };
                       const p = typeof path === 'string' ? path : path?.path;
                       const tab = tabMap[p];
@@ -1326,7 +1553,7 @@ JSON:`;
                   }
                 }}>
                   <div style={{ animation: 'fadeIn 0.4s' }}>
-                    {popupActiveTab === 'Dashboard' && (
+                    {popupActiveTab === 'ZenRadar' && (
                       <div>
                         {/* ── Full Profile Summary Card ── */}
                         <div style={{ padding: '20px 4vw 0' }}>
@@ -1353,7 +1580,7 @@ JSON:`;
                                 ].map(s => (
                                   <div key={s.l} style={{ textAlign: 'center', background: dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: 12, padding: '10px 12px', flex: '1 1 100px', maxWidth: 140 }}>
                                     <div style={{ fontSize: 18, fontWeight: 900, color: s.c }}>{s.v}</div>
-                                    <div style={{ fontSize: 9, fontWeight: 700, color: T.sub, textTransform: 'uppercase', marginTop: 2 }}>{s.l}</div>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: T.sub, textTransform: 'uppercase', marginTop: 2 }}>{s.l}</div>
                                   </div>
                                 ))}
                               </div>
@@ -1428,13 +1655,14 @@ JSON:`;
                           </div>
                         </div>
                         <EmployeeDashboard key="dashboard" isPopup={true} overrideData={previewData!} onTabChange={(path: any) => {
-                           const tabMap: Record<string, 'Dashboard' | 'Skills' | 'Certifications' | 'Projects' | 'Education' | 'Resume Upload' | 'Personal Details'> = {
-                            '/employee/skills': 'Skills',
-                            '/employee/certifications': 'Certifications',
-                            '/employee/projects': 'Projects',
-                            '/employee/education': 'Education',
-                            '/employee/resume-upload': 'Resume Upload',
-                                                '/employee/personal-details': 'Personal Details'
+                           const tabMap: Record<string, 'ZenRadar' | 'ZenScan' | 'ZenMatrix' | 'My Education' | 'My Projects' | 'My Certification' | 'My Achievements' | 'ZenProfile'> = {
+                            '/employee/skills': 'ZenMatrix',
+                            '/employee/certifications': 'My Certification',
+                            '/employee/projects': 'My Projects',
+                            '/employee/education': 'My Education',
+                            '/employee/resume-upload': 'ZenScan',
+                            '/employee/achievements': 'My Achievements',
+                            '/employee/personal-details': 'ZenProfile'
                           };
                           const tab = tabMap[typeof path === 'string' ? path : path?.path];
                           if (tab) setPopupActiveTab(tab);
@@ -1442,28 +1670,33 @@ JSON:`;
                       </div>
                     )}
 
-                    {popupActiveTab === 'Skills' && <SkillMatrixPage key="skills" isPopup={true} />}
-                    {popupActiveTab === 'Certifications' && <CertificationsPage key="certs" isPopup={true} />}
-                    {popupActiveTab === 'Projects' && <ProjectsPage key="projects" isPopup={true} />}
-                    {popupActiveTab === 'Education' && <EducationPage key="education" isPopup={true} />}
-                                        {popupActiveTab === 'Resume Upload' && (
+                    {popupActiveTab === 'ZenMatrix' && <SkillMatrixPage key="skills" isPopup={true} />}
+                    {popupActiveTab === 'My Certification' && <CertificationsPage key="certs" isPopup={true} />}
+                    {popupActiveTab === 'My Projects' && <ProjectsPage key="projects" isPopup={true} />}
+                    {popupActiveTab === 'My Education' && <EducationPage key="education" isPopup={true} />}
+                    {popupActiveTab === 'My Achievements' && <AchievementsPage key="achievements" isPopup={true} />}
+                                        {popupActiveTab === 'ZenScan' && (
                       <AdminResumeUploadPage 
                         key="resume" 
                         employeeId={previewUser.id} 
                         employeeName={previewUser.name} 
                         existingData={{
-                          skills: Object.entries(previewData?.ratings || {}).map(([name, rating]) => ({
-                            skillId: name,
-                            selfRating: rating as any,
-                            managerRating: null,
-                            validated: false
-                          })),
-                          projects: previewData?.projects || [],
-                          certifications: previewData?.certifications || [],
+                          skills: previewData
+                            ? Object.entries(previewData.ratings || {})
+                                .filter(([, rating]) => (rating as number) > 0)
+                                .map(([name, rating]) => ({
+                                  skillId: name,
+                                  selfRating: rating as any,
+                                  managerRating: null,
+                                  validated: false
+                                }))
+                            : (previewUser?.skills || []).filter((s: any) => s.selfRating > 0),
+                          projects: previewData?.projects || previewUser?.projects || [],
+                          certifications: previewData?.certifications || previewUser?.certifications || [],
                           education: previewData?.education || [],
-                          profile: previewData?.user
+                          profile: previewData?.user || previewUser
                         }}
-                        onClose={() => setPopupActiveTab('Dashboard')}
+                        onClose={() => setPopupActiveTab('ZenRadar')}
                         onSuccess={() => {
                           loadAppData(previewUser.id)
                             .then(data => {
@@ -1476,16 +1709,16 @@ JSON:`;
                             .catch(() => {
                               toast.warning('Data saved but could not refresh preview. Please reopen the preview.');
                             });
-                          setPopupActiveTab('Dashboard');
+                          setPopupActiveTab('ZenRadar');
                         }}
                       />
                     )}
                     
-                    {popupActiveTab === 'Personal Details' && (
+                    {popupActiveTab === 'ZenProfile' && (
                       <div style={{ padding: window.innerWidth < 600 ? 16 : 40, maxWidth: 800, margin: '0 auto' }}>
                          <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom: window.innerWidth < 600 ? 20 : 32 }}>
                             <Shield size={24} color="#3B82F6" />
-                            <h2 style={{ fontSize: window.innerWidth < 600 ? 18 : 22, fontWeight: 900, margin: 0, color: T.text }}>Personal Details</h2>
+                            <h2 style={{ fontSize: window.innerWidth < 600 ? 18 : 22, fontWeight: 700, margin: 0, color: T.text, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '-0.02em' }}>Personal Details</h2>
                          </div>
 
                          <div style={{ display:'grid', gridTemplateColumns: window.innerWidth < 600 ? '1fr' : '1fr 1fr', gap: 16 }}>
@@ -1565,8 +1798,7 @@ JSON:`;
       {showAddEmployeeModal && (
         <div style={{
           position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.6)',
-          backdropFilter: 'blur(6px)',
+          background: dark ? 'rgba(15,15,26,0.9)' : 'rgba(245,245,245,0.9)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 2000, padding: 20
         }}>
@@ -1586,7 +1818,7 @@ JSON:`;
                 <h2 style={{ fontSize: 20, fontWeight: 900, color: T.text, margin: 0 }}>Add New Employee</h2>
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: T.sub }}>Fill in the details to create a Zensar employee account</p>
               </div>
-              <button onClick={() => { setShowAddEmployeeModal(false); setResumeScanned(false); setNewEmployee({ name: '', email: '', designation: '', employeeId: '', location: '', phone: '', department: '', yearsIT: '', yearsZensar: '', password: '', confirmPassword: '' }); }} style={{ background: dark ? 'rgba(255,255,255,0.06)' : '#f3f4f6', border: 'none', color: T.text, cursor: 'pointer', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={() => { setShowAddEmployeeModal(false); setResumeScanned(false); setEmailWarningConfirmed(false); setShowEmployeeDetails(false); setShowResumeUploadPage(false); setNewEmployee({ name: '', email: '', designation: '', employeeId: '', location: '', phone: '', department: '', yearsIT: '', yearsZensar: '', password: '', confirmPassword: '' }); setExtractedDetails({ skills: [] as {name: string; rating: number}[], projects: [], certificates: [], education: [] }); setRawExtractedData(null); }} style={{ background: dark ? 'rgba(255,255,255,0.06)' : '#f3f4f6', border: 'none', color: T.text, cursor: 'pointer', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={18} />
               </button>
             </div>
@@ -1685,7 +1917,7 @@ JSON:`;
                     {inp('Mobile Number', 'phone', { required: false, placeholder: '+91 98765 43210', type: 'tel' })}
 
                     {/* ROW 4: Email */}
-                    {inp('Zensar Email', 'email', { required: true, placeholder: 'rahul@zensar.com', type: 'email', hint: 'Must be a @zensar.com address' })}
+                    {inp('Email', 'email', { required: true, placeholder: 'rahul@zensar.com or rahul@gmail.com', type: 'email', hint: 'Any valid email accepted (zensar.com, gmail.com, etc.)' })}
 
                     {/* ROW 5: Designation + Department (2-col) */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
@@ -1747,21 +1979,21 @@ JSON:`;
               })()}
 
               {/* ── Inline Email Warning Banner ── */}
-              {emailWarningConfirmed && !newEmployee.email.includes('@zensar.com') && (
+              {emailWarningConfirmed && (
                 <div style={{
                   marginTop: 16, padding: '14px 16px',
-                  background: 'rgba(245,158,11,0.1)',
-                  border: '1px solid rgba(245,158,11,0.4)',
+                  background: 'rgba(59,130,246,0.1)',
+                  border: '1px solid rgba(59,130,246,0.3)',
                   borderRadius: 12,
-                  display: 'flex', flexDirection: 'column', gap: 10
+                  display: 'flex', alignItems: 'flex-start', gap: 12
                 }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <span style={{ fontSize: 18 }}>⚠️</span>
+                  <Info size={20} style={{ color: '#3B82F6', flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ flex: 1 }}>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: '#F59E0B' }}>Non-Zensar Email Detected</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#3B82F6' }}>External Email Detected</div>
                       <div style={{ fontSize: 12, color: T.sub, marginTop: 3 }}>
-                        <b style={{ color: T.text }}>{newEmployee.email}</b> is not a @zensar.com address.<br />
-                        Are you sure you want to create this account?
+                        <b style={{ color: T.text }}>{newEmployee.email}</b> is an external email.<br />
+                        You can still proceed with creating this account.
                       </div>
                     </div>
                   </div>
@@ -1773,7 +2005,7 @@ JSON:`;
                       ✏️ Change Email
                     </button>
                     <button
-                      onClick={handleAddEmployee}
+                      onClick={() => handleAddEmployee(false, true)}
                       style={{ flex: 2, padding: '9px', borderRadius: 8, border: 'none', background: '#F59E0B', color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: 12 }}
                     >
                       ✅ Yes, Create Anyway
@@ -1783,30 +2015,93 @@ JSON:`;
               )}
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap', pointerEvents: 'auto' }}>
                 <button
-                  onClick={() => { setShowAddEmployeeModal(false); setResumeScanned(false); setEmailWarningConfirmed(false); setNewEmployee({ name: '', email: '', designation: '', employeeId: '', location: '', phone: '', department: '', yearsIT: '', yearsZensar: '', password: '', confirmPassword: '' }); }}
+                  onClick={() => { setShowAddEmployeeModal(false); setResumeScanned(false); setEmailWarningConfirmed(false); setShowEmployeeDetails(false); setShowResumeUploadPage(false); setNewEmployee({ name: '', email: '', designation: '', employeeId: '', location: '', phone: '', department: '', yearsIT: '', yearsZensar: '', password: '', confirmPassword: '' }); setExtractedDetails({ skills: [] as {name: string; rating: number}[], projects: [], certificates: [], education: [] }); setRawExtractedData(null); }}
                   style={{ flex: 1, padding: '14px', borderRadius: 12, border: `1px solid ${T.bdr}`, background: 'none', color: T.text, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}
                 >
                   Cancel
                 </button>
+
+                {resumeScanned && rawExtractedData && (
+                  <button
+                    onClick={() => {
+                      setCreatedEmployeeId(newEmployee.employeeId);
+                      setShowAddEmployeeModal(false);
+                      setShowResumeUploadPage(true);
+                    }}
+                    disabled={!newEmployee.name || !newEmployee.email.includes('@') || !newEmployee.password || newEmployee.password !== newEmployee.confirmPassword || !newEmployee.employeeId || newEmployee.employeeId.length !== 6}
+                    style={{
+                      flex: 2, padding: '14px', borderRadius: 12, border: `2px solid #3B82F6`,
+                      background: dark ? 'rgba(59,130,246,0.15)' : '#eff6ff', color: '#3B82F6', fontWeight: 800,
+                      cursor: (!newEmployee.name || !newEmployee.email.includes('@') || !newEmployee.password || newEmployee.password !== newEmployee.confirmPassword || !newEmployee.employeeId || newEmployee.employeeId.length !== 6) ? 'not-allowed' : 'pointer',
+                      opacity: (!newEmployee.name || !newEmployee.email.includes('@') || !newEmployee.password || newEmployee.password !== newEmployee.confirmPassword || !newEmployee.employeeId || newEmployee.employeeId.length !== 6) ? 0.5 : 1,
+                      fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                    }}
+                  >
+                    <Eye size={18} /> Show Details
+                  </button>
+                )}
+
                 <button
-                  onClick={handleAddEmployee}
+                  onClick={() => handleAddEmployee(false)}
+                  disabled={!newEmployee.name || !newEmployee.email.includes('@') || !newEmployee.password || newEmployee.password !== newEmployee.confirmPassword || !newEmployee.employeeId || newEmployee.employeeId.length !== 6}
                   style={{
                     flex: 2, padding: '14px', borderRadius: 12, border: 'none',
-                    background: 'linear-gradient(135deg, #10B981, #059669)',
-                    color: '#fff', fontWeight: 800, cursor: 'pointer', fontSize: 14,
+                    background: (!newEmployee.name || !newEmployee.email.includes('@') || !newEmployee.password || newEmployee.password !== newEmployee.confirmPassword || !newEmployee.employeeId || newEmployee.employeeId.length !== 6) ? '#9CA3AF' : 'linear-gradient(135deg, #10B981, #059669)',
+                    color: '#fff', fontWeight: 800, cursor: (!newEmployee.name || !newEmployee.email.includes('@') || !newEmployee.password || newEmployee.password !== newEmployee.confirmPassword || !newEmployee.employeeId || newEmployee.employeeId.length !== 6) ? 'not-allowed' : 'pointer', fontSize: 14,
                     boxShadow: '0 8px 24px rgba(16,185,129,0.35)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
                   }}
                 >
-                  <Plus size={18} /> Create Account & Continue
+                  <Plus size={18} /> Create Account
                 </button>
               </div>
 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Admin Resume Upload Page - Shows when clicking Show Details */}
+      {showResumeUploadPage && (
+        <AdminResumeUploadPage
+          employeeId={createdEmployeeId}
+          employeeName={newEmployee.name}
+          existingData={{
+            skills: [],
+            projects: [],
+            certifications: [],
+            education: [],
+            profile: {
+              name: newEmployee.name,
+              email: newEmployee.email,
+              designation: newEmployee.designation,
+              yearsIT: newEmployee.yearsIT,
+              location: newEmployee.location,
+              phone: newEmployee.phone
+            }
+          }}
+          preExtractedData={rawExtractedData}
+          onClose={() => {
+            // Go back to the add employee form with all data intact
+            setShowResumeUploadPage(false);
+            setShowAddEmployeeModal(true);
+          }}
+          onSuccess={() => {
+            // Employee was created and data saved inside AdminResumeUploadPage — just clean up
+            setShowResumeUploadPage(false);
+            setShowAddEmployeeModal(false);
+            setResumeScanned(false);
+            setEmailWarningConfirmed(false);
+            setNewEmployee({ name: '', email: '', designation: '', employeeId: '', location: '', phone: '', department: '', yearsIT: '', yearsZensar: '', password: '', confirmPassword: '' });
+            setExtractedDetails({ skills: [] as {name: string; rating: number}[], projects: [], certificates: [], education: [] });
+            setRawExtractedData(null);
+            setActiveTab('Employees');
+            loadAllData();
+            toast.success('Employee created and resume data saved!');
+          }}
+        />
       )}
 
       <style>{`

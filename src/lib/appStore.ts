@@ -8,7 +8,7 @@ export const SKILL_NAMES = [
   'API Testing','Mobile Testing','Performance Testing',
   'Security Testing','Database Testing','Banking',
   'Healthcare','E-Commerce','Insurance','Telecom',
-  'Manual Testing','Automation Testing','Regression Testing',
+  'Functional Testing','Automation Testing','Regression Testing',
   'UAT','Git','Jenkins','Docker','Azure DevOps',
   'ChatGPT/Prompt Engineering','AI Test Automation',
 ] as const;
@@ -18,7 +18,7 @@ export const CATEGORIES: Record<string, string[]> = {
   Technology:  ['Python','Java','JavaScript','TypeScript','C#','SQL'],
   Application: ['API Testing','Mobile Testing','Performance Testing','Security Testing','Database Testing'],
   Domain:      ['Banking','Healthcare','E-Commerce','Insurance','Telecom'],
-  TestingType: ['Manual Testing','Automation Testing','Regression Testing','UAT'],
+  TestingType: ['Functional Testing','Automation Testing','Regression Testing','UAT'],
   DevOps:      ['Git','Jenkins','Docker','Azure DevOps'],
   AI:          ['ChatGPT/Prompt Engineering','AI Test Automation'],
 };
@@ -70,6 +70,18 @@ export interface EducationEntry {
   Description: string;
 }
 
+export interface Achievement {
+  ID: string;
+  EmployeeID: string;
+  Title: string;
+  AwardType: string;
+  Category: string;
+  DateReceived: string;
+  Description: string;
+  Issuer: string;
+  ProjectContext: string;
+}
+
 export interface AppData {
   user: any;
   ratings: Record<string, number>;
@@ -83,6 +95,7 @@ export interface AppData {
   certifications: Certification[];
   projects: Project[];
   education: EducationEntry[];
+  achievements: Achievement[];
   overallScore: number;
 }
 
@@ -111,11 +124,12 @@ const calculateOverallScore = (
 };
 
 export const transformRawToAppData = (
-  user: any, 
-  allSkills: any[], 
-  certifications: Certification[], 
-  projects: Project[], 
+  user: any,
+  allSkills: any[],
+  certifications: Certification[],
+  projects: Project[],
   education: EducationEntry[],
+  achievements: Achievement[],
   passedSessionId?: string
 ): AppData => {
   const userId = String(user.zensar_id || '').trim().toLowerCase();
@@ -154,15 +168,37 @@ export const transformRawToAppData = (
     ratings[skill] = Math.min(3, Math.max(0, isNaN(val) ? 0 : val));
   });
 
-  const ratedSkills  = SKILL_NAMES.filter(s => ratings[s] > 0);
-  const completion   = Math.round((ratedSkills.length / SKILL_NAMES.length) * 100);
+  // Add custom skills (not in predefined list) to ratings
+  const predefinedSkillNames = new Set(SKILL_NAMES.map(s => s.toLowerCase()));
+  Object.entries(rawSkillsFlat).forEach(([skillName, rating]) => {
+    if (!predefinedSkillNames.has(skillName.toLowerCase()) && rating > 0) {
+      ratings[skillName] = Math.min(3, Math.max(0, rating));
+    }
+  });
+
+  const ratedPredefined  = SKILL_NAMES.filter(s => ratings[s] > 0);
+  const customSkillNames = Object.keys(ratings).filter(s => !predefinedSkillNames.has(s.toLowerCase()));
+  const ratedSkills = [...ratedPredefined, ...customSkillNames];
+  const completion   = Math.round((ratedPredefined.length / SKILL_NAMES.length) * 100);
   const expertSkills = SKILL_NAMES.filter(s => ratings[s] === 3) as string[];
-  const gapSkills    = SKILL_NAMES
+  // Add custom expert skills (rating 3)
+  customSkillNames.forEach(s => {
+    if (ratings[s] === 3) expertSkills.push(s);
+  });
+  const predefinedGapSkills = SKILL_NAMES
     .filter(s => ratings[s] > 0 && ratings[s] < 3)
     .map(skill => ({
       skill, level: ratings[skill],
       category: Object.entries(CATEGORIES).find(([, ss]) => (ss as string[]).includes(skill))?.[0] || '',
     }));
+  // Add custom gap skills (rating 1-2)
+  const customGapSkills = customSkillNames
+    .filter(s => ratings[s] > 0 && ratings[s] < 3)
+    .map(skill => ({
+      skill, level: ratings[skill],
+      category: 'Custom',
+    }));
+  const gapSkills = [...predefinedGapSkills, ...customGapSkills];
 
   const categoryAverages: Record<string, number> = {};
   Object.entries(CATEGORIES).forEach(([cat, catSkills]) => {
@@ -178,7 +214,7 @@ export const transformRawToAppData = (
     gapCount: gapSkills.length,
     categoryAverages, expertSkills, gapSkills,
     hasSkills: ratedSkills.length > 0,
-    certifications, projects, education, overallScore,
+    certifications, projects, education, achievements, overallScore,
   };
 };
 
@@ -188,8 +224,7 @@ export const loadAppData = async (overrideSessionId?: string): Promise<AppData |
     if (!sessionId) return null;
 
     const res = await fetch(`${API_BASE}/employees`);
-    if (!res.ok) return null;
-    const { employees, skills: allSkills } = await res.json();
+    if (!res.ok) return null;    const { employees, skills: allSkills } = await res.json();
 
     let user: any | null = null;
     if (sessionId) {
@@ -237,9 +272,16 @@ export const loadAppData = async (overrideSessionId?: string): Promise<AppData |
       education = (await resp.json()).education || [];
     } catch { /* handle error */ }
 
-    return transformRawToAppData(user, allSkills, certifications, projects, education, sessionId);
+    // Load achievements
+    let achievements: Achievement[] = [];
+    try {
+      const resp = await fetch(`${API_BASE}/achievements/${userId}`);
+      achievements = (await resp.json()).achievements || [];
+    } catch { /* handle error */ }
+
+    return transformRawToAppData(user, allSkills, certifications, projects, education, achievements, sessionId);
   } catch (err) {
     console.error('[loadAppData] failed:', err);
-    return null;
+    throw err; // re-throw so AppContext can detect server down
   }
 };

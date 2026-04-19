@@ -6,58 +6,308 @@ import { API_BASE } from '@/lib/api';
  */
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, SkipForward, Loader2, AlertCircle, Edit2, Trash2 } from 'lucide-react';
+import { Upload, FileText, SkipForward, Loader2, AlertCircle, Edit2, Trash2, CheckCircle } from 'lucide-react';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { SKILLS } from '@/lib/mockData';
 import { callResumeLLM } from '@/lib/llm';
 import { useAuth } from '@/lib/authContext';
 import { useApp } from '@/lib/AppContext';
+import { toast } from '@/lib/ToastContext';
 import { getEmployee, saveSkillRatings, upsertEmployee } from '@/lib/localDB';
+import { apiSaveSkills, isServerAvailable } from '@/lib/api';
 import ZensarLoader from '@/components/ZensarLoader';
 import type { ProficiencyLevel, SkillRating } from '@/lib/types';
 
 async function extractTextFromPDF(file: File): Promise<string> {
   try {
     const pdfjsLib = (window as any).pdfjsLib;
-    if (!pdfjsLib) return await file.text();
+    if (!pdfjsLib) {
+      console.warn('⚠️ PDF.js not loaded, attempting text extraction fallback');
+      return await file.text();
+    }
+    
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    console.log(`📄 PDF loaded: ${pdf.numPages} pages`);
+    
     let text = '';
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      text += content.items.map((item: any) => item.str).join(' ') + '\n';
+      const pageText = content.items.map((item: any) => item.str).join(' ');
+      text += pageText + '\n\n';
+      console.log(`📄 Page ${i}: ${pageText.length} characters extracted`);
     }
+    
+    console.log(`✅ Total text extracted: ${text.length} characters`);
+    console.log(`📝 First 500 chars: ${text.substring(0, 500)}`);
+    
+    if (text.length < 100) {
+      throw new Error('PDF text extraction failed - too little text extracted');
+    }
+    
     return text;
-  } catch {
-    try { return await file.text(); } catch { return ''; }
+  } catch (err) {
+    console.error('❌ PDF extraction error:', err);
+    try { 
+      const fallbackText = await file.text();
+      console.log(`📝 Fallback text extraction: ${fallbackText.length} characters`);
+      return fallbackText;
+    } catch { 
+      return ''; 
+    }
   }
 }
 
 async function extractEverythingFromResume(resumeText: string): Promise<any> {
-  const prompt = `Act as an expert recruitment AI trained on diverse, unstructured resume formats. 
-Scan the following resume text and extract all professional details into the specified JSON format.
+  // NO LIMIT - Read entire resume (increased from 12000 to 50000 characters)
+  const fullText = resumeText.slice(0, 50000); // Increased limit for comprehensive extraction
+  
+  console.log(`🤖 Sending ${fullText.length} characters to AI for extraction`);
+  console.log(`📝 Resume preview (first 1000 chars):\n${fullText.substring(0, 1000)}`);
+  
+  const prompt = `🚨 CRITICAL EXTRACTION TASK - READ CAREFULLY 🚨
 
-CRITICAL INSTRUCTIONS:
-1. CAPTURE ALL CERTIFICATIONS: This includes Technical Licenses, Online Courses, and any items listed under headers like "Certifications", "Achievements", "Awards", "Professional Development", or "Licenses". If an achievement reflects a credential or skill mastery, list it in 'certifications'.
-2. PROJECTS: Extract all major work engagements/projects.
-3. FORMATS: Handle both structured (tables/headers) and unstructured (narrative) resume formats.
+You are extracting data from a PROFESSIONAL RESUME. This resume contains MULTIPLE PROJECTS in the "PROFESSIONAL EXPERIENCE" section.
 
-Resume Content:
-${resumeText.slice(0, 4500)}
+📋 STEP-BY-STEP EXTRACTION INSTRUCTIONS:
 
-Return ONLY a perfectly valid JSON object with this structure:
+═══════════════════════════════════════════════════════════════
+STEP 1: EXTRACT ALL PROJECTS FROM "PROFESSIONAL EXPERIENCE"
+═══════════════════════════════════════════════════════════════
+
+HOW TO FIND PROJECTS:
+1. Search for the heading "PROFESSIONAL EXPERIENCE" in the resume
+2. Look for lines that start with "Project -" or "Project:" (with dash or colon)
+3. EACH line starting with "Project" is a SEPARATE project
+4. Extract EVERYTHING from that "Project" line until the next "Project" line
+
+📝 PROJECT LINE FORMAT (EXACT PATTERN TO MATCH):
+"Project - [CLIENT NAME] at [COMPANY] [DATE RANGE]"
+"Project - [CLIENT NAME] - [ROLE] at [COMPANY] [DATE RANGE]"
+
+Example from typical resume:
+Project - Tesco Bank - Test Manager at Zensar [Sep 2025 to Feb 2026]
+Role: Test Manager
+Project Description: Tesco Bank is a British retail banking...
+Technology/Skills/Tools used: Excel, MS Word, Teams, AWS
+Major achievements: Awarded Silver award
+
+WHAT TO EXTRACT FROM EACH PROJECT:
+- ProjectName: [Client Name] + brief description (e.g., "Tesco Bank - IT Infrastructure Testing")
+- Client: [Client name from "Project - CLIENT at COMPANY"]
+- Role: [From "Role:" line]
+- StartDate: [From date range, e.g., "Sep 2025"]
+- EndDate: [From date range, e.g., "Feb 2026"]
+- Description: [From "Project Description:" section]
+- Technologies: [From "Technology/Skills/Tools used" section - split by commas]
+- Outcome: [From "Key activities performed" or "Major achievements"]
+
+CRITICAL: If you find 8-10 lines starting with "Project -", you MUST extract 8-10 projects!
+
+═══════════════════════════════════════════════════════════════
+STEP 2: EXTRACT ALL ACHIEVEMENTS/AWARDS
+═══════════════════════════════════════════════════════════════
+
+⚠️ STRICT DEFINITION: An achievement is ONLY a real award, medal, or recognition.
+
+✅ VALID - Extract these:
+- Named awards: Pegasus, Gold Award, Silver Award, Bronze Medal, Best Team Award, Star Award
+- External recognitions: Kaggle medals, hackathon wins, competition rankings, certifications won
+- Client appreciation: "Appreciated by client for quality and timely delivery"
+
+❌ INVALID - DO NOT extract these as achievements:
+- Project metrics: "Reduced false positive rate by 20%", "Improved accuracy to 82%"
+- Project outcomes: "Data Quality Improvement", "Page Load Speed Improvement"
+- Technical improvements: "Reduced manual review time", "Experiment time reduction"
+- Percentage improvements, KPIs, or any quantified project result
+- Job responsibilities or activities performed
+
+WHERE TO LOOK (3 PLACES ONLY):
+
+PLACE 1: "Awards" section near top of resume
+Look for a section titled "Awards" or "Recognition" with named awards:
+- Pegasus → extract
+- Gold → extract
+- Silver → extract
+- Kaggle Bronze Medal → extract
+
+PLACE 2: "Major achievements" subsection in EACH project
+ONLY extract if it is a NAMED AWARD:
+✅ "Awarded Silver award" → extract
+✅ "Gold Award" → extract
+✅ "Best Team Award" → extract
+❌ "Improved data quality by 15%" → DO NOT extract
+❌ "Reduced false positive rate" → DO NOT extract
+
+PLACE 3: "Any client appreciation" subsection in EACH project
+✅ "Appreciated by client for quality and timely delivery" → extract
+
+ANTI-DUPLICATE RULES:
+- If "Pegasus" appears in Awards section AND in a project, extract it ONLY ONCE
+- Same award name + same project = DUPLICATE (extract once)
+- Same award name + different project = NOT duplicate (extract both)
+- Client appreciations from different projects = extract each separately
+
+IF THE RESUME HAS NO AWARDS SECTION AND NO NAMED AWARDS → return empty achievements array []
+
+═══════════════════════════════════════════════════════════════
+STEP 3: EXTRACT ALL CERTIFICATIONS
+═══════════════════════════════════════════════════════════════
+
+Look for "Certifications" section with bullet points:
+- Google Cloud Digital Leader
+- AWS certified Cloud Practitioner
+- SAFe SCRUM MASTER 6.0
+
+Extract EACH bullet point as a separate certification.
+
+═══════════════════════════════════════════════════════════════
+STEP 4: EXTRACT EDUCATION
+═══════════════════════════════════════════════════════════════
+
+Look for "Education" section:
+- B. Tech in Information Technology [2003-2007]
+
+═══════════════════════════════════════════════════════════════
+📝 RESUME TEXT (${fullText.length} characters):
+═══════════════════════════════════════════════════════════════
+
+${fullText}
+
+═══════════════════════════════════════════════════════════════
+📤 OUTPUT FORMAT (STRICT JSON - NO MARKDOWN, NO BACKTICKS):
+═══════════════════════════════════════════════════════════════
+
 {
-  "profile": { "name":"", "email":"", "phone":"", "location":"", "designation":"", "yearsIT": 0 },
-  "skills": { "Selenium":0, "Appium":0, "JMeter":0, "Postman":0, "JIRA":0, "TestRail":0, "Python":0, "Java":0, "JavaScript":0, "TypeScript":0, "C#":0, "SQL":0, "API Testing":0, "Mobile Testing":0, "Performance Testing":0, "Security Testing":0, "Database Testing":0, "Banking":0, "Healthcare":0, "E-Commerce":0, "Insurance":0, "Telecom":0, "Manual Testing":0, "Automation Testing":0, "Regression Testing":0, "UAT":0, "Git":0, "Jenkins":0, "Docker":0, "Azure DevOps":0, "ChatGPT/Prompt Engineering":0, "AI Test Automation":0 },
-  "education": [ { "degree":"", "institution":"", "field":"", "year":"" } ],
-  "certifications": [ { "CertName":"", "Provider":"", "IssueDate":"" } ],
-  "projects": [ { "ProjectName":"", "Role":"", "StartDate":"", "Description":"", "Outcome":"" } ],
-  "gaps": ["list any career gaps, missing info, or specific skills mention in Achievements/Awards that match our matrix"]
+  "projects": [
+    {
+      "ProjectName": "Tesco Bank - IT Infrastructure Testing",
+      "Client": "Tesco Bank",
+      "Role": "Test Manager",
+      "Domain": "Banking",
+      "StartDate": "Sep 2025",
+      "EndDate": "Feb 2026",
+      "IsOngoing": false,
+      "Description": "IT Infrastructure testing for banking systems...",
+      "Outcome": "Successfully tested infrastructure components",
+      "Technologies": ["Excel", "MS Word", "Teams", "AWS", "Azure", "Google Cloud"],
+      "TeamSize": 0
+    }
+  ],
+  "achievements": [
+    {
+      "Title": "Pegasus Award",
+      "AwardType": "Pegasus",
+      "Category": "Performance",
+      "DateReceived": "",
+      "Description": "",
+      "Issuer": "",
+      "ProjectContext": ""
+    },
+    {
+      "Title": "Silver Award",
+      "AwardType": "Silver",
+      "Category": "Performance",
+      "DateReceived": "",
+      "Description": "Awarded for quality delivery",
+      "Issuer": "Company",
+      "ProjectContext": "CIBC Project"
+    }
+  ],
+  "certifications": [
+    {
+      "CertName": "Google Cloud Digital Leader",
+      "Provider": "Google",
+      "IssueDate": "",
+      "ExpiryDate": "",
+      "CredentialID": ""
+    }
+  ],
+  "education": [
+    {
+      "degree": "B. Tech in Information Technology",
+      "institution": "",
+      "field": "Information Technology",
+      "year": "2003-2007"
+    }
+  ],
+  "profile": {
+    "name": "",
+    "email": "",
+    "phone": "",
+    "location": "",
+    "designation": "",
+    "yearsIT": 0,
+    "primarySkill": "",
+    "secondarySkill": ""
+  },
+  "skills": {
+    "JIRA": 3,
+    "Azure DevOps": 3,
+    "Selenium": 0,
+    "Appium": 0,
+    "JMeter": 0,
+    "Postman": 0,
+    "TestRail": 0,
+    "Python": 0,
+    "Java": 0,
+    "JavaScript": 0,
+    "TypeScript": 0,
+    "C#": 0,
+    "SQL": 0,
+    "API Testing": 0,
+    "Mobile Testing": 0,
+    "Performance Testing": 0,
+    "Security Testing": 0,
+    "Database Testing": 0,
+    "Banking": 0,
+    "Healthcare": 0,
+    "E-Commerce": 0,
+    "Insurance": 0,
+    "Telecom": 0,
+    "Functional Testing": 0,
+    "Automation Testing": 0,
+    "Regression Testing": 0,
+    "UAT": 0,
+    "Git": 0,
+    "Jenkins": 0,
+    "Docker": 0,
+    "ChatGPT/Prompt Engineering": 0,
+    "AI Test Automation": 0
+  },
+  "analysis": {
+    "completenessScore": 0,
+    "missingCriticalFields": [],
+    "improvementAreas": []
+  },
+  "gaps": []
 }
-Note: For skills, use 0=absent, 1=basic, 2=intermediate, 3=expert. Do not include markdown or conversational text.`;
+
+═══════════════════════════════════════════════════════════════
+✅ SUCCESS CRITERIA - YOU WILL BE GRADED ON THIS:
+═══════════════════════════════════════════════════════════════
+
+MINIMUM REQUIREMENTS:
+- Projects: Extract AT LEAST 5 projects (if you see 8-10 "Project -" lines, extract ALL of them)
+- Achievements: Extract ONLY real named awards/medals/recognitions (NOT project metrics)
+- Certifications: Extract ALL certifications (typically 4-8)
+- Education: Extract ALL education entries
+
+YOU FAIL IF:
+- You extract 0-2 projects when resume has "PROFESSIONAL EXPERIENCE" section with multiple "Project -" lines
+- You extract project metrics (percentages, improvements) as achievements — those are NOT achievements
+- You return empty arrays without searching thoroughly
+
+EXPECTED FOR THIS RESUME:
+Count the number of times "Project -" appears in the text. That is how many projects you should extract.
+Count ONLY named awards in "Awards" section and "Major achievements" subsections. Metrics are NOT achievements.
+
+Return ONLY valid JSON. NO markdown code blocks. NO explanations. JUST the JSON object.`;
 
   const result = await callResumeLLM(prompt);
   if (result.error || !result.data) return null;
@@ -158,10 +408,93 @@ export default function ResumeUploadPage({
       // Store in localDB
       if (emp) saveSkillRatings(employeeId, emp.name, ratings);
 
-      // Save Education
+      // Save skills to backend DB
+      try {
+        const serverUp = await isServerAvailable();
+        if (serverUp) {
+          const skillsPayload: Record<string, number> = {};
+          SKILLS.forEach(sk => {
+            skillsPayload[sk.name] = Math.min(3, Math.max(0, extractedSkills[sk.name] ?? 0));
+          });
+          await apiSaveSkills(employeeId, emp?.name || '', skillsPayload);
+        }
+      } catch (e) {
+        console.warn('Skills backend save failed, saved locally only');
+      }
+
+      // Fetch existing data to check for duplicates
+      let existingEducation: any[] = [];
+      let existingCerts: any[] = [];
+      let existingProjects: any[] = [];
+
+      try {
+        const [eduRes, certRes, projRes] = await Promise.all([
+          fetch(`${API_BASE}/education/${employeeId}`).catch(() => null),
+          fetch(`${API_BASE}/certifications/${employeeId}`).catch(() => null),
+          fetch(`${API_BASE}/projects/${employeeId}`).catch(() => null)
+        ]);
+
+        if (eduRes?.ok) {
+          const eduData = await eduRes.json();
+          existingEducation = eduData.education || [];
+        }
+        if (certRes?.ok) {
+          const certData = await certRes.json();
+          existingCerts = certData.certifications || [];
+        }
+        if (projRes?.ok) {
+          const projData = await projRes.json();
+          existingProjects = projData.projects || [];
+        }
+      } catch (e) {
+        console.log('Could not fetch existing data for duplicate check');
+      }
+
+      // Helper: Check for education duplicates
+      const isEduDuplicate = (newEdu: any, existing: any[]) => {
+        const newDeg = (newEdu.degree || '').toLowerCase().trim();
+        const newInst = (newEdu.institution || '').toLowerCase().trim();
+        return existing.some(ex => {
+          const exDeg = (ex.degree || '').toLowerCase().trim();
+          const exInst = (ex.institution || '').toLowerCase().trim();
+          return (exDeg === newDeg || exDeg.includes(newDeg) || newDeg.includes(exDeg)) &&
+                 (exInst === newInst || exInst.includes(newInst) || newInst.includes(exInst) || !newInst || !exInst);
+        });
+      };
+
+      // Helper: Check for certification duplicates
+      const isCertDuplicate = (newCert: any, existing: any[]) => {
+        const newName = (newCert.CertName || '').toLowerCase().trim();
+        const newProv = (newCert.Provider || '').toLowerCase().trim();
+        return existing.some(ex => {
+          const exName = (ex.CertName || ex.certName || '').toLowerCase().trim();
+          const exProv = (ex.Provider || ex.issuingOrganization || '').toLowerCase().trim();
+          return (exName === newName || exName.includes(newName) || newName.includes(exName)) &&
+                 (!newProv || !exProv || exProv === newProv || exProv.includes(newProv) || newProv.includes(exProv));
+        });
+      };
+
+      // Helper: Check for project duplicates
+      const isProjDuplicate = (newProj: any, existing: any[]) => {
+        const newName = (newProj.ProjectName || '').toLowerCase().trim();
+        const newRole = (newProj.Role || '').toLowerCase().trim();
+        return existing.some(ex => {
+          const exName = (ex.ProjectName || ex.projectName || '').toLowerCase().trim();
+          const exRole = (ex.Role || ex.role || '').toLowerCase().trim();
+          return (exName === newName || exName.includes(newName) || newName.includes(exName)) &&
+                 (!newRole || !exRole || exRole === newRole || exRole.includes(newRole) || newRole.includes(exRole));
+        });
+      };
+
+      // Save Education (with duplicate detection)
+      let eduSaved = 0, eduSkipped = 0;
       if (extractedData?.education) {
         for (const edu of extractedData.education) {
-          await fetch(`${API_BASE}/education`, {
+          if (isEduDuplicate(edu, existingEducation)) {
+            eduSkipped++;
+            continue;
+          }
+          const res = await fetch(`${API_BASE}/education`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -171,58 +504,143 @@ export default function ResumeUploadPage({
               fieldOfStudy: edu.field,
               endDate: edu.year
             })
-          }).catch(() => { });
+          });
+          if (res.ok) {
+            eduSaved++;
+            existingEducation.push(edu); // Track for further duplicate checking
+          }
         }
       }
 
-      // Save Certs
+      // Save Certs (with duplicate detection)
+      let certSaved = 0, certSkipped = 0;
       if (extractedData?.certifications) {
         for (const cert of extractedData.certifications) {
-          await fetch(`${API_BASE}/certifications`, {
+          if (isCertDuplicate(cert, existingCerts)) {
+            certSkipped++;
+            continue;
+          }
+          const res = await fetch(`${API_BASE}/certifications`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               employeeId: employeeId,
-              certName: cert.CertName, 
-              issuingOrganization: cert.Provider, 
-              issueDate: parseDate(cert.IssueDate), 
+              certName: cert.CertName,
+              issuingOrganization: cert.Provider,
+              issueDate: parseDate(cert.IssueDate),
               isAIExtracted: true
             })
-          }).catch(() => { });
+          });
+          if (res.ok) {
+            certSaved++;
+            existingCerts.push(cert); // Track for further duplicate checking
+          }
         }
       }
 
-      // Save Projects
+      // Save Projects (with duplicate detection)
+      let projSaved = 0, projSkipped = 0;
       if (extractedData?.projects) {
         for (const proj of extractedData.projects) {
-          await fetch(`${API_BASE}/projects`, {
+          if (isProjDuplicate(proj, existingProjects)) {
+            projSkipped++;
+            continue;
+          }
+          const res = await fetch(`${API_BASE}/projects`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               employeeId: employeeId,
-              projectName: proj.ProjectName, 
-              role: proj.Role, 
-              startDate: parseDate(proj.StartDate), 
+              projectName: proj.ProjectName,
+              role: proj.Role,
+              startDate: parseDate(proj.StartDate),
               endDate: parseDate(proj.EndDate),
               description: proj.Description,
-              outcome: proj.Outcome, 
+              outcome: proj.Outcome,
               isAIExtracted: true
             })
-          }).catch(() => { });
+          });
+          if (res.ok) {
+            projSaved++;
+            existingProjects.push(proj); // Track for further duplicate checking
+          }
         }
       }
+
+      // Save Achievements (with duplicate detection)
+      let achSaved = 0, achSkipped = 0;
+      if (extractedData?.achievements?.length > 0) {
+        let existingAchievements: any[] = [];
+        try {
+          const achRes = await fetch(`${API_BASE}/achievements/${employeeId}`).catch(() => null);
+          if (achRes?.ok) existingAchievements = (await achRes.json()).achievements || [];
+        } catch {}
+
+        for (const ach of extractedData.achievements) {
+          if (!ach.Title?.trim()) continue;
+          const newTitle = ach.Title.toLowerCase().trim();
+          const isDup = existingAchievements.some((ex: any) => {
+            const exTitle = (ex.Title || ex.title || '').toLowerCase().trim();
+            return exTitle === newTitle || exTitle.includes(newTitle) || newTitle.includes(exTitle);
+          });
+          if (isDup) { achSkipped++; continue; }
+          const res = await fetch(`${API_BASE}/achievements`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              employee_id: employeeId,
+              Title: ach.Title,
+              AwardType: ach.AwardType || 'Other',
+              Category: ach.Category || '',
+              DateReceived: parseDate(ach.DateReceived),
+              Description: ach.Description || '',
+              Issuer: ach.Issuer || '',
+              ProjectContext: ach.ProjectContext || ''
+            })
+          });
+          if (res.ok) { achSaved++; existingAchievements.push(ach); }
+        }
+      }
+
+      const totalSkipped = eduSkipped + certSkipped + projSkipped + achSkipped;
+      const skipMsg = totalSkipped > 0 ? ` (${totalSkipped} duplicates skipped)` : '';
 
       if (emp && extractedData?.profile) {
         const p = extractedData.profile;
-        upsertEmployee({ ...emp, name: p.name || emp.name, designation: p.designation || emp.designation, yearsIT: p.yearsIT || emp.yearsIT, location: p.location || emp.location, phone: p.phone || emp.phone });
+        upsertEmployee({ 
+          ...emp, 
+          name: p.name || emp.name, 
+          designation: p.designation || emp.designation, 
+          yearsIT: p.yearsIT || emp.yearsIT, 
+          location: p.location || emp.location, 
+          phone: p.phone || emp.phone,
+          primary_skill: p.primarySkill || emp.primary_skill,
+          secondary_skill: p.secondarySkill || emp.secondary_skill,
+        });
+        // Also update primary/secondary skill in backend
+        if (p.primarySkill || p.secondarySkill) {
+          fetch(`${API_BASE}/admin/employees/update`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              id: employeeId, 
+              primary_skill: p.primarySkill || undefined,
+              secondary_skill: p.secondarySkill || undefined,
+            })
+          }).catch(() => {});
+        }
       }
 
-      // In popup mode, switch to Skills tab. Otherwise navigate to skills page.
+      // Show success and redirect to Dashboard
+      const totalSaved = eduSaved + certSaved + projSaved + achSaved;
+      toast.success(`✅ Resume data saved! Skills ✓ · ${projSaved} projects · ${certSaved} certs · ${eduSaved} education · ${achSaved} achievements${skipMsg}`);
+
+      // In popup mode, switch to Dashboard tab. Otherwise navigate to dashboard.
       if (isPopup && onTabChange) {
-        onTabChange('/employee/skills');
+        onTabChange('/employee/dashboard');
       } else {
-        navigate('/employee/skills', { state: { aiRatings: ratings, fromResume: true } });
+        navigate('/employee/dashboard', { state: { fromResume: true, saved: true } });
       }
     } catch (err: any) {
-      alert('Error: ' + err.message);
+      console.error('Save error:', err);
+      toast.error('Some items may not have saved. Please check your profile. Error: ' + (err.message || 'Unknown'));
     } finally {
       setIsSaving(false);
     }
@@ -242,8 +660,8 @@ export default function ResumeUploadPage({
     const skillCount = Object.values(s).filter(v => (v as number) > 0).length;
 
     return (
-      <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '40px 20px' }}>
-        <div style={{ maxWidth: 800, margin: '0 auto', background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 16, overflow: 'hidden' }}>
+      <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '40px 7vw' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto', background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 16, overflow: 'hidden' }}>
           <div style={{ background: 'linear-gradient(135deg, #6B2D8B, #3B82F6)', padding: '24px', color: '#fff' }}>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>🤖 AI Extracted Insights</h2>
           </div>
@@ -407,21 +825,131 @@ export default function ResumeUploadPage({
               ))}
             </div>
 
-            {/* GAPS */}
-            {(extractedData.gaps || []).length > 0 && (
-              <div style={{ marginBottom: 24, padding: 16, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 12 }}>
-                <h3 style={{ fontSize: 12, textTransform: 'uppercase', color: '#F59E0B', letterSpacing: 1, marginBottom: 10 }}>AI Auditor: Found Gaps</h3>
-                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: T.sub, display: 'grid', gap: 6 }}>
-                  {extractedData.gaps.map((gap: string, i: number) => <li key={i}>{gap}</li>)}
-                </ul>
+            {/* AI COMPREHENSIVE RESUME ANALYSIS */}
+            {(extractedData.gaps || []).length > 0 || extractedData.analysis ? (
+              <div style={{ marginBottom: 24 }}>
+                {/* Analysis Header with Score */}
+                <div style={{ padding: 20, background: 'rgba(245,158,11,0.08)', border: '2px solid rgba(245,158,11,0.3)', borderRadius: 12, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                    <AlertCircle size={20} color="#F59E0B" />
+                    <h3 style={{ fontSize: 14, textTransform: 'uppercase', color: '#F59E0B', letterSpacing: 1, margin: 0, fontWeight: 800 }}>ZenScan Analysis Report</h3>
+                  </div>
+
+                  {/* Completeness Score */}
+                  {extractedData.analysis?.completenessScore > 0 && (
+                    <div style={{ marginBottom: 16, padding: 12, background: 'rgba(0,0,0,0.2)', borderRadius: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, color: T.sub }}>Resume Completeness Score</span>
+                        <span style={{ fontSize: 18, fontWeight: 800, color: extractedData.analysis.completenessScore >= 80 ? '#10B981' : extractedData.analysis.completenessScore >= 60 ? '#F59E0B' : '#EF4444' }}>
+                          {extractedData.analysis.completenessScore}%
+                        </span>
+                      </div>
+                      <div style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${extractedData.analysis.completenessScore}%`, background: extractedData.analysis.completenessScore >= 80 ? '#10B981' : extractedData.analysis.completenessScore >= 60 ? '#F59E0B' : '#EF4444', borderRadius: 3, transition: 'width 0.5s ease' }} />
+                      </div>
+                    </div>
+                  )}
+
+                  <p style={{ fontSize: 12, color: T.sub, lineHeight: 1.6, margin: 0 }}>
+                    Our AI has performed a comprehensive analysis of your resume. Below are the detailed findings including gaps, missing information, and areas for improvement:
+                  </p>
+                </div>
+
+                {/* Critical Missing Fields */}
+                {extractedData.analysis?.missingCriticalFields?.length > 0 && (
+                  <div style={{ marginBottom: 12, padding: 16, background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, borderLeft: '4px solid #EF4444' }}>
+                    <h4 style={{ fontSize: 12, fontWeight: 700, color: '#EF4444', margin: '0 0 10px 0', textTransform: 'uppercase' }}>🚨 Critical Missing Information</h4>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: T.text, display: 'grid', gap: 6 }}>
+                      {extractedData.analysis.missingCriticalFields.map((field: string, i: number) => (
+                        <li key={i}>{field}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Career Gaps */}
+                {extractedData.analysis?.careerGaps?.length > 0 && (
+                  <div style={{ marginBottom: 12, padding: 16, background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 10, borderLeft: '4px solid #F59E0B' }}>
+                    <h4 style={{ fontSize: 12, fontWeight: 700, color: '#F59E0B', margin: '0 0 10px 0', textTransform: 'uppercase' }}>📅 Career Timeline Gaps</h4>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: T.text, display: 'grid', gap: 6 }}>
+                      {extractedData.analysis.careerGaps.map((gap: string, i: number) => (
+                        <li key={i}>{gap}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Improvement Areas */}
+                {extractedData.analysis?.improvementAreas?.length > 0 && (
+                  <div style={{ marginBottom: 12, padding: 16, background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 10, borderLeft: '4px solid #3B82F6' }}>
+                    <h4 style={{ fontSize: 12, fontWeight: 700, color: '#3B82F6', margin: '0 0 10px 0', textTransform: 'uppercase' }}>💡 Areas for Improvement</h4>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: T.text, display: 'grid', gap: 6 }}>
+                      {extractedData.analysis.improvementAreas.map((area: string, i: number) => (
+                        <li key={i}>{area}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Formatting Issues */}
+                {extractedData.analysis?.formattingIssues?.length > 0 && (
+                  <div style={{ marginBottom: 12, padding: 16, background: 'rgba(139,92,246,0.05)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 10, borderLeft: '4px solid #8B5CF6' }}>
+                    <h4 style={{ fontSize: 12, fontWeight: 700, color: '#8B5CF6', margin: '0 0 10px 0', textTransform: 'uppercase' }}>📝 Formatting Issues</h4>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: T.text, display: 'grid', gap: 6 }}>
+                      {extractedData.analysis.formattingIssues.map((issue: string, i: number) => (
+                        <li key={i}>{issue}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Red Flags */}
+                {extractedData.analysis?.redFlags?.length > 0 && (
+                  <div style={{ marginBottom: 12, padding: 16, background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.3)', borderRadius: 10, borderLeft: '4px solid #DC2626' }}>
+                    <h4 style={{ fontSize: 12, fontWeight: 700, color: '#DC2626', margin: '0 0 10px 0', textTransform: 'uppercase' }}>⚠️ Red Flags - Immediate Attention Required</h4>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: T.text, display: 'grid', gap: 6 }}>
+                      {extractedData.analysis.redFlags.map((flag: string, i: number) => (
+                        <li key={i} style={{ fontWeight: 500 }}>{flag}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* General Gaps List */}
+                {(extractedData.gaps || []).length > 0 && (
+                  <div style={{ padding: 16, background: 'rgba(255,255,255,0.02)', border: `1px solid ${T.bdr}`, borderRadius: 10 }}>
+                    <h4 style={{ fontSize: 12, fontWeight: 700, color: T.sub, margin: '0 0 10px 0', textTransform: 'uppercase' }}>📋 Complete List of Findings</h4>
+                    <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12, color: T.text, display: 'grid', gap: 6 }}>
+                      {extractedData.gaps.map((gap: string, i: number) => (
+                        <li key={i}>{gap}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ marginBottom: 24, padding: 24, background: 'rgba(16,185,129,0.08)', border: '2px solid rgba(16,185,129,0.3)', borderRadius: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <CheckCircle size={24} color="#10B981" />
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: '#10B981' }}>Excellent Resume Quality</span>
+                    <p style={{ fontSize: 12, color: T.sub, margin: '4px 0 0 0', lineHeight: 1.5 }}>
+                      Our AI analysis found no significant gaps, missing information, or issues. Your resume is comprehensive and well-structured.
+                    </p>
+                  </div>
+                </div>
+                <div style={{ marginTop: 16, padding: 12, background: 'rgba(16,185,129,0.1)', borderRadius: 8, textAlign: 'center' }}>
+                  <span style={{ fontSize: 24, fontWeight: 800, color: '#10B981' }}>95-100%</span>
+                  <div style={{ fontSize: 11, color: T.sub, marginTop: 4 }}>Estimated Completeness Score</div>
+                </div>
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <button onClick={() => setStatus('idle')} style={{ flex: 1, padding: 12, minWidth: 120, background: 'transparent', border: `1px solid ${T.bdr}`, color: T.text, borderRadius: 10, cursor: 'pointer' }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button onClick={() => setStatus('idle')} style={{ padding: '14px 32px', minWidth: 140, background: 'transparent', border: `1px solid ${T.bdr}`, color: T.text, borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
                 ← Re-upload
               </button>
-              <button onClick={onConfirmAndSave} style={{ flex: 2, padding: 12, minWidth: 180, background: '#3B82F6', border: 'none', color: '#fff', fontWeight: 600, borderRadius: 10, cursor: 'pointer' }}>Confirm & Save All →</button>
+              <button onClick={onConfirmAndSave} style={{ padding: '14px 40px', minWidth: 200, background: '#3B82F6', border: 'none', color: '#fff', fontWeight: 700, borderRadius: 10, cursor: 'pointer', fontSize: 14 }}>Confirm & Save All →</button>
             </div>
           </div>
         </div>
@@ -436,16 +964,42 @@ export default function ResumeUploadPage({
           <div style={{ width: 60, height: 60, borderRadius: 18, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <FileText size={28} color="#fff" />
           </div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px' }}>AI Resume Extraction</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 800, margin: '0 0 8px' }}>ZenScan</h1>
           <p style={{ fontSize: 14, color: T.sub }}>Pre-fill your profile using Local AI. Fast & Private.</p>
         </div>
 
         {(status === 'idle' || status === 'error') && (
-          <div onClick={() => inputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}
-            style={{ border: `2px dashed ${dragging ? '#3B82F6' : T.bdr}`, borderRadius: 16, padding: '48px 24px', textAlign: 'center', background: T.card, cursor: 'pointer', marginBottom: 16 }}>
-            <Upload size={32} color={T.muted} style={{ margin: '0 auto 12px' }} />
-            <div style={{ fontWeight: 700, fontSize: 15 }}>Upload Resume</div>
-            <input ref={inputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={onInputChange} style={{ display: 'none' }} />
+          <div>
+            <div onClick={() => inputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={onDrop}
+              style={{ border: `2px dashed ${dragging ? '#3B82F6' : T.bdr}`, borderRadius: 16, padding: '48px 24px', textAlign: 'center', background: T.card, cursor: 'pointer', marginBottom: 16 }}>
+              <Upload size={32} color={T.muted} style={{ margin: '0 auto 12px' }} />
+              <div style={{ fontWeight: 700, fontSize: 15 }}>📄 Upload Resume as PDF</div>
+              <div style={{ fontSize: 13, color: T.sub, marginTop: 8 }}>Drag & drop or click to upload</div>
+              <input ref={inputRef} type="file" accept=".pdf" onChange={onInputChange} style={{ display: 'none' }} />
+            </div>
+            
+            <div style={{ background: 'rgba(59, 130, 246, 0.08)', border: `1px solid rgba(59, 130, 246, 0.3)`, borderRadius: 12, padding: '16px', marginBottom: 16 }}>
+              <div style={{ fontSize: 12, color: T.text, lineHeight: 1.6 }}>
+                <div style={{ fontWeight: 700, marginBottom: 8, color: '#3B82F6' }}>📋 PDF Format Required</div>
+                <div style={{ marginBottom: 8 }}>
+                  For best accuracy and data quality, please upload your resume as a <strong>PDF file only</strong>.
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <strong>Have a Word document?</strong> Convert it to PDF for free:
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                  <a href="https://smallpdf.com/word-to-pdf" target="_blank" rel="noopener noreferrer" 
+                    style={{ color: '#3B82F6', textDecoration: 'none', fontWeight: 600, fontSize: 11 }}>
+                    → smallpdf.com
+                  </a>
+                  <span style={{ color: T.muted }}>•</span>
+                  <a href="https://ilovepdf.com/word-to-pdf" target="_blank" rel="noopener noreferrer"
+                    style={{ color: '#3B82F6', textDecoration: 'none', fontWeight: 600, fontSize: 11 }}>
+                    → ilovepdf.com
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

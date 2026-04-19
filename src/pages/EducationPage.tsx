@@ -115,8 +115,8 @@ export default function EducationPage({
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '40px 20px 100px' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '40px 7vw 100px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         
         <div style={{ display: 'flex', flexDirection: window.innerWidth < 768 ? 'column' : 'row', justifyContent: 'space-between', alignItems: window.innerWidth < 768 ? 'flex-start' : 'center', marginBottom: 32, gap: 20 }}>
           <div style={{ display: 'flex', flexDirection: window.innerWidth < 480 ? 'column' : 'row', alignItems: window.innerWidth < 480 ? 'flex-start' : 'center', gap: 16 }}>
@@ -133,19 +133,20 @@ export default function EducationPage({
               </button>
             )}
             <div>
-              <h1 style={{ 
-                margin: 0, 
-                fontSize: window.innerWidth < 480 ? 24 : 32, 
-                fontWeight: 900, 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 12,
+              <h1 style={{
+                fontSize: 'clamp(22px,3vw,28px)',
+                fontWeight: 800,
+                color: T.text,
+                margin: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: window.innerWidth < 480 ? 10 : 16,
                 flexWrap: 'wrap'
               }}>
-                <GraduationCap size={window.innerWidth < 480 ? 32 : 40} color="#3B82F6" /> 
-                <span>Academic <span style={{ color: '#3B82F6' }}>Background</span></span>
+                <GraduationCap size={28} color="#3B82F6" /> 
+                <span>My <span style={{ color: '#3B82F6' }}>Education</span></span>
               </h1>
-              <p style={{ margin: '6px 0 0', color: T.sub, fontSize: window.innerWidth < 480 ? 12 : 14, fontWeight: 500 }}>Manage your professional qualifications and academic journey.</p>
+              <p style={{ margin: '4px 0 0', color: T.sub, fontSize: 13, fontWeight: 500 }}>Manage your professional qualifications and academic journey.</p>
             </div>
           </div>
           <button 
@@ -154,7 +155,7 @@ export default function EducationPage({
               display: 'flex', alignItems: 'center', gap: 8, padding: '14px 28px', borderRadius: 14, 
               background: isAdding ? T.card : '#3B82F6', border: isAdding ? `1px solid ${T.bdr}` : 'none', 
               color: isAdding ? T.text : '#fff', fontWeight: 800, cursor: 'pointer', transition: '0.2s',
-              width: window.innerWidth < 768 ? '100%' : 'auto', justifyContent: 'center',
+              width: 'auto', justifyContent: 'center',
               boxShadow: isAdding ? 'none' : '0 10px 20px -5px rgba(59,130,246,0.3)'
             }}
           >
@@ -201,7 +202,7 @@ export default function EducationPage({
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                 <button 
                   onClick={handleSave}
-                  style={{ width: '100%', padding: '14px', borderRadius: 12, background: '#3B82F6', color: '#fff', border: 'none', fontWeight: 800, fontSize: 15, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(59,130,246,0.3)' }}
+                  style={{ width: '100%', padding: '14px', borderRadius: 12, background: '#3B82F6', color: '#fff', border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: '0 10px 15px -3px rgba(59,130,246,0.3)' }}
                 >
                   Verify & Persist Record
                 </button>
@@ -213,8 +214,8 @@ export default function EducationPage({
         {eduList.length === 0 && !isAdding && (
           <div style={{ textAlign: 'center', padding: window.innerWidth < 480 ? '40px 20px' : '80px 40px', background: T.card, borderRadius: 32, border: `3px dashed ${T.bdr}`, margin: '0 10px' }}>
              <Layout size={window.innerWidth < 480 ? 48 : 64} color={T.muted} style={{ margin: '0 auto 24px' }} />
-             <h2 style={{ fontSize: window.innerWidth < 480 ? 20 : 24, fontWeight: 900, marginBottom: 12 }}>Academic Vault Empty</h2>
-             <p style={{ color: T.sub, maxWidth: 400, margin: '0 auto', fontSize: window.innerWidth < 480 ? 13 : 14 }}>Sync your educational background to complete your professional digital twin profiling.</p>
+             <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>Education Vault Empty</h2>
+             <p style={{ color: T.sub, maxWidth: 400, margin: '0 auto', fontSize: window.innerWidth < 480 ? 13 : 14 }}>Sync your education records to complete your professional digital twin profiling.</p>
           </div>
         )}
 

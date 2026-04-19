@@ -19,7 +19,7 @@ const SKILL_NAMES = [
   'API Testing','Mobile Testing','Performance Testing',
   'Security Testing','Database Testing','Banking',
   'Healthcare','E-Commerce','Insurance','Telecom',
-  'Manual Testing','Automation Testing','Regression Testing',
+  'Functional Testing','Automation Testing','Regression Testing',
   'UAT','Git','Jenkins','Docker','Azure DevOps',
   'ChatGPT/Prompt Engineering','AI Test Automation'
 ];
@@ -243,7 +243,7 @@ export default function SkillMatrixPage({
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, color: T.text, fontFamily: "'Inter', sans-serif", transition: 'background 0.35s, color 0.35s' }}>
-      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '36px 20px 80px' }}>
+      <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '36px 24px 80px' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', marginBottom: '32px' }}>
@@ -254,16 +254,12 @@ export default function SkillMatrixPage({
               </button>
             )}
             <div>
-              <h1 style={{ fontSize: '30px', fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif", marginBottom: '4px' }}>Skill Matrix</h1>
-              <p style={{ color: T.sub, fontSize: '14px' }}>Rate your proficiency across multiple skills</p>
+              <h1 style={{ fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif", marginBottom: '4px' }}>ZenMatrix</h1>
+              <p style={{ color: T.sub, fontSize: '13px' }}>Rate your proficiency across multiple skills</p>
             </div>
           </div>
           {!alreadySubmitted && (
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button disabled={saving} onClick={handleSave} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 20px', borderRadius: '9px', background: T.card, border: `1px solid ${T.bdr}`, color: '#60A5FA', fontWeight: 600, fontSize: '13px', cursor: saving ? 'not-allowed' : 'pointer' }}>
-                {saving ? <ZensarLoader size={16} dark={dark} /> : <Save size={15} />} 
-                {saving ? 'Syncing...' : 'Save Progress'}
-              </button>
               <button onClick={handleSubmit} disabled={submitting} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 22px', borderRadius: '9px', background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '13px', cursor: submitting ? 'not-allowed' : 'pointer', boxShadow: '0 0 20px rgba(59,130,246,0.35)', opacity: submitting ? 0.7 : 1 }}>
                 {submitting ? <ZensarLoader size={16} dark={dark} /> : <Send size={15} />}
                 {submitting ? 'Submitting...' : 'Submit Final'}
@@ -350,8 +346,8 @@ export default function SkillMatrixPage({
               <div key={skill.id} style={{ background: rated ? `${LVL_COLOR[r.selfRating]}08` : T.card, border: `1px solid ${rated ? `${LVL_COLOR[r.selfRating]}28` : T.bdr}`, borderRadius: '13px', padding: '18px 22px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '14px' }}>
                 <div style={{ flex: '1', minWidth: '160px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '15px' }}>{skill.name}</span>
-                    <span style={{ padding: '2px 9px', borderRadius: '999px', fontSize: '10px', fontWeight: 600, background: `${color}18`, color }}>{skill.category}</span>
+                    <span style={{ fontWeight: 700, fontSize: '14px' }}>{skill.name}</span>
+                    <span style={{ padding: '2px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: `${color}18`, color }}>{skill.category}</span>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', minWidth: '90px' }}>

@@ -170,7 +170,7 @@ export default function ProjectsPage({
     }));
   };
 
-  const pg = { minHeight: '100vh', background: T.bg, color: T.text, padding: '32px 20px', fontFamily: "'Inter', sans-serif" };
+  const pg = { minHeight: '100vh', background: T.bg, color: T.text, padding: '24px 24px 80px', fontFamily: "'Inter', sans-serif" };
   const cardStyle = { background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 16, padding: 24, position: 'relative' as const };
   const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: 8, background: dark? 'rgba(255,255,255,0.06)' : '#fff', border: `1px solid ${T.bdr}`, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const };
   const labelStyle = { fontSize: 12, color: T.sub, marginBottom: 6, display: 'block', fontWeight: 600 };
@@ -181,7 +181,7 @@ export default function ProjectsPage({
     <>
       
       <div style={pg}>
-        <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32, flexWrap: 'wrap', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -191,8 +191,8 @@ export default function ProjectsPage({
                 </button>
               )}
               <div>
-                <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 6px' }}>My Projects</h1>
-                <div style={{ color: T.sub, fontSize: 14 }}>Your QI project portfolio</div>
+                <h1 style={{ fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, margin: '0 0 4px' }}>My Projects</h1>
+                <div style={{ color: T.sub, fontSize: 13 }}>Your QI project portfolio</div>
               </div>
             </div>
             <button onClick={openNew} style={{ background: 'linear-gradient(135deg, #8B5CF6, #3B82F6)', border: 'none', padding: '10px 20px', borderRadius: 10, color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', boxShadow: '0 4px 15px rgba(139,92,246,0.3)' }}>
@@ -211,8 +211,8 @@ export default function ProjectsPage({
                       <Briefcase size={22} />
                     </div>
                     <div>
-                      <h3 style={{ fontSize: 18, margin: '0 0 4px', fontWeight: 800 }}>{(p as any).ProjectName || (p as any).project_name || 'Untitled Project'}</h3>
-                      <div style={{ fontSize: 14, color: T.sub, fontWeight: 500 }}>
+                      <h3 style={{ fontSize: 16, margin: '0 0 4px', fontWeight: 700 }}>{(p as any).ProjectName || (p as any).project_name || 'Untitled Project'}</h3>
+                      <div style={{ fontSize: 13, color: T.sub, fontWeight: 500 }}>
                         {(p as any).Role || (p as any).role} <span style={{ opacity: 0.5 }}>·</span> {(p as any).Domain || (p as any).domain} {(p as any).Client || (p as any).client ? `· ${(p as any).Client || (p as any).client}` : ''}
                       </div>
                     </div>
@@ -279,8 +279,8 @@ export default function ProjectsPage({
       </div>
 
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div onClick={() => setShowModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: dark ? '#0f0f1a' : '#f5f5f5' }}>
+          <div onClick={() => setShowModal(false)} style={{ position: 'absolute', inset: 0 }} />
           <form onSubmit={handleSave} style={{ position: 'relative', background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 20, width: '100%', maxWidth: 700, padding: 32, boxShadow: '0 20px 40px rgba(0,0,0,0.5)', fontFamily: "'Inter', sans-serif", maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: T.text, margin: '0 0 20px' }}>{editingProj ? 'Edit Project' : 'Add Project'}</h2>
             

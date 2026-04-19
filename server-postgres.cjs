@@ -8,8 +8,17 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow all origins but properly (not wildcard when credentials used)
+    callback(null, origin || '*');
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -36,7 +45,7 @@ const SKILL_NAMES = [
   'API Testing', 'Mobile Testing', 'Performance Testing',
   'Security Testing', 'Database Testing', 'Banking',
   'Healthcare', 'E-Commerce', 'Insurance', 'Telecom',
-  'Manual Testing', 'Automation Testing', 'Regression Testing',
+  'Functional Testing', 'Automation Testing', 'Regression Testing',
   'UAT', 'Git', 'Jenkins', 'Docker', 'Azure DevOps',
   'ChatGPT/Prompt Engineering', 'AI Test Automation'
 ];
@@ -199,6 +208,23 @@ async function initializeDatabase() {
       )
     `);
 
+    // Create achievements table
+    await query(`
+      CREATE TABLE IF NOT EXISTS achievements (
+        id VARCHAR(50) PRIMARY KEY,
+        employee_id VARCHAR(50) REFERENCES employees(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        award_type VARCHAR(50) DEFAULT 'Other',
+        category VARCHAR(50) DEFAULT 'Other',
+        date_received VARCHAR(50),
+        description TEXT,
+        issuer VARCHAR(255),
+        project_context VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Create indexes
     await query(`CREATE INDEX IF NOT EXISTS idx_employees_email ON employees(email)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_employees_zensar_id ON employees(zensar_id)`);
@@ -206,6 +232,7 @@ async function initializeDatabase() {
     await query(`CREATE INDEX IF NOT EXISTS idx_projects_employee_id ON projects(employee_id)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_certifications_employee_id ON certifications(employee_id)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_education_employee_id ON education(employee_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_achievements_employee_id ON achievements(employee_id)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_growth_plans_employee_id ON growth_plans(employee_id)`);
 
     // Create app_settings table
@@ -225,6 +252,165 @@ async function initializeDatabase() {
     // CLEANUP: Remove any projects with empty/placeholder names
     await query("DELETE FROM projects WHERE project_name IS NULL OR project_name = '' OR project_name = '.'");
     console.log('🧹 Cleanup: Removed malformed project records.');
+
+    // Create BFSI roles table
+    await query(`
+      CREATE TABLE IF NOT EXISTS bfsi_roles (
+        id SERIAL PRIMARY KEY,
+        role_id VARCHAR(50) UNIQUE NOT NULL,
+        role_title VARCHAR(255) NOT NULL,
+        client_name VARCHAR(255),
+        required_skills TEXT[],
+        days_open INTEGER DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'Open',
+        fill_priority VARCHAR(50) DEFAULT 'Medium',
+        assigned_spoc VARCHAR(255),
+        created_date DATE DEFAULT CURRENT_DATE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        hire_type VARCHAR(50),
+        job_description TEXT,
+        srf_no VARCHAR(50),
+        aging_bucket VARCHAR(50),
+        type VARCHAR(50)
+      )
+    `);
+
+    // Create BFSI employee workforce table
+    await query(`
+      CREATE TABLE IF NOT EXISTS bfsi_workforce (
+        id SERIAL PRIMARY KEY,
+        employee_id VARCHAR(50) NOT NULL,
+        employee_name VARCHAR(255) NOT NULL,
+        email VARCHAR(255),
+        current_skills TEXT[],
+        certifications TEXT[],
+        experience_years INTEGER DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'Available',
+        doj DATE,
+        primary_skill VARCHAR(255),
+        domain_expertise TEXT[],
+        reskilling_program VARCHAR(255),
+        graduation_date DATE,
+        bench_days INTEGER DEFAULT 0,
+        reject_count INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        band VARCHAR(50),
+        billing_status VARCHAR(50),
+        project_name VARCHAR(255),
+        customer VARCHAR(255),
+        pm_name VARCHAR(255),
+        location VARCHAR(255),
+        aging_days INTEGER DEFAULT 0,
+        practice_name VARCHAR(255),
+        service_line VARCHAR(255),
+        deployable_flag BOOLEAN DEFAULT FALSE,
+        rmg_status VARCHAR(50),
+        pool_status VARCHAR(50),
+        deallocation_date DATE,
+        return_to_pool_date DATE,
+        release_reason VARCHAR(255),
+        UNIQUE(employee_id)
+      )
+    `);
+    
+    // Add new columns if they don't exist (for existing databases)
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS band VARCHAR(50)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS billing_status VARCHAR(50)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS project_name VARCHAR(255)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS customer VARCHAR(255)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS pm_name VARCHAR(255)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS location VARCHAR(255)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS aging_days INTEGER DEFAULT 0`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS practice_name VARCHAR(255)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS service_line VARCHAR(255)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS deployable_flag BOOLEAN DEFAULT FALSE`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS rmg_status VARCHAR(50)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS pool_status VARCHAR(50)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS deallocation_date DATE`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS return_to_pool_date DATE`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS release_reason VARCHAR(255)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS grade VARCHAR(50)`);
+    
+    // Add new columns to roles table
+    await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS hire_type VARCHAR(50)`);
+    await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS job_description TEXT`);
+    await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS srf_no VARCHAR(50)`);
+    await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS aging_bucket VARCHAR(50)`);
+    await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS type VARCHAR(50)`);
+
+    // Create BFSI certifications pipeline table
+    await query(`
+      CREATE TABLE IF NOT EXISTS bfsi_certifications (
+        id SERIAL PRIMARY KEY,
+        employee_id VARCHAR(50) REFERENCES bfsi_workforce(employee_id) ON DELETE CASCADE,
+        cert_name VARCHAR(255) NOT NULL,
+        provider VARCHAR(255),
+        start_date DATE,
+        expected_completion DATE,
+        status VARCHAR(50) DEFAULT 'In Progress',
+        duration_weeks INTEGER DEFAULT 4,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create BFSI role assignments table
+    await query(`
+      CREATE TABLE IF NOT EXISTS bfsi_assignments (
+        id SERIAL PRIMARY KEY,
+        role_id VARCHAR(50) REFERENCES bfsi_roles(role_id) ON DELETE CASCADE,
+        employee_id VARCHAR(50) REFERENCES bfsi_workforce(employee_id) ON DELETE CASCADE,
+        match_score INTEGER DEFAULT 0,
+        assignment_status VARCHAR(50) DEFAULT 'Shortlisted',
+        assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(role_id, employee_id)
+      )
+    `);
+
+    // Create BFSI upload history
+    await query(`
+      CREATE TABLE IF NOT EXISTS bfsi_uploads (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR(255),
+        uploaded_by VARCHAR(255),
+        upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        records_processed INTEGER DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'Success'
+      )
+    `);
+    
+    // Create BFSI summary data table for Demand vs Supply
+    await query(`
+      CREATE TABLE IF NOT EXISTS bfsi_summary_data (
+        id SERIAL PRIMARY KEY,
+        primary_skill VARCHAR(255) UNIQUE NOT NULL,
+        reactive_srf INTEGER DEFAULT 0,
+        reactive_backup INTEGER DEFAULT 0,
+        demand_forecast INTEGER DEFAULT 0,
+        proactive INTEGER DEFAULT 0,
+        demand_total INTEGER DEFAULT 0,
+        pool_supply INTEGER DEFAULT 0,
+        deallocation_supply INTEGER DEFAULT 0,
+        supply_total INTEGER DEFAULT 0,
+        gap INTEGER DEFAULT 0,
+        offers_reactive INTEGER DEFAULT 0,
+        offers_proactive INTEGER DEFAULT 0,
+        offers_total INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create indexes for BFSI tables
+    await query(`CREATE INDEX IF NOT EXISTS idx_bfsi_roles_status ON bfsi_roles(status)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_bfsi_roles_type ON bfsi_roles(type)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_bfsi_workforce_status ON bfsi_workforce(status)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_bfsi_workforce_billing ON bfsi_workforce(billing_status)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_bfsi_certifications_emp ON bfsi_certifications(employee_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_bfsi_assignments_role ON bfsi_assignments(role_id)`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_bfsi_summary_skill ON bfsi_summary_data(primary_skill)`);
 
     console.log('✅ Database tables initialized successfully');
   } catch (error) {
@@ -390,13 +576,31 @@ app.post('/api/employees', async (req, res) => {
     const rawPw = body.password || body.Password || '';
     const encPw = rawPw ? encryptPw(rawPw) : encryptPw('zensar123');
 
-    // Check if already exists (case-insensitive)
-    const existing = await query(
-      'SELECT * FROM employees WHERE LOWER(id) = LOWER($1) OR LOWER(zensar_id) = LOWER($1) OR LOWER(email) = LOWER($2)',
-      [zensar_id, email]
+    // Check for duplicates with specific field validation
+    const existingZensarId = await query(
+      'SELECT * FROM employees WHERE LOWER(zensar_id) = LOWER($1)',
+      [zensar_id]
     );
-    if (existing.rows.length > 0) {
-      return res.json({ success: true, ...existing.rows[0], id: existing.rows[0].id });
+    if (existingZensarId.rows.length > 0) {
+      return res.status(400).json({ error: `Zensar ID '${zensar_id}' already exists in the database.` });
+    }
+
+    const existingEmail = await query(
+      'SELECT * FROM employees WHERE LOWER(email) = LOWER($1)',
+      [email]
+    );
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({ error: `Email '${email}' is already registered with another employee.` });
+    }
+
+    if (phone) {
+      const existingPhone = await query(
+        'SELECT * FROM employees WHERE phone = $1',
+        [phone]
+      );
+      if (existingPhone.rows.length > 0) {
+        return res.status(400).json({ error: `Phone number '${phone}' is already associated with another employee.` });
+      }
     }
 
     const result = await query(`
@@ -448,13 +652,42 @@ app.delete('/api/employees/:id', async (req, res) => {
 app.post('/api/register', async (req, res) => {
   try {
     const { name, email, phone, designation, department, location, yearsIT, yearsZensar, password, zensarId, primarySkill, primaryDomain } = req.body;
-    const zid = zensarId || `emp_${Date.now()}`;
+    const zid = (zensarId || `emp_${Date.now()}`).trim();
+    const emailTrimmed = (email || '').trim().toLowerCase();
+    const phoneTrimmed = (phone || '').trim();
+
+    // Check for duplicates with specific field validation
+    const existingZensarId = await query(
+      'SELECT * FROM employees WHERE LOWER(zensar_id) = LOWER($1)',
+      [zid]
+    );
+    if (existingZensarId.rows.length > 0) {
+      return res.status(400).json({ error: `Zensar ID '${zid}' already exists in the database.` });
+    }
+
+    const existingEmail = await query(
+      'SELECT * FROM employees WHERE LOWER(email) = LOWER($1)',
+      [emailTrimmed]
+    );
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({ error: `Email '${emailTrimmed}' is already registered with another employee.` });
+    }
+
+    if (phoneTrimmed) {
+      const existingPhone = await query(
+        'SELECT * FROM employees WHERE phone = $1',
+        [phoneTrimmed]
+      );
+      if (existingPhone.rows.length > 0) {
+        return res.status(400).json({ error: `Phone number '${phoneTrimmed}' is already associated with another employee.` });
+      }
+    }
 
     const result = await query(`
       INSERT INTO employees (id, zensar_id, name, email, phone, designation, department, location, years_it, years_zensar, password, primary_skill, primary_domain)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
-    `, [zid, zid, name, email, phone, designation, department, location, yearsIT || 0, yearsZensar || 0, encryptPw(password), primarySkill, primaryDomain]);
+    `, [zid, zid, name, emailTrimmed, phoneTrimmed, designation, department, location, yearsIT || 0, yearsZensar || 0, encryptPw(password), primarySkill, primaryDomain]);
 
     res.json({ success: true, employee: { ...result.rows[0], id: result.rows[0].zensar_id || result.rows[0].id } });
   } catch (error) {
@@ -530,11 +763,35 @@ app.post('/api/admin/settings', async (req, res) => {
 app.post('/api/admin/employees/add', async (req, res) => {
   try {
     const { name, email, zensar_id, password, phone, designation, department, location, years_it, years_zensar, primary_skill, primary_domain } = req.body;
+    const zid = (zensar_id || '').trim();
+    const emailTrimmed = (email || '').trim().toLowerCase();
+    const phoneTrimmed = (phone || '').trim();
 
-    // Check if employee already exists
-    const existing = await query("SELECT * FROM employees WHERE zensar_id = $1 OR email = $2", [zensar_id, email]);
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'Employee with this ID or Email already exists' });
+    // Check for duplicates with specific field validation
+    const existingZensarId = await query(
+      'SELECT * FROM employees WHERE LOWER(zensar_id) = LOWER($1)',
+      [zid]
+    );
+    if (existingZensarId.rows.length > 0) {
+      return res.status(400).json({ error: `Zensar ID '${zid}' already exists in the database.` });
+    }
+
+    const existingEmail = await query(
+      'SELECT * FROM employees WHERE LOWER(email) = LOWER($1)',
+      [emailTrimmed]
+    );
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({ error: `Email '${emailTrimmed}' is already registered with another employee.` });
+    }
+
+    if (phoneTrimmed) {
+      const existingPhone = await query(
+        'SELECT * FROM employees WHERE phone = $1',
+        [phoneTrimmed]
+      );
+      if (existingPhone.rows.length > 0) {
+        return res.status(400).json({ error: `Phone number '${phoneTrimmed}' is already associated with another employee.` });
+      }
     }
 
     const id = zensar_id || `EMP_${Date.now()}`;
@@ -551,27 +808,224 @@ app.post('/api/admin/employees/add', async (req, res) => {
   }
 });
 
+// Admin create employee (used by AdminDashboard)
+app.post('/api/admin/create-employee', async (req, res) => {
+  try {
+    const { name, email, employeeId, phone, designation, department, location, yearsIT, yearsZensar, password, skills, projects, certificates, education, primarySkill, primaryDomain } = req.body;
+    const zid = (employeeId || '').trim();
+    const emailTrimmed = (email || '').trim().toLowerCase();
+    const phoneTrimmed = (phone || '').trim();
+
+    console.log('[Admin Create Employee] Request received:', {
+      name, email: emailTrimmed, employeeId: zid, phone: phoneTrimmed, designation,
+      primarySkill, primaryDomain,
+      skillsCount: Array.isArray(skills) ? skills.length : 0,
+      projectsCount: Array.isArray(projects) ? projects.length : 0,
+      certificatesCount: Array.isArray(certificates) ? certificates.length : 0,
+      educationCount: Array.isArray(education) ? education.length : 0
+    });
+
+    // Check for duplicates with specific field validation
+    const existingZensarId = await query(
+      'SELECT * FROM employees WHERE LOWER(zensar_id) = LOWER($1)',
+      [zid]
+    );
+    if (existingZensarId.rows.length > 0) {
+      return res.status(400).json({ error: `Zensar ID '${zid}' already exists in the database.` });
+    }
+
+    const existingEmail = await query(
+      'SELECT * FROM employees WHERE LOWER(email) = LOWER($1)',
+      [emailTrimmed]
+    );
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({ error: `Email '${emailTrimmed}' is already registered with another employee.` });
+    }
+
+    if (phoneTrimmed) {
+      const existingPhone = await query(
+        'SELECT * FROM employees WHERE phone = $1',
+        [phoneTrimmed]
+      );
+      if (existingPhone.rows.length > 0) {
+        return res.status(400).json({ error: `Phone number '${phoneTrimmed}' is already associated with another employee.` });
+      }
+    }
+
+    // Determine primary_skill and primary_domain from skills if not provided
+    let finalPrimarySkill = primarySkill || '';
+    let finalPrimaryDomain = primaryDomain || '';
+    
+    if (!finalPrimarySkill && Array.isArray(skills) && skills.length > 0) {
+      // Find highest rated skill
+      const sortedSkills = [...skills].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      finalPrimarySkill = sortedSkills[0]?.name || '';
+    }
+    
+    if (!finalPrimaryDomain && Array.isArray(skills) && skills.length > 0) {
+      // Find highest rated domain skill (Banking, Insurance, Healthcare, etc.)
+      const domainSkills = ['Banking', 'Insurance', 'Healthcare', 'E-Commerce', 'Telecom', 'Retail', 'Energy & Utilities'];
+      const foundDomain = skills.find(s => domainSkills.includes(s.name || s.skillName || ''));
+      finalPrimaryDomain = foundDomain?.name || foundDomain?.skillName || '';
+    }
+
+    // Create the employee
+    const result = await query(`
+      INSERT INTO employees (id, zensar_id, name, email, phone, designation, department, location, years_it, years_zensar, password, primary_skill, primary_domain)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *
+    `, [zid, zid, name, emailTrimmed, phoneTrimmed, designation || '', department || '', location || '', yearsIT || 0, yearsZensar || 0, encryptPw(password), finalPrimarySkill, finalPrimaryDomain]);
+
+    console.log('[Admin Create Employee] Employee created:', zid);
+
+    // Save skills if provided
+    let skillsSaved = 0;
+    if (Array.isArray(skills) && skills.length > 0) {
+      console.log('[Admin Create Employee] Saving skills:', skills.length);
+      for (const skill of skills) {
+        const skillName = skill.name || skill.skillName || '';
+        const rating = skill.rating || skill.selfRating || 1; // Default to Level 1
+        if (skillName && rating > 0) {
+          try {
+            await query(`
+              INSERT INTO skills (employee_id, skill_name, self_rating)
+              VALUES ($1, $2, $3)
+              ON CONFLICT (employee_id, skill_name) DO UPDATE SET self_rating = $3
+            `, [zid, skillName, Math.min(5, rating)]); // Allow ratings 1-5
+            skillsSaved++;
+          } catch (err) {
+            console.error('[Admin Create Employee] Error saving skill:', skillName, err.message);
+          }
+        }
+      }
+      console.log('[Admin Create Employee] Skills saved:', skillsSaved);
+    }
+
+    // Save projects if provided
+    let projectsSaved = 0;
+    if (Array.isArray(projects) && projects.length > 0) {
+      console.log('[Admin Create Employee] Saving projects:', projects.length);
+      for (const proj of projects) {
+        const projName = proj.name || proj.projectName || '';
+        const projDesc = proj.description || '';
+        const projDuration = proj.duration || '';
+        const projTech = Array.isArray(proj.technologies) ? proj.technologies : [];
+        if (projName) {
+          try {
+            await query(`
+              INSERT INTO projects (employee_id, project_name, description, technologies)
+              VALUES ($1, $2, $3, $4)
+            `, [zid, projName, projDesc, projTech]);
+            projectsSaved++;
+          } catch (err) {
+            console.error('[Admin Create Employee] Error saving project:', projName, err.message);
+          }
+        }
+      }
+      console.log('[Admin Create Employee] Projects saved:', projectsSaved);
+    }
+
+    // Save certifications if provided
+    let certsSaved = 0;
+    if (Array.isArray(certificates) && certificates.length > 0) {
+      console.log('[Admin Create Employee] Saving certifications:', certificates.length);
+      for (const cert of certificates) {
+        const certName = cert.name || cert.CertName || '';
+        const certIssuer = cert.issuer || cert.Provider || '';
+        const certDate = cert.date || '';
+        if (certName) {
+          try {
+            await query(`
+              INSERT INTO certifications (employee_id, cert_name, issuing_organization)
+              VALUES ($1, $2, $3)
+            `, [zid, certName, certIssuer]);
+            certsSaved++;
+          } catch (err) {
+            console.error('[Admin Create Employee] Error saving certification:', certName, err.message);
+          }
+        }
+      }
+      console.log('[Admin Create Employee] Certifications saved:', certsSaved);
+    }
+
+    // Save education if provided
+    let eduSaved = 0;
+    if (Array.isArray(education) && education.length > 0) {
+      console.log('[Admin Create Employee] Saving education:', education.length);
+      for (const edu of education) {
+        const degree = edu.degree || '';
+        if (degree) {
+          try {
+            await query(`
+              INSERT INTO education (employee_id, degree, institution, field_of_study)
+              VALUES ($1, $2, $3, $4)
+            `, [zid, degree, edu.institution || '', edu.field || '']);
+            eduSaved++;
+          } catch (err) {
+            console.error('[Admin Create Employee] Error saving education:', degree, err.message);
+          }
+        }
+      }
+      console.log('[Admin Create Employee] Education saved:', eduSaved);
+    }
+
+    console.log(`[Admin] ✅ Created employee: ${name} (${zid}) with ${skillsSaved} skills, ${projectsSaved} projects, ${certsSaved} certs, ${eduSaved} education`);
+    res.json({ 
+      success: true, 
+      ...result.rows[0], 
+      id: result.rows[0].id,
+      saved: {
+        skills: skillsSaved,
+        projects: projectsSaved,
+        certifications: certsSaved,
+        education: eduSaved
+      }
+    });
+  } catch (error) {
+    console.error('[Admin Create Employee] Error:', error);
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Zensar ID or Email already exists in the database.' });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Admin update employee
 app.post('/api/admin/employees/update', async (req, res) => {
   try {
-    const { id, name, email, zensar_id, password, phone, designation, department, location, years_it, years_zensar, primary_skill, primary_domain } = req.body;
+    // Support both camelCase (frontend) and snake_case (legacy)
+    const { 
+      id, name, email, zensar_id, password, phone, designation, department, location, 
+      years_it, years_zensar, primary_skill, primary_domain,
+      // camelCase aliases
+      yearsIT, yearsZensar, primarySkill, primaryDomain
+    } = req.body;
 
     let encrypted = null;
     if (password) {
       encrypted = encryptPw(password);
     }
 
+    // Use camelCase values as fallback for snake_case
+    const finalYearsIT = years_it ?? yearsIT ?? 0;
+    const finalYearsZensar = years_zensar ?? yearsZensar ?? 0;
+    const finalPrimarySkill = primary_skill ?? primarySkill ?? null;
+    const finalPrimaryDomain = primary_domain ?? primaryDomain ?? null;
+
     await query(`
       UPDATE employees 
-      SET name = $1, email = $2, zensar_id = $3, phone = $4, designation = $5, 
-          department = $6, location = $7, years_it = $8, years_zensar = $9, 
-          password = COALESCE($10, password), primary_skill = $11, primary_domain = $12,
+      SET name = COALESCE($1, name), email = COALESCE($2, email), zensar_id = COALESCE($3, zensar_id), 
+          phone = COALESCE($4, phone), designation = COALESCE($5, designation), 
+          department = COALESCE($6, department), location = COALESCE($7, location), 
+          years_it = COALESCE($8, years_it), years_zensar = COALESCE($9, years_zensar), 
+          password = COALESCE($10, password), primary_skill = COALESCE($11, primary_skill), 
+          primary_domain = COALESCE($12, primary_domain),
           updated_at = CURRENT_TIMESTAMP
       WHERE id = $13 OR zensar_id = $13
     `, [
       name, email, zensar_id, phone, designation,
-      department, location, years_it || 0, years_zensar || 0,
-      encrypted, primary_skill, primary_domain, id
+      department, location, finalYearsIT, finalYearsZensar,
+      encrypted, finalPrimarySkill, finalPrimaryDomain, id
     ]);
 
     res.json({ success: true, message: 'Personnel record updated' });
@@ -586,13 +1040,19 @@ app.get('/api/employees/:id/skills', async (req, res) => {
   try {
     const result = await query('SELECT * FROM skills WHERE employee_id = $1', [req.params.id]);
 
-    const skills = result.rows.map(row => ({
-      skillId: `s${SKILL_NAMES.indexOf(row.skill_name) + 1}`,
-      skillName: row.skill_name,
-      selfRating: row.self_rating,
-      managerRating: row.manager_rating,
-      validated: row.validated
-    })).filter(s => s.selfRating > 0);
+    const skills = result.rows.map(row => {
+      // Check if it's a predefined skill
+      const predefinedIdx = SKILL_NAMES.indexOf(row.skill_name);
+      const skillId = predefinedIdx >= 0 ? `s${predefinedIdx + 1}` : row.skill_name;
+
+      return {
+        skillId: skillId,
+        skillName: row.skill_name,
+        selfRating: row.self_rating,
+        managerRating: row.manager_rating,
+        validated: row.validated
+      };
+    }).filter(s => s.selfRating > 0);
 
     res.json(skills);
   } catch (error) {
@@ -682,14 +1142,24 @@ app.post('/api/skills', async (req, res) => {
 
   try {
     for (const s of skills) {
-      const skillName = SKILL_NAMES.find((name, idx) => `s${idx + 1}` === s.skillId) || s.skillId;
+      // Check if skillId is a predefined skill ID (s1, s2, etc.)
+      let skillName;
+      if (typeof s.skillId === 'string' && s.skillId.match(/^s\d+$/i)) {
+        // It's a predefined skill ID like "s1", "s2"
+        const idx = parseInt(s.skillId.replace(/^s/i, '')) - 1;
+        skillName = SKILL_NAMES[idx] || s.skillId;
+      } else {
+        // It's a custom skill name (from AI extraction)
+        skillName = s.skillId || s.skillName || 'Unknown Skill';
+      }
+
       await query(`
         INSERT INTO skills (employee_id, skill_name, self_rating)
         VALUES ($1, $2, $3)
         ON CONFLICT (employee_id, skill_name) DO UPDATE SET self_rating = $3
       `, [resolvedId, skillName, s.selfRating]);
     }
-    res.json({ success: true });
+    res.json({ success: true, saved: skills.length });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -785,6 +1255,15 @@ app.post('/api/certifications', async (req, res) => {
          RETURNING *
        `, [certName, org, issueDate || null, expiryDate || null, noExpiry, credentialId, url, existingId, empId]);
     } else {
+      // ── DUPLICATE CHECK: same cert name for same employee ──
+      const dupCheck = await query(
+        `SELECT id FROM certifications WHERE employee_id = $1 AND LOWER(TRIM(cert_name)) = LOWER(TRIM($2))`,
+        [empId, certName]
+      );
+      if (dupCheck.rows.length > 0) {
+        console.log(`[Cert Sync] ⚠️ Duplicate skipped: "${certName}" already exists for ${empId}`);
+        return res.json({ success: true, duplicate: true, message: `Certification "${certName}" already exists`, id: dupCheck.rows[0].id });
+      }
       result = await query(`
         INSERT INTO certifications (employee_id, cert_name, issuing_organization, issue_date, expiry_date, no_expiry, credential_id, credential_url)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -892,6 +1371,15 @@ app.post('/api/projects', async (req, res) => {
         RETURNING *
       `, [projectName, role, client, domain, startDate || null, endDate || null, desc, techs, skillsUsed, teamSize, outcome, isOngoing, existingId, resolvedEmpId]);
     } else {
+      // ── DUPLICATE CHECK: same project name + role for same employee ──
+      const dupCheck = await query(
+        `SELECT id FROM projects WHERE employee_id = $1 AND LOWER(TRIM(project_name)) = LOWER(TRIM($2)) AND LOWER(TRIM(COALESCE(role,''))) = LOWER(TRIM($3))`,
+        [resolvedEmpId, projectName, role]
+      );
+      if (dupCheck.rows.length > 0) {
+        console.log(`[Projects Sync] ⚠️ Duplicate skipped: "${projectName}" (${role}) already exists for ${resolvedEmpId}`);
+        return res.json({ success: true, duplicate: true, message: `Project "${projectName}" already exists`, id: dupCheck.rows[0].id });
+      }
       result = await query(`
         INSERT INTO projects (
           employee_id, project_name, role, client, domain, 
@@ -975,6 +1463,15 @@ app.post('/api/education', async (req, res) => {
         RETURNING *
       `, [degree, institution, fieldOfStudy, startDate, endDate, grade, desc, existingId, empId]);
     } else {
+      // ── DUPLICATE CHECK: same degree + institution for same employee ──
+      const dupCheck = await query(
+        `SELECT id FROM education WHERE employee_id = $1 AND LOWER(TRIM(COALESCE(degree,''))) = LOWER(TRIM($2)) AND LOWER(TRIM(COALESCE(institution,''))) = LOWER(TRIM($3))`,
+        [empId, degree, institution]
+      );
+      if (dupCheck.rows.length > 0) {
+        console.log(`[Education Sync] ⚠️ Duplicate skipped: "${degree}" at "${institution}" already exists for ${empId}`);
+        return res.json({ success: true, duplicate: true, message: `Education "${degree}" already exists`, id: dupCheck.rows[0].id });
+      }
       result = await query(`
         INSERT INTO education (employee_id, degree, institution, field_of_study, start_date, end_date, grade, description)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1032,6 +1529,94 @@ app.delete('/api/education/:id', async (req, res) => {
   try {
     await query('DELETE FROM education WHERE id = $1', [req.params.id]);
     res.json({ success: true, message: 'Educational record removed' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get achievements for employee
+app.get('/api/achievements/:id', async (req, res) => {
+  try {
+    let sql = 'SELECT * FROM achievements WHERE LOWER(employee_id) = LOWER($1) ORDER BY date_received DESC';
+    let params = [req.params.id];
+
+    // Also try matching by zensar_id from employees table
+    const empSql = 'SELECT id FROM employees WHERE LOWER(zensar_id) = LOWER($1)';
+    const empResult = await query(empSql, [req.params.id]);
+    if (empResult.rows.length > 0) {
+      const empPk = empResult.rows[0].id;
+      sql = 'SELECT * FROM achievements WHERE LOWER(employee_id) = LOWER($1) OR LOWER(employee_id) = LOWER($2) ORDER BY date_received DESC';
+      params = [req.params.id, empPk];
+    }
+
+    const result = await query(sql, params);
+    const mapped = result.rows.map(r => ({
+      ID: r.id,
+      EmployeeID: r.employee_id,
+      Title: r.title,
+      AwardType: r.award_type,
+      Category: r.category,
+      DateReceived: r.date_received,
+      Description: r.description,
+      Issuer: r.issuer,
+      ProjectContext: r.project_context
+    }));
+    res.json({ achievements: mapped });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add or Update achievement
+app.post('/api/achievements', async (req, res) => {
+  try {
+    const body = req.body;
+    const rawEmpId = body.employeeId || body.EmployeeID || body.employee_id;
+    const id = body.id || body.ID || `ach_${Date.now()}`;
+    const employeeId = rawEmpId || body.user?.id || 'unknown';
+
+    // ── DUPLICATE CHECK: same title for same employee ──
+    const dupCheck = await query(
+      `SELECT id FROM achievements WHERE employee_id = $1 AND LOWER(TRIM(title)) = LOWER(TRIM($2))`,
+      [employeeId, body.Title || body.title || '']
+    );
+    if (dupCheck.rows.length > 0 && !body.id && !body.ID) {
+      console.log(`[Achievement Sync] ⚠️ Duplicate skipped: "${body.Title}" already exists for ${employeeId}`);
+      return res.json({ success: true, duplicate: true, message: `Achievement "${body.Title}" already exists`, id: dupCheck.rows[0].id });
+    }
+
+    await query(`
+      INSERT INTO achievements (id, employee_id, title, award_type, category, date_received, description, issuer, project_context)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (id) DO UPDATE SET
+        title = EXCLUDED.title,
+        award_type = EXCLUDED.award_type,
+        category = EXCLUDED.category,
+        date_received = EXCLUDED.date_received,
+        description = EXCLUDED.description,
+        issuer = EXCLUDED.issuer,
+        project_context = EXCLUDED.project_context
+    `, [
+      id, employeeId, body.Title || body.title,
+      body.AwardType || body.award_type || 'Other',
+      body.Category || body.category || 'Other',
+      body.DateReceived || body.date_received || null,
+      body.Description || body.description || '',
+      body.Issuer || body.issuer || '',
+      body.ProjectContext || body.project_context || ''
+    ]);
+
+    res.json({ success: true, message: 'Achievement saved', id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete achievement
+app.delete('/api/achievements/:id', async (req, res) => {
+  try {
+    await query('DELETE FROM achievements WHERE id = $1', [req.params.id]);
+    res.json({ success: true, message: 'Achievement removed' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1122,6 +1707,1067 @@ app.post('/api/llm', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ==========================================
+// BFSI API ENDPOINTS
+// ==========================================
+
+const XLSX = require('xlsx');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+
+// BFSI Skills Taxonomy
+const BFSI_SKILLS = {
+  testing: ['API Testing', 'Performance Testing', 'Security Testing', 'Database Testing', 'Mobile Testing', 'Automation Testing', 'SDET', 'Functional Testing', 'Regression Testing', 'UAT'],
+  automation: ['Selenium', 'Playwright', 'Cypress', 'Appium', 'JMeter', 'Postman', 'SOAP UI', 'LoadRunner'],
+  development: ['Java', 'Python', 'C#', 'SQL', 'REST APIs', 'Microservices', 'JavaScript', 'TypeScript'],
+  devops: ['Jenkins', 'Git', 'Azure DevOps', 'Docker', 'Kubernetes', 'TFS', 'JIRA', 'TestRail'],
+  domain: ['Banking systems', 'Payment Processing', 'Regulatory Compliance', 'SOX', 'PCI-DSS', 'Financial Data Security', 'Banking', 'Insurance', 'E-Commerce']
+};
+
+// Get all BFSI roles
+app.get('/api/bfsi/roles', async (req, res) => {
+  try {
+    const roles = await query('SELECT * FROM bfsi_roles ORDER BY created_date DESC');
+    res.json({ roles: roles.rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all BFSI workforce
+app.get('/api/bfsi/workforce', async (req, res) => {
+  try {
+    const workforce = await query('SELECT * FROM bfsi_workforce ORDER BY employee_name');
+    const certifications = await query('SELECT * FROM bfsi_certifications');
+    res.json({ 
+      workforce: workforce.rows,
+      certifications: certifications.rows
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Calculate skill match score
+function calculateMatchScore(employeeSkills, requiredSkills) {
+  if (!requiredSkills || requiredSkills.length === 0) return 0;
+  if (!employeeSkills || employeeSkills.length === 0) return 0;
+  
+  const matched = requiredSkills.filter(skill => 
+    employeeSkills.some(empSkill => 
+      empSkill.toLowerCase().includes(skill.toLowerCase()) || 
+      skill.toLowerCase().includes(empSkill.toLowerCase())
+    )
+  );
+  
+  const baseScore = Math.round((matched.length / requiredSkills.length) * 100);
+  return Math.min(100, baseScore);
+}
+
+// Get BFSI dashboard KPIs
+app.get('/api/bfsi/dashboard', async (req, res) => {
+  try {
+    // Total open roles
+    const rolesResult = await query("SELECT COUNT(*) as total FROM bfsi_roles WHERE status = 'Open'");
+    const totalRoles = parseInt(rolesResult.rows[0].total);
+    
+    // Reactive vs Proactive roles
+    const reactiveResult = await query("SELECT COUNT(*) as total FROM bfsi_roles WHERE status = 'Open' AND type = 'Reactive'");
+    const proactiveResult = await query("SELECT COUNT(*) as total FROM bfsi_roles WHERE status = 'Open' AND type = 'Proactive'");
+    
+    // Filled roles (assigned)
+    const filledResult = await query("SELECT COUNT(DISTINCT role_id) as filled FROM bfsi_assignments WHERE assignment_status = 'Assigned'");
+    const filledRoles = parseInt(filledResult.rows[0].filled);
+    
+    // Fill rate
+    const fillRate = totalRoles > 0 ? Math.round((filledRoles / (totalRoles + filledRoles)) * 100) : 0;
+    
+    // Total workforce from LOB
+    const totalWorkforceResult = await query("SELECT COUNT(*) as total FROM bfsi_workforce");
+    const totalWorkforce = parseInt(totalWorkforceResult.rows[0].total);
+    
+    // Billable employees
+    const billableResult = await query("SELECT COUNT(*) as billable FROM bfsi_workforce WHERE billing_status ILIKE '%billable%'");
+    const billableEmployees = parseInt(billableResult.rows[0].billable);
+    
+    // Pool employees (available)
+    const poolResult = await query("SELECT COUNT(*) as pool FROM bfsi_workforce WHERE billing_status ILIKE '%pool%' OR status = 'Available'");
+    const poolEmployees = parseInt(poolResult.rows[0].pool);
+    
+    // Deallocating employees
+    const deallocResult = await query("SELECT COUNT(*) as dealloc FROM bfsi_workforce WHERE status = 'Deallocating'");
+    const deallocatingCount = parseInt(deallocResult.rows[0].dealloc);
+    
+    // Employees ready
+    const readyResult = await query("SELECT COUNT(*) as ready FROM bfsi_workforce WHERE status = 'Available'");
+    const readyEmployees = parseInt(readyResult.rows[0].ready);
+    
+    // In certification
+    const certResult = await query("SELECT COUNT(*) as cert FROM bfsi_certifications WHERE status = 'In Progress'");
+    const inCertification = parseInt(certResult.rows[0].cert);
+    
+    // Average days to fill
+    const daysResult = await query("SELECT AVG(days_open) as avg_days FROM bfsi_roles WHERE status = 'Open'");
+    const avgDays = Math.round(parseFloat(daysResult.rows[0].avg_days) || 0);
+    
+    // Aging roles
+    const agingResult = await query("SELECT COUNT(*) as aging FROM bfsi_roles WHERE status = 'Open' AND days_open > 90");
+    const agingRoles = parseInt(agingResult.rows[0].aging);
+    
+    // Get summary data from Excel Summary sheet
+    const summaryResult = await query("SELECT * FROM bfsi_summary_data ORDER BY gap DESC LIMIT 5");
+    const summaryData = summaryResult.rows;
+    
+    // Calculate totals from summary
+    const totalDemand = summaryData.reduce((sum, s) => sum + (s.demand_total || 0), 0);
+    const totalSupply = summaryData.reduce((sum, s) => sum + (s.supply_total || 0), 0);
+    const totalGap = summaryData.reduce((sum, s) => sum + (s.gap || 0), 0);
+    
+    // Get Grand Total row specifically for overall KPIs
+    const grandTotalResult = await query("SELECT * FROM bfsi_summary_data WHERE primary_skill ILIKE '%Grand Total%'");
+    const gt = grandTotalResult.rows[0] || {};
+    console.log('📊 Dashboard Grand Total row:', gt);
+    console.log('📊 supply_total from GT:', gt.supply_total, 'type:', typeof gt.supply_total);
+    
+    // Skill gaps from summary data (all rows excluding Grand Total for the list)
+    const allSummaryResult = await query("SELECT * FROM bfsi_summary_data WHERE primary_skill NOT ILIKE '%Grand Total%' ORDER BY gap DESC");
+    const skillGaps = allSummaryResult.rows.map(s => ({
+      skill: s.primary_skill,
+      demand: s.demand_total,
+      supply: s.supply_total,
+      gap: s.gap,
+      reactive: s.reactive_srf,
+      proactive: s.proactive,
+      pool: s.pool_supply,
+      deallocation: s.deallocation_supply
+    }));
+    console.log('📊 Skill gaps count:', skillGaps.length);
+    console.log('📊 First skill gap:', skillGaps[0]);
+    
+    const response = {
+      totalRoles: safeParseInt(gt.demand_total, totalRoles),
+      reactiveRoles: safeParseInt(gt.reactive_srf, 0),
+      proactiveRoles: safeParseInt(gt.proactive, 0),
+      filledRoles,
+      fillRate,
+      totalWorkforce,
+      billableEmployees,
+      poolEmployees: safeParseInt(gt.pool_supply, poolEmployees),
+      deallocatingCount: safeParseInt(gt.deallocation_supply, deallocatingCount),
+      readyEmployees,
+      inCertification,
+      avgDays,
+      agingRoles,
+      totalDemand: safeParseInt(gt.demand_total, totalRoles),
+      totalSupply: safeParseInt(gt.supply_total, 0),
+      totalGap: safeParseInt(gt.gap, 0),
+      skillGaps,
+      criticalGap: skillGaps[0]?.skill || 'None'
+    };
+    console.log('📊 Dashboard response totals:', { 
+      totalDemand: response.totalDemand, 
+      totalSupply: response.totalSupply, 
+      totalGap: response.totalGap 
+    });
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get BFSI summary data (from Excel Summary sheet)
+app.get('/api/bfsi/summary-data', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM bfsi_summary_data ORDER BY gap DESC');
+    res.json({ summary: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get skill demand vs supply
+app.get('/api/bfsi/skill-analysis', async (req, res) => {
+  try {
+    const allRoles = await query("SELECT required_skills FROM bfsi_roles WHERE status = 'Open'");
+    const allWorkforce = await query("SELECT * FROM bfsi_workforce");
+    const certifications = await query("SELECT * FROM bfsi_certifications WHERE status = 'In Progress'");
+    
+    const skillDemand = {};
+    const skillSupply = { ready: {}, week2: {}, week4: {}, blocked: {} };
+    
+    // Calculate demand
+    allRoles.rows.forEach(role => {
+      (role.required_skills || []).forEach(skill => {
+        skillDemand[skill] = (skillDemand[skill] || 0) + 1;
+      });
+    });
+    
+    // Categorize supply by readiness
+    allWorkforce.rows.forEach(emp => {
+      const skills = emp.current_skills || [];
+      const today = new Date();
+      const gradDate = emp.graduation_date ? new Date(emp.graduation_date) : null;
+      const daysToGrad = gradDate ? Math.ceil((gradDate - today) / (1000 * 60 * 60 * 24)) : null;
+      
+      skills.forEach(skill => {
+        if (emp.status === 'Available' && !gradDate) {
+          skillSupply.ready[skill] = (skillSupply.ready[skill] || 0) + 1;
+        } else if (daysToGrad && daysToGrad <= 14) {
+          skillSupply.week2[skill] = (skillSupply.week2[skill] || 0) + 1;
+        } else if (daysToGrad && daysToGrad <= 28) {
+          skillSupply.week4[skill] = (skillSupply.week4[skill] || 0) + 1;
+        } else if (emp.bench_days > 60 || emp.reject_count > 2) {
+          skillSupply.blocked[skill] = (skillSupply.blocked[skill] || 0) + 1;
+        }
+      });
+    });
+    
+    const analysis = Object.entries(skillDemand).map(([skill, demand]) => ({
+      skill,
+      demand,
+      ready: skillSupply.ready[skill] || 0,
+      week2: skillSupply.week2[skill] || 0,
+      week4: skillSupply.week4[skill] || 0,
+      blocked: skillSupply.blocked[skill] || 0,
+      totalSupply: (skillSupply.ready[skill] || 0) + (skillSupply.week2[skill] || 0) + (skillSupply.week4[skill] || 0),
+      gap: demand - ((skillSupply.ready[skill] || 0) + (skillSupply.week2[skill] || 0) + (skillSupply.week4[skill] || 0))
+    }));
+    
+    res.json({ analysis });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Shortlist employees for a role
+app.get('/api/bfsi/shortlist/:roleId', async (req, res) => {
+  try {
+    const { roleId } = req.params;
+    
+    // Get role details
+    const roleResult = await query('SELECT * FROM bfsi_roles WHERE role_id = $1', [roleId]);
+    if (roleResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Role not found' });
+    }
+    const role = roleResult.rows[0];
+    
+    // Get all workforce
+    const workforceResult = await query('SELECT * FROM bfsi_workforce');
+    const certifications = await query('SELECT * FROM bfsi_certifications WHERE status = $1', ['In Progress']);
+    
+    const today = new Date();
+    
+    const shortlist = workforceResult.rows.map(emp => {
+      const matchScore = calculateMatchScore(emp.current_skills, role.required_skills);
+      const certBonus = (emp.certifications || []).some(c => 
+        role.required_skills.some(rs => c.toLowerCase().includes(rs.toLowerCase()))
+      ) ? 10 : 0;
+      const finalScore = Math.min(100, matchScore + certBonus);
+      
+      const gradDate = emp.graduation_date ? new Date(emp.graduation_date) : null;
+      const daysToGrad = gradDate ? Math.ceil((gradDate - today) / (1000 * 60 * 60 * 24)) : null;
+      
+      let readiness = 'Blocked';
+      if (finalScore >= 80 && emp.status === 'Available' && !gradDate) {
+        readiness = 'Ready Now';
+      } else if (finalScore >= 60 && daysToGrad && daysToGrad <= 14) {
+        readiness = '2-Week Ready';
+      } else if (finalScore >= 40 && daysToGrad && daysToGrad <= 28) {
+        readiness = '4-Week Ready';
+      }
+      
+      const gaps = role.required_skills.filter(reqSkill => 
+        !(emp.current_skills || []).some(empSkill => 
+          empSkill.toLowerCase().includes(reqSkill.toLowerCase()) ||
+          reqSkill.toLowerCase().includes(empSkill.toLowerCase())
+        )
+      );
+      
+      return {
+        ...emp,
+        matchScore: finalScore,
+        baseScore: matchScore,
+        certBonus,
+        readiness,
+        daysToGrad,
+        gaps,
+        skillMatch: `${matchScore}%`
+      };
+    }).filter(emp => emp.matchScore >= 40).sort((a, b) => b.matchScore - a.matchScore);
+    
+    res.json({ role, shortlist });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get certification pipeline
+app.get('/api/bfsi/certifications/pipeline', async (req, res) => {
+  try {
+    const pipeline = await query(`
+      SELECT c.*, w.employee_name, w.reskilling_program 
+      FROM bfsi_certifications c
+      JOIN bfsi_workforce w ON c.employee_id = w.employee_id
+      WHERE c.status = 'In Progress'
+      ORDER BY c.expected_completion ASC
+    `);
+    res.json({ pipeline: pipeline.rows });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get aging roles
+app.get('/api/bfsi/roles/aging', async (req, res) => {
+  try {
+    const redRoles = await query(`
+      SELECT r.*, COUNT(a.employee_id) as candidate_count
+      FROM bfsi_roles r
+      LEFT JOIN bfsi_assignments a ON r.role_id = a.role_id
+      WHERE r.status = 'Open' AND r.days_open > 90
+      GROUP BY r.id
+      ORDER BY r.days_open DESC
+    `);
+    
+    const amberRoles = await query(`
+      SELECT r.*, COUNT(a.employee_id) as candidate_count
+      FROM bfsi_roles r
+      LEFT JOIN bfsi_assignments a ON r.role_id = a.role_id
+      WHERE r.status = 'Open' AND r.days_open BETWEEN 60 AND 90
+      GROUP BY r.id
+      ORDER BY r.days_open DESC
+    `);
+    
+    res.json({
+      red: redRoles.rows,
+      amber: amberRoles.rows
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get reskilling opportunities
+app.get('/api/bfsi/reskilling-opportunities', async (req, res) => {
+  try {
+    const rolesResult = await query("SELECT * FROM bfsi_roles WHERE status = 'Open'");
+    const workforceResult = await query("SELECT * FROM bfsi_workforce WHERE status = 'Available'");
+    const roles = rolesResult.rows || [];
+    const workforce = workforceResult.rows || [];
+    
+    const opportunities = [];
+    
+    workforce.forEach(emp => {
+      roles.forEach(role => {
+        const score = calculateMatchScore(emp.current_skills, role.required_skills);
+        if (score >= 40 && score < 80) {
+          const gaps = role.required_skills.filter(req => 
+            !(emp.current_skills || []).some(s => 
+              s.toLowerCase().includes(req.toLowerCase()) ||
+              req.toLowerCase().includes(s.toLowerCase())
+            )
+          );
+          
+          if (gaps.length > 0 && gaps.length <= 3) {
+            opportunities.push({
+              employeeId: emp.employee_id,
+              employeeName: emp.employee_name,
+              currentRole: emp.primary_skill || 'Unknown',
+              targetRole: role.role_title,
+              roleId: role.role_id,
+              matchScore: score,
+              gaps,
+              estimatedWeeks: gaps.length * 2,
+              potential: score >= 60 ? 'High' : 'Medium'
+            });
+          }
+        }
+      });
+    });
+    
+    res.json({ opportunities: opportunities.sort((a, b) => b.matchScore - a.matchScore).slice(0, 10) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper function to safely parse integers, avoiding NaN
+function safeParseInt(value, defaultValue = 0) {
+  if (value === null || value === undefined || value === '' || value === 'NaN' || value === 'null' || value === 'NULL') {
+    return defaultValue;
+  }
+  const num = parseInt(value);
+  return isNaN(num) ? defaultValue : num;
+}
+
+// Helper function to parse Excel date (serial number or string) to PostgreSQL date
+function parseExcelDate(dateValue) {
+  // Handle null, undefined, empty string
+  if (!dateValue || dateValue === '' || dateValue === 'null' || dateValue === 'NULL') {
+    return null;
+  }
+  
+  // If it's already a Date object, return ISO string
+  if (dateValue instanceof Date) {
+    if (isNaN(dateValue.getTime())) return null;
+    return dateValue.toISOString().split('T')[0];
+  }
+  
+  // If it's a number (Excel serial date), convert it
+  if (typeof dateValue === 'number') {
+    // Excel's epoch is 1900-01-01 (with the 1900 leap year bug)
+    // Valid Excel dates are typically > 1 (day 1 is 1900-01-01)
+    if (dateValue < 1) return null;
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const days = Math.floor(dateValue);
+    const milliseconds = days * 24 * 60 * 60 * 1000;
+    const date = new Date(excelEpoch.getTime() + milliseconds);
+    if (isNaN(date.getTime())) return null;
+    // Check if date is reasonable (between 1950 and 2050)
+    const year = date.getFullYear();
+    if (year < 1950 || year > 2050) return null;
+    return date.toISOString().split('T')[0];
+  }
+  
+  // If it's a string, clean it first
+  if (typeof dateValue === 'string') {
+    const cleanValue = dateValue.trim();
+    if (cleanValue === '' || cleanValue === '-' || cleanValue === 'N/A') return null;
+    
+    // Check if it's already in YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleanValue)) {
+      const date = new Date(cleanValue);
+      if (!isNaN(date.getTime())) {
+        return cleanValue;
+      }
+      return null;
+    }
+    
+    // Try various date formats
+    const formats = [
+      // DD-MMM-YYYY or DD-MMM-YY (e.g., "15-Apr-25" or "15-Apr-2025")
+      { regex: /^(\d{1,2})-(\w{3})-(\d{2,4})$/, parse: (m) => {
+        const months = { 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 
+                        'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 11 };
+        const day = parseInt(m[1]);
+        const month = months[m[2].toLowerCase()];
+        if (month === undefined) return null;
+        let year = parseInt(m[3]);
+        if (year < 50) year += 2000;
+        else if (year < 100) year += 1900;
+        return new Date(year, month, day);
+      }},
+      // DD/MM/YYYY or DD-MM-YYYY
+      { regex: /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/, parse: (m) => {
+        return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+      }},
+      // MM/DD/YYYY
+      { regex: /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/, parse: (m) => {
+        return new Date(parseInt(m[3]), parseInt(m[1]) - 1, parseInt(m[2]));
+      }},
+      // YYYY-MM-DD (ISO) - already handled above but included for completeness
+      { regex: /^(\d{4})-(\d{2})-(\d{2})$/, parse: (m) => {
+        return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
+      }}
+    ];
+    
+    for (const format of formats) {
+      const match = cleanValue.match(format.regex);
+      if (match) {
+        try {
+          const date = format.parse(match);
+          if (date && !isNaN(date.getTime())) {
+            return date.toISOString().split('T')[0];
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    }
+    
+    // Try standard Date parsing as final fallback
+    try {
+      const date = new Date(cleanValue);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+    } catch (e) {
+      // Ignore parsing errors
+    }
+  }
+  
+  return null;
+}
+
+// Upload Excel and populate BFSI data - Multi-sheet processing
+app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    console.log('📊 Processing Excel sheets:', workbook.SheetNames);
+    
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // Clear existing data
+      await client.query('DELETE FROM bfsi_assignments');
+      await client.query('DELETE FROM bfsi_certifications');
+      await client.query('DELETE FROM bfsi_workforce');
+      await client.query('DELETE FROM bfsi_roles');
+      await client.query('DELETE FROM bfsi_summary_data');
+      
+      let rolesCount = 0;
+      let workforceCount = 0;
+      let summaryCount = 0;
+      let poolCount = 0;
+      let deallocationCount = 0;
+      
+      // ==========================================
+      // SHEET 1: LOB - Full Employee Database (1,014 employees)
+      // ==========================================
+      if (workbook.SheetNames.includes('LOB')) {
+        const lobSheet = workbook.Sheets['LOB'];
+        const lobData = XLSX.utils.sheet_to_json(lobSheet, { raw: false });
+        console.log(`📋 Processing LOB sheet: ${lobData.length} employees`);
+        
+        for (const row of lobData) {
+          const empId = String(row['Emp Number'] || row['EmpNumber'] || '').trim();
+          const empName = String(row['Emp Name'] || row['EmpName'] || '').trim();
+          if (!empId || !empName) continue;
+          
+          // Extract skills from multiple columns
+          const skills = [];
+          if (row['Primary Skill Name']) skills.push(String(row['Primary Skill Name']));
+          if (row['Secondary Skill Name']) skills.push(String(row['Secondary Skill Name']));
+          if (row['Tertiary Skill Name']) skills.push(String(row['Tertiary Skill Name']));
+          if (row['l1_skills']) skills.push(...String(row['l1_skills']).split(',').map(s => s.trim()).filter(Boolean));
+          if (row['l2_skills']) skills.push(...String(row['l2_skills']).split(',').map(s => s.trim()).filter(Boolean));
+          if (row['ACTUALSKILL']) skills.push(...String(row['ACTUALSKILL']).split(',').map(s => s.trim()).filter(Boolean));
+          
+          // Calculate experience from Hire Date
+          let expYears = 0;
+          const hireDateValue = parseExcelDate(row['Hire Date']);
+          if (hireDateValue) {
+            const hireDate = new Date(hireDateValue);
+            const diffMs = new Date() - hireDate;
+            if (!isNaN(diffMs) && diffMs >= 0) {
+              expYears = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+            }
+          }
+          if (isNaN(expYears) || expYears < 0) expYears = 0;
+          
+          // Determine status based on Billing Status
+          let status = 'Available';
+          const billingStatus = String(row['Billing Status'] || '').toLowerCase();
+          if (billingStatus.includes('billable') || billingStatus.includes('billing')) {
+            status = 'In-project';
+          } else if (billingStatus.includes('pool')) {
+            status = 'Available';
+          }
+          
+          await client.query(`
+            INSERT INTO bfsi_workforce (
+              employee_id, employee_name, email, current_skills, certifications, 
+              experience_years, status, doj, primary_skill, band, 
+              billing_status, project_name, customer, pm_name, location,
+              aging_days, practice_name, service_line, deployable_flag
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            ON CONFLICT (employee_id) DO UPDATE SET
+              employee_name = EXCLUDED.employee_name,
+              current_skills = EXCLUDED.current_skills,
+              status = EXCLUDED.status,
+              project_name = EXCLUDED.project_name,
+              updated_at = CURRENT_TIMESTAMP
+          `, [
+            empId,
+            empName,
+            row['Email'] || row['Email ID'] || '',
+            skills.filter((v, i, a) => a.indexOf(v) === i), // deduplicate
+            row['Training_Name'] ? [String(row['Training_Name'])] : [],
+            expYears,
+            status,
+            hireDateValue,
+            row['Primary Skill Name'] || row['Role'] || '',
+            row['Band'] || '',
+            row['Billing Status'] || '',
+            row['Project Name'] || '',
+            row['Customer'] || '',
+            row['Project Manager'] || row['PmName'] || '',
+            row['Work Location'] || row['Location'] || '',
+            safeParseInt(row['Aging'] || row['Ageing'], 0),
+            row['Practice Name(L1)'] || row['PracticeName'] || '',
+            row['Service Lines'] || '',
+            row['DeployableFlag'] === 'YES' || row['DeployableFlag'] === 'Y'
+          ]);
+          workforceCount++;
+        }
+      }
+      
+      // ==========================================
+      // SHEET 2: Reactive - Urgent Role Requisitions (84 roles)
+      // ==========================================
+      if (workbook.SheetNames.includes('Reactive')) {
+        const reactiveSheet = workbook.Sheets['Reactive'];
+        const reactiveData = XLSX.utils.sheet_to_json(reactiveSheet, { raw: false });
+        console.log(`📋 Processing Reactive sheet: ${reactiveData.length} urgent roles`);
+        
+        for (const row of reactiveData) {
+          const reqNo = String(row['Requisition No'] || row['ReqNo'] || `R${Date.now()}${rolesCount}`);
+          
+          // Extract skills from various columns
+          const skills = [];
+          if (row['Skills']) skills.push(...String(row['Skills']).split(',').map(s => s.trim()));
+          if (row['Primary Skill']) skills.push(String(row['Primary Skill']));
+          if (row['ElementName']) skills.push(String(row['ElementName']));
+          
+          // Extract customer from various columns
+          const customer = row['CustomerName'] || row['Customer'] || row['Client'] || 'Unknown';
+          
+          await client.query(`
+            INSERT INTO bfsi_roles (
+              role_id, role_title, client_name, required_skills, days_open, 
+              status, fill_priority, assigned_spoc, created_date, hire_type,
+              job_description, srf_no, aging_bucket, type
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ON CONFLICT (role_id) DO UPDATE SET
+              role_title = EXCLUDED.role_title,
+              required_skills = EXCLUDED.required_skills,
+              updated_at = CURRENT_TIMESTAMP
+          `, [
+            reqNo,
+            row['Job Title'] || row['JobTitle'] || row['Role'] || row['Role Title'] || row['Designation'] || row['Position'] || row['Requisition Title'] || 'Unknown Role',
+            customer,
+            [...new Set(skills)].filter(Boolean),
+            safeParseInt(row['Ageing'] || row['AgeingDays'] || row['DaysOpen'], 30),
+            'Open',
+            row['Priority'] || (safeParseInt(row['Ageing'], 0) > 60 ? 'URGENT' : 'HIGH'),
+            row['Recruiter'] || row['SPOC'] || '',
+            row['CreatedDate'] || new Date().toISOString().split('T')[0],
+            'Reactive',
+            row['Responsibilities'] || row['Job Description'] || '',
+            row['SRFNo'] || '',
+            row['Aging Bucket'] || row['AgeingBucket'] || '',
+            'Reactive'
+          ]);
+          rolesCount++;
+        }
+      }
+      
+      // ==========================================
+      // SHEET 3: Proactive - Pipeline Roles (10 roles)
+      // ==========================================
+      if (workbook.SheetNames.includes('Proactive')) {
+        const proactiveSheet = workbook.Sheets['Proactive'];
+        const proactiveData = XLSX.utils.sheet_to_json(proactiveSheet, { raw: false });
+        console.log(`📋 Processing Proactive sheet: ${proactiveData.length} pipeline roles`);
+        
+        for (const row of proactiveData) {
+          const skills = [];
+          if (row['Skills']) skills.push(...String(row['Skills']).split(',').map(s => s.trim()));
+          if (row['Skill Requirement']) skills.push(String(row['Skill Requirement']));
+          
+          await client.query(`
+            INSERT INTO bfsi_roles (
+              role_id, role_title, client_name, required_skills, days_open, 
+              status, fill_priority, assigned_spoc, created_date, hire_type,
+              job_description, type
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (role_id) DO UPDATE SET
+              role_title = EXCLUDED.role_title,
+              required_skills = EXCLUDED.required_skills,
+              updated_at = CURRENT_TIMESTAMP
+          `, [
+            String(row['Req ID'] || row['Requisition'] || `P${Date.now()}${rolesCount}`),
+            row['Role Title'] || row['Job Title'] || row['JobTitle'] || row['Role'] || row['Designation'] || row['Position'] || 'Proactive Role',
+            row['Customer'] || row['Client'] || 'TBD',
+            [...new Set(skills)].filter(Boolean),
+            safeParseInt(row['Ageing'], 60),
+            'Open',
+            'Medium',
+            row['Recruiter'] || '',
+            row['CreatedDate'] || new Date().toISOString().split('T')[0],
+            'Proactive',
+            row['Description'] || row['Job Description'] || '',
+            'Proactive'
+          ]);
+          rolesCount++;
+        }
+      }
+      
+      // ==========================================
+      // SHEET 4: Pool - Available Resources (39 employees)
+      // ==========================================
+      if (workbook.SheetNames.includes('Pool')) {
+        const poolSheet = workbook.Sheets['Pool'];
+        const poolData = XLSX.utils.sheet_to_json(poolSheet, { raw: false });
+        console.log(`📋 Processing Pool sheet: ${poolData.length} available resources`);
+        
+        for (const row of poolData) {
+          const empId = String(row['EmpId'] || '');
+          if (!empId) continue;
+          
+          // Update existing employee with pool-specific data or insert new
+          const skills = [];
+          if (row['ACTUALSKILL']) skills.push(...String(row['ACTUALSKILL']).split(',').map(s => s.trim()));
+          if (row['l1_skills']) skills.push(...String(row['l1_skills']).split(',').map(s => s.trim()));
+          if (row['l2_skills']) skills.push(...String(row['l2_skills']).split(',').map(s => s.trim()));
+          
+          // Try to update first
+          const updateResult = await client.query(
+            'UPDATE bfsi_workforce SET status = $1, aging_days = $2, rmg_status = $3, pool_status = $4, grade = $5, location = $6, practice_name = $7, service_line = $8, updated_at = CURRENT_TIMESTAMP WHERE employee_id = $9',
+            [
+              'Available-Pool',
+              safeParseInt(row['AgeingDays'] || row['Aging'], 0),
+              row['RmgStatus'] || row['RMG Status'] || '',
+              row['Result'] || row['Pool Result'] || '',
+              row['Grade'] || '',
+              row['Location'] || '',
+              row['Practice Name'] || row['Practice'] || '',
+              row['Service Lines'] || row['Service Line'] || '',
+              empId
+            ]
+          );
+          
+          // If not exists, insert as new pool employee
+          if (updateResult.rowCount === 0) {
+            await client.query(`
+              INSERT INTO bfsi_workforce (
+                employee_id, employee_name, current_skills, status, 
+                aging_days, rmg_status, pool_status, grade, location, 
+                practice_name, service_line
+              )
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            `, [
+              empId,
+              row['EmpName'] || row['Emp Name'] || 'Unknown',
+              [...new Set(skills)].filter(Boolean),
+              'Available-Pool',
+              safeParseInt(row['AgeingDays'] || row['Aging'], 0),
+              row['RmgStatus'] || row['RMG Status'] || '',
+              row['Result'] || row['Pool Result'] || 'In Pool',
+              row['Grade'] || '',
+              row['Location'] || '',
+              row['Practice Name'] || row['Practice'] || '',
+              row['Service Lines'] || row['Service Line'] || ''
+            ]);
+          }
+          poolCount++;
+        }
+      }
+      
+      // ==========================================
+      // SHEET 5: Deallocation - Employees releasing (21 employees)
+      // ==========================================
+      if (workbook.SheetNames.includes('Deallocation')) {
+        const deallocSheet = workbook.Sheets['Deallocation'];
+        const deallocData = XLSX.utils.sheet_to_json(deallocSheet, { raw: false });
+        console.log(`📋 Processing Deallocation sheet: ${deallocData.length} releasing employees`);
+        
+        for (const row of deallocData) {
+          const empId = String(row['Emp Number'] || row['EmpId'] || '');
+          if (!empId) continue;
+          
+          const releaseDate = parseExcelDate(row['Estimated Release Date'] || row['Release Date']);
+          
+          // Update employee with deallocation info
+          await client.query(
+            `UPDATE bfsi_workforce 
+             SET status = $1, 
+                 deallocation_date = $2,
+                 return_to_pool_date = $3,
+                 release_reason = $4,
+                 updated_at = CURRENT_TIMESTAMP 
+             WHERE employee_id = $5`,
+            [
+              'Deallocating',
+              releaseDate,
+              releaseDate,
+              row['Reason For Deallocation'] || '',
+              empId
+            ]
+          );
+          deallocationCount++;
+        }
+      }
+      
+      // ==========================================
+      // SHEET 6: Summary - Demand vs Supply Analysis
+      // ==========================================
+      if (workbook.SheetNames.includes('Summary')) {
+        const summarySheet = workbook.Sheets['Summary'];
+        const summaryData = XLSX.utils.sheet_to_json(summarySheet, { header: 1 });
+        console.log(`📋 Processing Summary sheet: ${summaryData.length} rows`);
+        
+        // STRICT: Only process rows 4-16 (main summary section)
+        // Header at row 3 (index 3), data rows 4-16 (indices 4-16)
+        // Stop at row 17 where "Grand Total" or report sections begin
+        const headerRowIdx = 3; // Row 4 in Excel (0-indexed: 3)
+        const firstDataRow = 4; // Row 5 in Excel
+        const lastDataRow = 16; // Row 17 in Excel - STOP before Grand Total
+        
+        // Verified column mapping for this Excel format
+        const colMap = {
+          skill: 0,        // Primary Skill
+          reactive: 1,     // Reactive_SRF
+          backup: 2,       // Backup
+          forecast: 3,     // Forecast_SRF
+          proactive: 4,    // Proactive
+          demand_total: 5, // Demand Total
+          pool: 6,         // Pool
+          dealloc: 7,      // Deallocation
+          supply_total: 8, // Supply Total
+          gap: 9,          // GAP
+          off_react: 10,   // Offer Received: Reactive
+          off_pro: 11,     // Offer Received: Proactive
+          off_total: 12    // Offer Received: Total
+        };
+        
+        console.log('📊 STRICT IMPORT: Processing ONLY main summary rows 5-17');
+        console.log('📊 Column mapping:', colMap);
+        
+        // WIPE existing summary data before every upload so stale/junk rows never persist
+        await client.query('DELETE FROM bfsi_summary_data');
+        console.log('🗑️  Cleared bfsi_summary_data before fresh import');
+        
+        // Show what we're about to import
+        console.log('📊 Excel data to import:');
+        for (let i = firstDataRow; i <= lastDataRow && i < summaryData.length; i++) {
+          const row = summaryData[i];
+          if (!row || !row[colMap.skill]) continue;
+          const skill = String(row[colMap.skill]).trim();
+          const pool = safeParseInt(row[colMap.pool], 0);
+          const dealloc = safeParseInt(row[colMap.dealloc], 0);
+          const reactive = safeParseInt(row[colMap.reactive], 0);
+          console.log(`  Row ${i+1}: "${skill}" → Pool=${pool}, Dealloc=${dealloc}, Reactive=${reactive}`);
+        }
+        
+        // Process ONLY the main summary rows - NO sub-reports
+        for (let i = firstDataRow; i <= lastDataRow && i < summaryData.length; i++) {
+          const row = summaryData[i];
+          if (!row || !row[colMap.skill]) continue;
+          
+          const skillName = String(row[colMap.skill] || '').trim();
+          if (!skillName || skillName.toLowerCase().includes('total')) continue;
+          
+          const poolValue = safeParseInt(row[colMap.pool], 0);
+          const deallocValue = safeParseInt(row[colMap.dealloc], 0);
+          const reactiveValue = safeParseInt(row[colMap.reactive], 0);
+          const proactiveValue = safeParseInt(row[colMap.proactive], 0);
+          
+          console.log(`✅ Importing: "${skillName}" → Pool=${poolValue}, Dealloc=${deallocValue}, Reactive=${reactiveValue}`);
+
+          await client.query(`
+            INSERT INTO bfsi_summary_data (
+              primary_skill, reactive_srf, proactive, demand_total, 
+              pool_supply, deallocation_supply, supply_total, gap, offers_total
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `, [
+            skillName,
+            reactiveValue,
+            proactiveValue,
+            safeParseInt(row[colMap.demand_total], 0),
+            poolValue,
+            deallocValue,
+            safeParseInt(row[colMap.supply_total], 0),
+            safeParseInt(row[colMap.gap], 0),
+            safeParseInt(row[colMap.off_total], 0)
+          ]);
+          summaryCount++;
+        }
+        
+        // Also insert Grand Total row for totalSupply/totalDemand lookups
+        const grandTotalRow = summaryData.find((r) => r && String(r[0] || '').toLowerCase().includes('grand total'));
+        if (grandTotalRow) {
+          await client.query(`
+            INSERT INTO bfsi_summary_data (
+              primary_skill, reactive_srf, proactive, demand_total,
+              pool_supply, deallocation_supply, supply_total, gap, offers_total
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `, [
+            'Grand Total',
+            safeParseInt(grandTotalRow[colMap.reactive], 0),
+            safeParseInt(grandTotalRow[colMap.proactive], 0),
+            safeParseInt(grandTotalRow[colMap.demand_total], 0),
+            safeParseInt(grandTotalRow[colMap.pool], 0),
+            safeParseInt(grandTotalRow[colMap.dealloc], 0),
+            safeParseInt(grandTotalRow[colMap.supply_total], 0),
+            safeParseInt(grandTotalRow[colMap.gap], 0),
+            safeParseInt(grandTotalRow[colMap.off_total], 0)
+          ]);
+          console.log(`✅ Grand Total row inserted: Pool=${safeParseInt(grandTotalRow[colMap.pool],0)}, Dealloc=${safeParseInt(grandTotalRow[colMap.dealloc],0)}, Supply=${safeParseInt(grandTotalRow[colMap.supply_total],0)}`);
+        }
+        
+        console.log(`✅ Summary import complete: ${summaryCount} skills imported`);
+      }
+      
+      // Record upload
+      await client.query(`
+        INSERT INTO bfsi_uploads (filename, uploaded_by, records_processed, status)
+        VALUES ($1, $2, $3, $4)
+      `, [
+        req.file.originalname, 
+        req.body.uploadedBy || 'admin', 
+        rolesCount + workforceCount + poolCount + deallocationCount, 
+        'Success'
+      ]);
+      
+      await client.query('COMMIT');
+      
+      res.json({
+        success: true,
+        message: `Upload successful:`,
+        summary: {
+          roles: rolesCount,
+          employees: workforceCount,
+          pool: poolCount,
+          deallocating: deallocationCount,
+          summarySkills: summaryCount,
+          total: rolesCount + workforceCount + poolCount + deallocationCount
+        }
+      });
+      
+      console.log(`✅ Upload complete: ${rolesCount} roles, ${workforceCount} employees, ${poolCount} pool, ${deallocationCount} deallocating`);
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('BFSI Upload Error:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
+// Generate weekly report
+app.get('/api/bfsi/report/weekly', async (req, res) => {
+  try {
+    const dashboard = await query('SELECT * FROM bfsi_uploads ORDER BY upload_date DESC LIMIT 1');
+    const roles = await query("SELECT COUNT(*) as total FROM bfsi_roles WHERE status = 'Open'");
+    const filled = await query("SELECT COUNT(DISTINCT role_id) as filled FROM bfsi_assignments WHERE assignment_status = 'Assigned'");
+    const aging = await query("SELECT COUNT(*) as aging FROM bfsi_roles WHERE status = 'Open' AND days_open > 90");
+    const completions = await query("SELECT COUNT(*) as completed FROM bfsi_certifications WHERE status = 'Completed' AND updated_at >= CURRENT_DATE - INTERVAL '7 days'");
+    
+    res.json({
+      generatedAt: new Date().toISOString(),
+      lastUpload: dashboard.rows[0],
+      summary: {
+        openRoles: parseInt(roles.rows[0].total),
+        filledRoles: parseInt(filled.rows[0].filled),
+        agingRoles: parseInt(aging.rows[0].aging),
+        certCompletionsThisWeek: parseInt(completions.rows[0].completed)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Assign employee to role
+app.post('/api/bfsi/assign', async (req, res) => {
+  try {
+    const { roleId, employeeId, matchScore } = req.body;
+    
+    await query(`
+      INSERT INTO bfsi_assignments (role_id, employee_id, match_score, assignment_status)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (role_id, employee_id) DO UPDATE SET
+        match_score = EXCLUDED.match_score,
+        assignment_status = EXCLUDED.assignment_status,
+        updated_at = CURRENT_TIMESTAMP
+    `, [roleId, employeeId, matchScore, 'Assigned']);
+    
+    await query("UPDATE bfsi_workforce SET status = $1 WHERE employee_id = $2", ['Assigned', employeeId]);
+    await query("UPDATE bfsi_roles SET status = $1 WHERE role_id = $2", ['Filled', roleId]);
+    
+    res.json({ success: true, message: 'Employee assigned to role' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reserve employee for role (reskilling track)
+app.post('/api/bfsi/reserve', async (req, res) => {
+  try {
+    const { roleId, employeeId, matchScore, weeks } = req.body;
+    
+    await query(`
+      INSERT INTO bfsi_assignments (role_id, employee_id, match_score, assignment_status)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (role_id, employee_id) DO UPDATE SET
+        match_score = EXCLUDED.match_score,
+        assignment_status = EXCLUDED.assignment_status,
+        updated_at = CURRENT_TIMESTAMP
+    `, [roleId, employeeId, matchScore, 'Reserved']);
+    
+    res.json({ success: true, message: `Employee reserved for role (${weeks} weeks track)` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Start reskilling for employee
+app.post('/api/bfsi/reskill', async (req, res) => {
+  try {
+    const { employeeId, programName, durationWeeks, targetSkills } = req.body;
+    
+    const today = new Date();
+    const completionDate = new Date(today);
+    completionDate.setDate(completionDate.getDate() + (durationWeeks * 7));
+    
+    await query(`
+      UPDATE bfsi_workforce 
+      SET reskilling_program = $1, 
+          graduation_date = $2, 
+          status = $3,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE employee_id = $4
+    `, [programName, completionDate.toISOString().split('T')[0], 'Under-reskilling', employeeId]);
+    
+    await query(`
+      INSERT INTO bfsi_certifications (employee_id, cert_name, start_date, expected_completion, duration_weeks, status)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [employeeId, programName, today.toISOString().split('T')[0], completionDate.toISOString().split('T')[0], durationWeeks, 'In Progress']);
+    
+    res.json({ success: true, message: 'Reskilling program started' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reset all BFSI data
+app.post('/api/bfsi/reset', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('TRUNCATE TABLE bfsi_assignments CASCADE');
+    await client.query('TRUNCATE TABLE bfsi_certifications CASCADE');
+    await client.query('TRUNCATE TABLE bfsi_workforce CASCADE');
+    await client.query('TRUNCATE TABLE bfsi_roles CASCADE');
+    await client.query('TRUNCATE TABLE bfsi_summary_data CASCADE');
+    await client.query('TRUNCATE TABLE bfsi_uploads CASCADE');
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'All BFSI data has been reset' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ==========================================
 
 // Serve Static Built Vite App for Cloud deployment
 app.use(express.static(path.join(__dirname, 'dist')));

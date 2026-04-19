@@ -28,7 +28,7 @@ function CareerCoachTab({ data, T }: { data: any, T: any }) {
   const [typing, setTyping] = useState(false);
   const botRef = useRef<HTMLDivElement>(null);
 
-  const systemCtx = `You are the Zensar QI AI Coach/Mentor for ${data.user?.Name || 'Employee'}.
+  const systemCtx = `You are the Zensar ZenAICoach - Your AI Mentor for ${data.user?.Name || 'Employee'}.
 Skills: ${(data?.expertSkills || []).join(', ')}.
 Overall Score: ${data?.overallScore || 0}/100.
 Certifications: ${(data?.certifications || []).map((c:any)=>c.CertName || c.Name).join(', ')}.
@@ -36,7 +36,8 @@ Education: ${(data?.education || []).map((e:any)=>e.Degree || e.degree).join(', 
 IMPORTANT: Your response must be in JSON format: {"response": "your message here"}`;
 
   useEffect(() => {
-    setMessages([{ role:'bot', text: `Hello ${data.user?.Name?.split(' ')[0]}! 👋 I'm your QI AI Coach. I've analyzed your expertise in ${data.expertSkills?.[0] || 'Quality Intelligence'} and your educational background. How can I guide your growth today?` }]);
+    const firstName = data.user?.Name?.split(' ')[0] || data.user?.name?.split(' ')[0] || 'there';
+    setMessages([{ role:'bot', text: `Hello ${firstName}! 👋 I'm your ZenAICoach. I've analyzed your expertise in ${data.expertSkills?.[0] || 'Quality Intelligence'} and your educational background. How can I guide your growth today?` }]);
   }, []);
 
   useEffect(() => { botRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages, typing]);
@@ -84,7 +85,7 @@ IMPORTANT: Your response must be in JSON format: {"response": "your message here
               </div>
             </div>
           ))}
-          {typing && <div style={{ color: '#3B82F6', fontSize: 12, fontWeight: 700, marginLeft: 8 }}>AI Coach is thinking...</div>}
+          {typing && <div style={{ color: '#3B82F6', fontSize: 12, fontWeight: 700, marginLeft: 8 }}>ZenAICoach is thinking...</div>}
           <div ref={botRef} />
         </div>
         <div style={{ display: 'flex', gap: 10, paddingTop: 16, borderTop: `1px solid ${T.bdr}` }}>
@@ -172,7 +173,7 @@ Format: Return a JSON object ONLY with a "steps" array containing 3 objects:
            
            <div style={{ display: 'flex', flexDirection: 'column', gap:0, background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 24, overflow: 'hidden' }}>
               {steps.map((s, idx) => (
-                 <div key={idx} style={{ padding: '24px 5vw', borderBottom: idx === steps.length - 1 ? 'none' : `1px solid ${T.bdr}`, display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+                 <div key={idx} style={{ padding: '24px', borderBottom: idx === steps.length - 1 ? 'none' : `1px solid ${T.bdr}`, display: 'flex', flexWrap: 'wrap', gap: 24 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44 }}>
                        <div style={{ width: 44, height: 44, borderRadius: 14, background: `${s.color || '#3B82F6'}15`, border: `1.5px solid ${s.color || '#3B82F6'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           {idx === 0 ? <Zap color={s.color} /> : idx === 1 ? <Target color={s.color} /> : <Award color={s.color} />}
@@ -184,7 +185,7 @@ Format: Return a JSON object ONLY with a "steps" array containing 3 objects:
                           <div style={{ fontSize: 10, fontWeight: 800, color: s.color || '#3B82F6', letterSpacing: 1.5, textTransform: 'uppercase' }}>{s.phase} · {s.time}</div>
                           <div style={{ fontSize: 11, color: T.muted }}>Path: QI Specialist</div>
                        </div>
-                       <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: T.text }}>{s.title}</h3>
+                       <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: T.text }}>{s.title}</h3>
                        <p style={{ fontSize: 13, color: T.sub, margin: '4px 0 16px', lineHeight: 1.5 }}>{s.text}</p>
                        
                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
@@ -245,8 +246,8 @@ export default function AIIntelligencePage({
   if (!data?.user) return <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: T.sub }}>Authentication Required</div>;
 
   return (
-    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '24px 16px 80px' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, padding: '24px 24px 80px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
         {/* Back Button */}
         <button onClick={() => navigate('/employee/dashboard')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, background: 'transparent', border: `1px solid ${T.bdr}`, color: T.sub, cursor: 'pointer', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
@@ -263,11 +264,13 @@ export default function AIIntelligencePage({
            </div>
            
            <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(135deg, #6B2D8B, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, fontWeight: 900, color: '#fff', flexShrink: 0 }}>{(data?.user?.Name || 'U')[0]}</div>
+              <div style={{ width: 80, height: 80, borderRadius: 24, background: 'linear-gradient(135deg, #6B2D8B, #3B82F6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, fontWeight: 900, color: '#fff', flexShrink: 0 }}>{(data?.user?.Name || data?.user?.name || 'U')[0]}</div>
               <div style={{ flex: 1, minWidth: 200 }}>
-                 <div style={{ fontSize: 11, fontWeight: 800, color: '#3B82F6', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 4 }}>Quality Intelligence Insights</div>
-                 <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, lineHeight: 1.2 }}>{data?.user?.Name || 'Qualitian Explorer'}</h1>
-                 <p style={{ margin: '4px 0 0', fontSize: 13, color: T.sub, fontWeight: 500 }}>{data?.user?.Designation || 'Quality Engineer'} · {data?.user?.Department || 'QI'}</p>
+                 <h1 style={{ margin: 0, fontSize: 'clamp(22px,3vw,28px)', fontWeight: 800, lineHeight: 1.2 }}>{data?.user?.Name || data?.user?.name}</h1>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
+                   <p style={{ margin: 0, fontSize: 13, color: T.sub, fontWeight: 500 }}>Zensar ID: {data?.user?.ZensarID || data?.user?.zensar_id || data?.user?.id || 'N/A'}</p>
+                   <p style={{ margin: 0, fontSize: 13, color: T.sub, fontWeight: 500 }}>Email: {data?.user?.Email || data?.user?.email || 'N/A'}</p>
+                 </div>
                  
                  <div style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
                     <div>
@@ -275,11 +278,11 @@ export default function AIIntelligencePage({
                        <div style={{ fontSize: 9, fontWeight: 700, color: T.muted }}>CAPABILITY</div>
                     </div>
                     <div>
-                       <div style={{ fontSize: 20, fontWeight: 900, color: '#10B981' }}>{data?.expertCount || 0}</div>
+                       <div style={{ fontSize: 20, fontWeight: 800, color: '#10B981' }}>{data?.expertCount || 0}</div>
                        <div style={{ fontSize: 9, fontWeight: 700, color: T.muted }}>EXPERTS</div>
                     </div>
                     <div>
-                       <div style={{ fontSize: 20, fontWeight: 900, color: '#8B5CF6' }}>{(data.certifications || []).length}</div>
+                       <div style={{ fontSize: 20, fontWeight: 800, color: '#8B5CF6' }}>{(data.certifications || []).length}</div>
                        <div style={{ fontSize: 9, fontWeight: 700, color: T.muted }}>CERTS</div>
                     </div>
                  </div>
@@ -290,9 +293,9 @@ export default function AIIntelligencePage({
         {/* Dynamic Nav Tabs */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 24, padding: 4, background: T.card, borderRadius: 16, width: '100%', border: `1px solid ${T.bdr}` }}>
            {[
-             { id: 'coach', label: 'AI Coach', icon: Bot },
-             { id: 'map', label: 'Learning Roadmap', icon: Map },
-             { id: 'gaps', label: 'Gap Analysis', icon: Target }
+             { id: 'coach', label: 'ZenAICoach', icon: Bot },
+             { id: 'map', label: 'ZenPath', icon: Map },
+             { id: 'gaps', label: 'ZenGap', icon: Target }
            ].map(t => (
              <button
                 key={t.id}
@@ -394,7 +397,7 @@ Format: Return ONLY a JSON object with a "gaps" array containing up to 5 items:
 
   return (
     <div style={{ animation: 'fadeUp 0.4s' }}>
-      <div style={{ padding: '24px 32px', background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 24, paddingBottom: 40 }}>
+      <div style={{ padding: '24px', background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 24, paddingBottom: 40 }}>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -402,7 +405,7 @@ Format: Return ONLY a JSON object with a "gaps" array containing up to 5 items:
           </div>
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 }}>AI Diagnostic</div>
-            <div style={{ fontWeight: 900, fontSize: 22, color: T.text }}>Professional Gaps Analysis</div>
+            <div style={{ fontWeight: 800, fontSize: 20, color: T.text }}>Professional Gaps Analysis</div>
           </div>
         </div>
 

@@ -23,7 +23,7 @@ export const SKILLS: Skill[] = [
   { id: 's20', name: 'E-Commerce', category: 'Domain' },
   { id: 's21', name: 'Insurance', category: 'Domain' },
   { id: 's22', name: 'Telecom', category: 'Domain' },
-  { id: 's23', name: 'Manual Testing', category: 'TestingType' },
+  { id: 's23', name: 'Functional Testing', category: 'TestingType' },
   { id: 's24', name: 'Automation Testing', category: 'TestingType' },
   { id: 's25', name: 'Regression Testing', category: 'TestingType' },
   { id: 's26', name: 'UAT', category: 'TestingType' },
@@ -120,7 +120,7 @@ export const MOCK_EMPLOYEES: Employee[] = [
     department: 'Quality Intelligence',
     yearsIT: 2,
     yearsZensar: 1,
-    primarySkill: 'Manual Testing',
+    primarySkill: 'Functional Testing',
     primaryDomain: 'E-Commerce',
     skills: makeSkills([
       { skillId: 's5', selfRating: 2, managerRating: 1, validated: true },
