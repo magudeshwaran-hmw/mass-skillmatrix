@@ -297,24 +297,13 @@ ${fullText}
     "ChatGPT/Prompt Engineering": 0,
     "AI Test Automation": 0
   },
-  "customSkills": [
-    {"name": "Python", "rating": 5},
-    {"name": "scikit-learn", "rating": 4},
-    {"name": "TensorFlow", "rating": 4},
-    {"name": "pandas", "rating": 4},
-    {"name": "NumPy", "rating": 4},
-    {"name": "LangChain", "rating": 3},
-    {"name": "FastAPI", "rating": 3}
-  ]
+  "analysis": {
+    "completenessScore": 0,
+    "missingCriticalFields": [],
+    "improvementAreas": []
+  },
+  "gaps": []
 }
-
-IMPORTANT FOR customSkills:
-- Extract ALL skills/tools/technologies mentioned ANYWHERE in the resume that are NOT already in the "skills" object above
-- Look in: Skills section, Technical Skills, Tools, Technologies, project descriptions, certifications
-- Include: programming languages, frameworks, libraries, cloud platforms, databases, tools, methodologies
-- Rate 1-5 based on how prominently featured (primary skill = 5, mentioned once = 2)
-- DO NOT duplicate skills already in the "skills" object above
-- Extract AT LEAST 10 custom skills if the resume has a technical skills section
 
 ═══════════════════════════════════════════════════════════════
 ✅ SUCCESS CRITERIA - YOU WILL BE GRADED ON THIS:
@@ -325,13 +314,13 @@ MINIMUM REQUIREMENTS:
 - Achievements: Extract AT LEAST 3 achievements (from Awards section + Major achievements subsections)
 - Certifications: Extract ALL certifications (typically 4-8)
 - Education: Extract ALL education entries
-- customSkills: Extract AT LEAST 10 skills not in the predefined list above
+- Skills: ONLY extract skills from the predefined list above (NO custom skills)
 
 YOU FAIL IF:
 - You extract 0-2 projects when resume has "PROFESSIONAL EXPERIENCE" section with multiple "Project -" lines
 - You extract 0 achievements when resume has "Awards" section or "Major achievements" subsections
 - You return empty arrays without searching thoroughly
-- You return fewer than 5 customSkills when resume has a technical skills section
+- You extract skills NOT in the predefined list above
 
 EXPECTED FOR THIS RESUME:
 Count the number of times "Project -" appears in the text. That is how many projects you should extract.
