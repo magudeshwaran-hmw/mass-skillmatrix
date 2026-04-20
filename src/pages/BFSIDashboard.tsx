@@ -1497,204 +1497,95 @@ export default function BFSIDashboard() {
         </div>
       )}
 
-      {/* ══════════════════════════════════════════════════════════════
-          WEEKLY REPORT — Full-page, data-driven, UI-friendly
-          ══════════════════════════════════════════════════════════════ */}
       {weeklyReport && (
         <div style={{ position: 'fixed', inset: 0, background: dark ? '#020617' : '#f1f5f9', zIndex: 2000, overflowY: 'auto' }}>
-          {/* Header bar */}
-          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: dark ? '#0f172a' : '#fff', borderBottom: `1px solid ${T.bdr}`, padding: '16px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 12px rgba(0,0,0,0.08)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Landmark size={22} color="#fff" />
+
+          {/* Sticky header */}
+          <div style={{ position: 'sticky', top: 0, zIndex: 10, background: dark ? '#0f172a' : '#fff', borderBottom: `1px solid ${T.bdr}`, padding: '14px 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Landmark size={20} color="#fff" />
               </div>
               <div>
-                <div style={{ fontWeight: 900, fontSize: 18, color: T.text }}>ZenTalentHub — Weekly Intelligence Report</div>
-                <div style={{ fontSize: 12, color: T.sub }}>BFSI Testing Practice · Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                <div style={{ fontWeight: 900, fontSize: 16, color: T.text }}>ZenTalentHub — Demand vs Supply Report</div>
+                <div style={{ fontSize: 11, color: T.sub }}>BFSI Testing Practice · {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
               </div>
             </div>
-            <button onClick={() => setWeeklyReport(null)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', background: dark ? '#1e293b' : '#f1f5f9', border: `1px solid ${T.bdr}`, borderRadius: 10, color: T.text, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-              ✕ Close
-            </button>
+            <button onClick={() => setWeeklyReport(null)} style={{ padding: '9px 20px', background: dark ? '#1e293b' : '#f1f5f9', border: `1px solid ${T.bdr}`, borderRadius: 10, color: T.text, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>✕ Close</button>
           </div>
 
-          <div style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 40px 60px' }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 40px 60px' }}>
 
-            {/* ── KPI Summary Row ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 16, marginBottom: 32 }}>
+            {/* KPI row */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 14, marginBottom: 28 }}>
               {[
-                { label: 'Total Pool',       val: workforce.filter(w => w.status === 'Available-Pool').length,  color: COLORS.info,    icon: '👥', sub: 'Bench resources' },
-                { label: 'Deallocating',     val: workforce.filter(w => w.status === 'Deallocating').length,    color: COLORS.warning, icon: '⏳', sub: 'Rolling off projects' },
-                { label: 'Reactive SRFs',    val: roles.filter(r => r.type === 'Reactive').length,              color: COLORS.danger,  icon: '🔴', sub: 'Urgent open positions' },
-                { label: 'Proactive SRFs',   val: roles.filter(r => r.type === 'Proactive').length,             color: COLORS.purple,  icon: '🟣', sub: 'Pipeline positions' },
+                { label: 'Total Pool',   val: kpiData?.skillGaps?.reduce((s: number, sg: any) => s + (Number(sg.pool)||0), 0) ?? workforce.filter(w => w.status === 'Available-Pool').length,       color: COLORS.info,    icon: '👥' },
+                { label: 'Deallocation', val: kpiData?.skillGaps?.reduce((s: number, sg: any) => s + (Number(sg.deallocation)||0), 0) ?? workforce.filter(w => w.status === 'Deallocating').length, color: COLORS.warning, icon: '⏳' },
+                { label: 'Total Supply', val: kpiData?.skillGaps?.reduce((s: number, sg: any) => s + (Number(sg.pool)||0) + (Number(sg.deallocation)||0), 0) ?? 0,                                 color: COLORS.success, icon: '✅' },
+                { label: 'Total Demand', val: kpiData?.skillGaps?.reduce((s: number, sg: any) => s + (Number(sg.reactive)||0) + (Number(sg.proactive)||0), 0) ?? roles.length,                    color: COLORS.danger,  icon: '📋' },
+                { label: 'Total GAP',    val: kpiData?.skillGaps?.reduce((s: number, sg: any) => s + (Number(sg.gap)||0), 0) ?? 0,                                                                  color: COLORS.purple,  icon: '📊' },
               ].map(k => (
-                <div key={k.label} style={{ background: dark ? '#1e293b' : '#fff', borderRadius: 16, padding: '20px 24px', border: `1px solid ${T.bdr}`, borderTop: `4px solid ${k.color}` }}>
-                  <div style={{ fontSize: 22, marginBottom: 6 }}>{k.icon}</div>
-                  <div style={{ fontSize: 36, fontWeight: 900, color: T.text, lineHeight: 1 }}>{k.val}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: k.color, marginTop: 4 }}>{k.label}</div>
-                  <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>{k.sub}</div>
+                <div key={k.label} style={{ background: dark ? '#1e293b' : '#fff', borderRadius: 14, padding: '16px 20px', border: `1px solid ${T.bdr}`, borderTop: `4px solid ${k.color}`, textAlign: 'center' }}>
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>{k.icon}</div>
+                  <div style={{ fontSize: 32, fontWeight: 900, color: T.text, lineHeight: 1 }}>{k.val}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: k.color, marginTop: 4 }}>{k.label}</div>
                 </div>
               ))}
             </div>
 
-            {/* ── Supply vs Demand Summary Table ── */}
-            {(kpiData?.skillGaps || []).length > 0 && (
-              <div style={{ background: dark ? '#1e293b' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, marginBottom: 32, overflow: 'hidden' }}>
-                <div style={{ padding: '18px 24px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.info }} />
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: T.text }}>Supply vs Demand Summary</h3>
-                  <span style={{ fontSize: 11, color: T.sub, marginLeft: 4 }}>From Excel Summary sheet</span>
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr style={{ background: dark ? 'rgba(255,255,255,0.04)' : '#f8fafc' }}>
-                        {['Primary Skill', 'Reactive', 'Proactive', 'Demand Total', 'Pool', 'Deallocation', 'Supply Total', 'GAP'].map((h, hi) => (
-                          <th key={h} style={{ padding: '12px 16px', textAlign: hi === 0 ? 'left' : 'center', fontWeight: 900, color: T.sub, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(kpiData?.skillGaps || []).map((sg: any, i: number) => {
-                        const gap = Number(sg.gap) || 0;
-                        return (
-                          <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
-                            <td style={{ padding: '12px 16px', fontWeight: 700, color: T.text }}>{sg.skill}</td>
-                            <td style={{ padding: '12px 16px', textAlign: 'center', color: COLORS.danger, fontWeight: 700 }}>{sg.reactive || 0}</td>
-                            <td style={{ padding: '12px 16px', textAlign: 'center', color: COLORS.purple, fontWeight: 700 }}>{sg.proactive || 0}</td>
-                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: T.text }}>{sg.demand || (Number(sg.reactive||0)+Number(sg.proactive||0))}</td>
-                            <td style={{ padding: '12px 16px', textAlign: 'center', color: COLORS.info, fontWeight: 700 }}>{sg.pool || 0}</td>
-                            <td style={{ padding: '12px 16px', textAlign: 'center', color: COLORS.warning, fontWeight: 700 }}>{sg.deallocation || 0}</td>
-                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: COLORS.success }}>{sg.supply || (Number(sg.pool||0)+Number(sg.deallocation||0))}</td>
-                            <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 900, color: gap < 0 ? COLORS.danger : gap > 0 ? COLORS.success : T.sub }}>
-                              <span style={{ padding: '3px 10px', borderRadius: 8, background: gap < 0 ? `${COLORS.danger}18` : gap > 0 ? `${COLORS.success}18` : 'transparent', border: `1px solid ${gap < 0 ? COLORS.danger : gap > 0 ? COLORS.success : T.bdr}44` }}>
-                                {gap > 0 ? '+' : ''}{gap}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+            {/* MAIN TABLE — exactly like Excel Summary sheet */}
+            <div style={{ background: dark ? '#1e293b' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, overflow: 'hidden', marginBottom: 24 }}>
+              <div style={{ padding: '14px 24px', borderBottom: `1px solid ${T.bdr}`, background: dark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.04)' }}>
+                <div style={{ fontWeight: 900, fontSize: 15, color: T.text }}>Report 1 — DEMAND VS SUPPLY</div>
+                <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>All skills · Status: All</div>
               </div>
-            )}
-
-            {/* ── Two column: Pool + Deallocation ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
-
-              {/* Pool Table */}
-              <div style={{ background: dark ? '#1e293b' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.info }} />
-                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.text }}>Pool Resources</h3>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 900, padding: '3px 10px', borderRadius: 8, background: `${COLORS.info}18`, color: COLORS.info }}>{workforce.filter(w => w.status === 'Available-Pool').length} total</span>
-                </div>
-                <div style={{ overflowX: 'auto', maxHeight: 320, overflowY: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                    <thead style={{ position: 'sticky', top: 0, background: dark ? '#1e293b' : '#fff', zIndex: 1 }}>
-                      <tr style={{ background: dark ? 'rgba(255,255,255,0.04)' : '#f8fafc' }}>
-                        {['Name', 'Grade', 'Skill', 'Ageing', 'RMG Status'].map(h => (
-                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 900, color: T.sub, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workforce.filter(w => w.status === 'Available-Pool').map((emp, i) => (
-                        <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
-                          <td style={{ padding: '8px 12px', fontWeight: 700, color: T.text, whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.employee_name}</td>
-                          <td style={{ padding: '8px 12px', color: T.sub }}>{(emp as any).grade || '—'}</td>
-                          <td style={{ padding: '8px 12px', color: COLORS.info, fontWeight: 600, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.primary_skill || '—'}</td>
-                          <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: (emp.aging_days || 0) > 30 ? COLORS.danger : COLORS.success }}>{emp.aging_days || 0}d</td>
-                          <td style={{ padding: '8px 12px', color: T.sub, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.rmg_status || '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Deallocation Table */}
-              <div style={{ background: dark ? '#1e293b' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.warning }} />
-                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.text }}>Deallocation Pipeline</h3>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 900, padding: '3px 10px', borderRadius: 8, background: `${COLORS.warning}18`, color: COLORS.warning }}>{workforce.filter(w => w.status === 'Deallocating').length} total</span>
-                </div>
-                <div style={{ overflowX: 'auto', maxHeight: 320, overflowY: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                    <thead style={{ position: 'sticky', top: 0, background: dark ? '#1e293b' : '#fff', zIndex: 1 }}>
-                      <tr style={{ background: dark ? 'rgba(255,255,255,0.04)' : '#f8fafc' }}>
-                        {['Name', 'Band', 'Skill', 'Dealloc Date', 'Project', 'Reason'].map(h => (
-                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 900, color: T.sub, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {workforce.filter(w => w.status === 'Deallocating').map((emp, i) => {
-                        const dDate = emp.deallocation_date ? new Date(emp.deallocation_date) : null;
-                        const daysLeft = dDate ? Math.ceil((dDate.getTime() - Date.now()) / 86400000) : null;
-                        const urgency = daysLeft !== null && daysLeft <= 7 ? COLORS.danger : COLORS.warning;
-                        return (
-                          <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
-                            <td style={{ padding: '8px 12px', fontWeight: 700, color: T.text, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.employee_name}</td>
-                            <td style={{ padding: '8px 12px', color: T.sub }}>{(emp as any).band || '—'}</td>
-                            <td style={{ padding: '8px 12px', color: COLORS.info, fontWeight: 600, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.primary_skill || '—'}</td>
-                            <td style={{ padding: '8px 12px', color: urgency, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                              {dDate ? dDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—'}
-                              {daysLeft !== null && <span style={{ fontSize: 9, marginLeft: 4, color: urgency }}>({Math.abs(daysLeft)}d)</span>}
-                            </td>
-                            <td style={{ padding: '8px 12px', color: T.sub, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.project_name || '—'}</td>
-                            <td style={{ padding: '8px 12px', color: T.sub, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(emp as any).release_reason || '—'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Reactive SRFs Table ── */}
-            <div style={{ background: dark ? '#1e293b' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, marginBottom: 32, overflow: 'hidden' }}>
-              <div style={{ padding: '16px 24px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.danger }} />
-                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.text }}>Open Reactive SRFs</h3>
-                </div>
-                <span style={{ fontSize: 11, fontWeight: 900, padding: '3px 10px', borderRadius: 8, background: `${COLORS.danger}18`, color: COLORS.danger }}>{roles.filter(r => r.type === 'Reactive').length} open</span>
-              </div>
-              <div style={{ overflowX: 'auto', maxHeight: 300, overflowY: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                  <thead style={{ position: 'sticky', top: 0, background: dark ? '#1e293b' : '#fff', zIndex: 1 }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: dark ? 'rgba(255,255,255,0.06)' : '#f1f5f9' }}>
+                      <th rowSpan={2} style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 900, color: T.text, fontSize: 12, borderBottom: `2px solid ${T.bdr}`, borderRight: `1px solid ${T.bdr}`, minWidth: 220, verticalAlign: 'bottom' }}>Primary Skill</th>
+                      <th colSpan={3} style={{ padding: '8px 16px', textAlign: 'center', fontWeight: 900, color: COLORS.danger, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, borderRight: `1px solid ${T.bdr}`, background: `${COLORS.danger}08` }}>DEMAND</th>
+                      <th colSpan={3} style={{ padding: '8px 16px', textAlign: 'center', fontWeight: 900, color: COLORS.success, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, borderRight: `1px solid ${T.bdr}`, background: `${COLORS.success}08` }}>SUPPLY</th>
+                      <th rowSpan={2} style={{ padding: '12px 14px', textAlign: 'center', fontWeight: 900, color: T.text, fontSize: 12, borderBottom: `2px solid ${T.bdr}`, borderRight: `1px solid ${T.bdr}`, minWidth: 70, verticalAlign: 'bottom' }}>GAP</th>
+                      <th colSpan={3} style={{ padding: '8px 16px', textAlign: 'center', fontWeight: 900, color: COLORS.info, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, background: `${COLORS.info}08` }}>OFFERS RECEIVED</th>
+                    </tr>
                     <tr style={{ background: dark ? 'rgba(255,255,255,0.04)' : '#f8fafc' }}>
-                      {['SRF No', 'Title', 'Skill', 'Customer', 'Location', 'Grade', 'Priority', 'Ageing', 'SPOC', 'Month'].map(h => (
-                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 900, color: T.sub, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
+                      {[{l:'Reactive SRF',c:COLORS.danger},{l:'Backup SRF',c:COLORS.warning},{l:'Proactive',c:COLORS.purple}].map(h=>(
+                        <th key={h.l} style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 800, color: h.c, fontSize: 11, borderBottom: `2px solid ${T.bdr}`, borderRight: `1px solid ${T.bdr}`, whiteSpace: 'nowrap', background: `${h.c}06` }}>{h.l}</th>
+                      ))}
+                      {[{l:'Pool',c:COLORS.info},{l:'Deallocation',c:COLORS.warning},{l:'Supply Total',c:COLORS.success}].map(h=>(
+                        <th key={h.l} style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 800, color: h.c, fontSize: 11, borderBottom: `2px solid ${T.bdr}`, borderRight: `1px solid ${T.bdr}`, whiteSpace: 'nowrap', background: `${h.c}06` }}>{h.l}</th>
+                      ))}
+                      {[{l:'Reactive',c:COLORS.danger},{l:'Proactive',c:COLORS.purple},{l:'Total',c:COLORS.info}].map(h=>(
+                        <th key={h.l} style={{ padding: '8px 14px', textAlign: 'center', fontWeight: 800, color: h.c, fontSize: 11, borderBottom: `2px solid ${T.bdr}`, borderRight: `1px solid ${T.bdr}`, whiteSpace: 'nowrap', background: `${h.c}06` }}>{h.l}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {roles.filter(r => r.type === 'Reactive').map((role, i) => {
-                      const meta = parseMeta(role);
+                    {(kpiData?.skillGaps || []).map((sg: any, i: number) => {
+                      const reactive = Number(sg.reactive||0), proactive = Number(sg.proactive||0);
+                      const pool = Number(sg.pool||0), dealloc = Number(sg.deallocation||0);
+                      const supplyTotal = pool + dealloc;
+                      const gap = Number(sg.gap || (supplyTotal - reactive - proactive));
+                      const offR = Number(sg.offers_reactive||0), offP = Number(sg.offers_proactive||0), offT = Number(sg.offers_total||(offR+offP));
+                      const isGT = (sg.skill||'').toLowerCase().includes('grand');
                       return (
-                        <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
-                          <td style={{ padding: '8px 12px', color: COLORS.info, fontWeight: 700 }}>{role.role_id}</td>
-                          <td style={{ padding: '8px 12px', fontWeight: 700, color: T.text, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role.role_title}</td>
-                          <td style={{ padding: '8px 12px', color: T.sub, whiteSpace: 'nowrap' }}>{(role.required_skills || [])[0] || '—'}</td>
-                          <td style={{ padding: '8px 12px', color: T.sub, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role.client_name || '—'}</td>
-                          <td style={{ padding: '8px 12px', color: T.sub, whiteSpace: 'nowrap' }}>{role.location || '—'}</td>
-                          <td style={{ padding: '8px 12px', color: T.sub }}>{meta.grade || '—'}</td>
-                          <td style={{ padding: '8px 12px' }}>
-                            <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 6, background: role.fill_priority === 'P1' ? `${COLORS.danger}18` : `${COLORS.warning}18`, color: role.fill_priority === 'P1' ? COLORS.danger : COLORS.warning }}>{role.fill_priority || '—'}</span>
+                        <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: isGT ? (dark?'rgba(59,130,246,0.12)':'rgba(59,130,246,0.06)') : i%2===0?'transparent':(dark?'rgba(255,255,255,0.02)':'rgba(0,0,0,0.01)'), fontWeight: isGT?900:400 }}>
+                          <td style={{ padding: '12px 16px', fontWeight: isGT?900:700, color: T.text, borderRight: `1px solid ${T.bdr}` }}>{isGT ? '🔢 Grand Total' : sg.skill}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: reactive>0?COLORS.danger:T.sub, fontWeight: reactive>0?800:400, borderRight: `1px solid ${T.bdr}` }}>{reactive||'—'}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: T.sub, borderRight: `1px solid ${T.bdr}` }}>—</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: proactive>0?COLORS.purple:T.sub, fontWeight: proactive>0?800:400, borderRight: `1px solid ${T.bdr}` }}>{proactive||'—'}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: pool>0?COLORS.info:T.sub, fontWeight: pool>0?800:400, borderRight: `1px solid ${T.bdr}` }}>{pool||'—'}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: dealloc>0?COLORS.warning:T.sub, fontWeight: dealloc>0?800:400, borderRight: `1px solid ${T.bdr}` }}>{dealloc||'—'}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: supplyTotal>0?COLORS.success:T.sub, fontWeight: supplyTotal>0?800:400, borderRight: `1px solid ${T.bdr}` }}>{supplyTotal||'—'}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', borderRight: `1px solid ${T.bdr}` }}>
+                            <span style={{ display:'inline-block', minWidth:40, padding:'4px 10px', borderRadius:8, fontWeight:900, fontSize:13, background: gap<0?`${COLORS.danger}18`:gap>0?`${COLORS.success}18`:(dark?'rgba(255,255,255,0.06)':'#f1f5f9'), color: gap<0?COLORS.danger:gap>0?COLORS.success:T.sub, border:`1px solid ${gap<0?COLORS.danger:gap>0?COLORS.success:T.bdr}44` }}>
+                              {gap>0?`+${gap}`:gap===0?'0':gap}
+                            </span>
                           </td>
-                          <td style={{ padding: '8px 12px', color: (role.days_open || 0) > 90 ? COLORS.danger : COLORS.warning, fontWeight: 800 }}>{role.days_open || 0}d</td>
-                          <td style={{ padding: '8px 12px', color: T.sub, whiteSpace: 'nowrap' }}>{role.assigned_spoc || '—'}</td>
-                          <td style={{ padding: '8px 12px', color: T.sub }}>{meta.month || '—'}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: offR>0?COLORS.danger:T.sub, fontWeight: offR>0?800:400, borderRight: `1px solid ${T.bdr}` }}>{offR||'—'}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: offP>0?COLORS.purple:T.sub, fontWeight: offP>0?800:400, borderRight: `1px solid ${T.bdr}` }}>{offP||'—'}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: offT>0?COLORS.info:T.sub, fontWeight: offT>0?800:400 }}>{offT||'—'}</td>
                         </tr>
                       );
                     })}
@@ -1703,58 +1594,21 @@ export default function BFSIDashboard() {
               </div>
             </div>
 
-            {/* ── Proactive SRFs Table ── */}
-            {roles.filter(r => r.type === 'Proactive').length > 0 && (
-              <div style={{ background: dark ? '#1e293b' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, marginBottom: 32, overflow: 'hidden' }}>
-                <div style={{ padding: '16px 24px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS.purple }} />
-                    <h3 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.text }}>Proactive SRFs</h3>
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 900, padding: '3px 10px', borderRadius: 8, background: `${COLORS.purple}18`, color: COLORS.purple }}>{roles.filter(r => r.type === 'Proactive').length} open</span>
+            {/* Legend */}
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '12px 20px', background: dark?'#1e293b':'#fff', borderRadius: 12, border: `1px solid ${T.bdr}`, marginBottom: 20 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.sub }}>Legend:</span>
+              {[{c:COLORS.danger,l:'Reactive SRF = urgent open positions'},{c:COLORS.purple,l:'Proactive = pipeline positions'},{c:COLORS.info,l:'Pool = bench resources'},{c:COLORS.warning,l:'Deallocation = rolling off'},{c:COLORS.success,l:'GAP+ = surplus'},{c:COLORS.danger,l:'GAP- = shortage'}].map(l=>(
+                <div key={l.l} style={{ display:'flex', alignItems:'center', gap:5 }}>
+                  <div style={{ width:10, height:10, borderRadius:3, background:l.c, flexShrink:0 }} />
+                  <span style={{ fontSize:11, color:T.sub }}>{l.l}</span>
                 </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                    <thead>
-                      <tr style={{ background: dark ? 'rgba(255,255,255,0.04)' : '#f8fafc' }}>
-                        {['SRF No', 'Title', 'Skill', 'Customer', 'Grade', 'Priority', 'Ageing', 'SPOC'].map(h => (
-                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 900, color: T.sub, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {roles.filter(r => r.type === 'Proactive').map((role, i) => {
-                        const meta = parseMeta(role);
-                        return (
-                          <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
-                            <td style={{ padding: '8px 12px', color: COLORS.purple, fontWeight: 700 }}>{role.role_id}</td>
-                            <td style={{ padding: '8px 12px', fontWeight: 700, color: T.text, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role.role_title}</td>
-                            <td style={{ padding: '8px 12px', color: T.sub }}>{(role.required_skills || [])[0] || '—'}</td>
-                            <td style={{ padding: '8px 12px', color: T.sub, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role.client_name || '—'}</td>
-                            <td style={{ padding: '8px 12px', color: T.sub }}>{meta.grade || '—'}</td>
-                            <td style={{ padding: '8px 12px' }}>
-                              <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 6, background: `${COLORS.purple}18`, color: COLORS.purple }}>{role.fill_priority || '—'}</span>
-                            </td>
-                            <td style={{ padding: '8px 12px', color: COLORS.warning, fontWeight: 800 }}>{role.days_open || 0}d</td>
-                            <td style={{ padding: '8px 12px', color: T.sub }}>{role.assigned_spoc || '—'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+              ))}
+            </div>
 
-            {/* ── Footer ── */}
-            <div style={{ padding: '16px 24px', background: dark ? '#1e293b' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 12, color: T.sub }}>
-                ZenTalentHub · BFSI Testing Practice · {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
-              </div>
-              <button onClick={() => setWeeklyReport(null)}
-                style={{ padding: '10px 24px', background: COLORS.info, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>
-                Close Report
-              </button>
+            {/* Footer */}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div style={{ fontSize:11, color:T.sub }}>ZenTalentHub · BFSI Testing Practice · Data from Excel upload</div>
+              <button onClick={() => setWeeklyReport(null)} style={{ padding:'10px 28px', background:COLORS.info, color:'#fff', border:'none', borderRadius:10, fontWeight:800, fontSize:13, cursor:'pointer' }}>Close Report</button>
             </div>
 
           </div>
