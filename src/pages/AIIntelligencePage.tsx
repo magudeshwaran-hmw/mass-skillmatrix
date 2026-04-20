@@ -222,120 +222,184 @@ Format: Return a JSON object ONLY with a "steps" array containing 3 objects:
 }
 
 // ─────────────────────────────────────────────────
-// TAB 3 — DEEP GAP ANALYSIS (defined BEFORE main export)
+// TAB 3 — RESUME DATA GAP ANALYSIS (data-driven, no AI needed)
+// Shows exactly which fields are missing in extracted resume data
 // ─────────────────────────────────────────────────
 function DeepGapAnalysisTab({ data, T }: { data: any, T: any }) {
-  const [analysis, setAnalysis] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const { dark } = (window as any).__zenDark || { dark: false };
+  // Get dark from T background color as fallback
+  const isDark = T.bg === '#050B18' || T.bg?.includes('0,0,0') || T.card?.includes('30,41');
 
-  useEffect(() => {
-    generateAnalysis();
-  }, []);
+  // ── Build gap list from actual extracted data ──────────────────────────────
+  const gaps: Array<{
+    section: string;
+    item: string;
+    missing: string[];
+    severity: 'high' | 'medium' | 'low';
+  }> = [];
 
-  const generateAnalysis = async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const expertSkills = (data.expertSkills || []).join(', ');
-      const gapSkills = (data.gapSkills || []).map((g: any) => g.skill).join(', ');
-      const designation = data.user?.Designation || 'Quality Engineer';
-
-      const prompt = `Perform a deep capability diagnostic analysis for ${data.user?.Name}, a ${designation} at Zensar.
-Context:
-- Strong Capabilities: ${expertSkills}
-- Missing/Gap Capabilities: ${gapSkills}
-
-Format: Return ONLY a JSON object with a "gaps" array containing up to 5 items:
-{
-  "gaps": [
-    {
-      "title": "Clear gap title (e.g. Lack of modern automation testing experience)",
-      "impact": "Heavy reliance on manual testing impacts scalability...",
-      "fix": "Actionable way to fix this gap (e.g. Complete a practical certification...)"
-    }
-  ]
-}`;
-
-      const res = await callLLM(prompt);
-      if (res?.data?.gaps) {
-        setAnalysis(res.data.gaps);
-      } else {
-        throw new Error("Invalid response format");
+  // ── Check PROJECTS ──────────────────────────────────────────────────────────
+  const projects = data.projects || [];
+  if (projects.length === 0) {
+    gaps.push({ section: 'Projects', item: 'No projects found', missing: ['Upload resume with work experience to extract projects'], severity: 'high' });
+  } else {
+    projects.forEach((p: any) => {
+      const name = p.ProjectName || p.projectName || p.name || 'Unnamed Project';
+      const missing: string[] = [];
+      if (!p.StartDate && !p.startDate && !p.start_date)   missing.push('Start Date');
+      if (!p.EndDate   && !p.endDate   && !p.end_date && !p.IsOngoing && !p.is_ongoing) missing.push('End Date');
+      if (!p.Client    && !p.client)                        missing.push('Client Name');
+      if (!p.Role      && !p.role)                          missing.push('Role / Designation');
+      if (!p.Description && !p.description)                 missing.push('Project Description');
+      if ((!p.Technologies || (Array.isArray(p.Technologies) && p.Technologies.length === 0)) &&
+          (!p.technologies  || (Array.isArray(p.technologies)  && p.technologies.length  === 0))) {
+        missing.push('Technologies Used');
       }
-    } catch (err) {
-      console.error(err);
-      setError(true);
-      setAnalysis([
-        {
-          title: "Lack of modern automation testing experience (Selenium, Cypress, Playwright, etc.)",
-          impact: "Heavy reliance on manual testing limits scalability, efficiency, and market competitiveness.",
-          fix: "Complete a practical course in Cypress or Playwright. Implement automated test suites for current projects."
-        },
-        {
-          title: "Absence of API testing automation skills",
-          impact: "Unable to effectively validate backend APIs or integrate with CI/CD workflows.",
-          fix: "Learn RestAssured or Python requests. Practice writing tests in Postman."
-        },
-        {
-          title: "No CI/CD pipeline integration experience",
-          impact: "Silos QA processes from modern DevOps workflows.",
-          fix: "Engage with Jenkins/GitHub Actions fundamentals. Shadow DevOps teams on pipeline integration."
-        }
-      ]);
-    } finally {
-      setLoading(false);
+      if (missing.length > 0) {
+        gaps.push({ section: 'Project', item: name, missing, severity: missing.length >= 3 ? 'high' : missing.length >= 2 ? 'medium' : 'low' });
+      }
+    });
+  }
+
+  // ── Check CERTIFICATIONS ────────────────────────────────────────────────────
+  const certs = data.certifications || [];
+  if (certs.length === 0) {
+    gaps.push({ section: 'Certifications', item: 'No certifications found', missing: ['Add certifications to your resume or upload a resume with certifications'], severity: 'medium' });
+  } else {
+    certs.forEach((c: any) => {
+      const name = c.CertName || c.certName || c.name || 'Unnamed Certification';
+      const missing: string[] = [];
+      if (!c.Provider && !c.issuingOrganization && !c.issuer) missing.push('Issuing Organization');
+      if (!c.IssueDate && !c.issueDate && !c.issue_date)      missing.push('Issue Date');
+      if (!c.CredentialID && !c.credentialId && !c.credential_id) missing.push('Credential ID');
+      if (missing.length > 0) {
+        gaps.push({ section: 'Certification', item: name, missing, severity: 'low' });
+      }
+    });
+  }
+
+  // ── Check EDUCATION ─────────────────────────────────────────────────────────
+  const education = data.education || [];
+  if (education.length === 0) {
+    gaps.push({ section: 'Education', item: 'No education found', missing: ['Add education details to your resume'], severity: 'medium' });
+  } else {
+    education.forEach((e: any) => {
+      const name = e.Degree || e.degree || 'Unnamed Degree';
+      const missing: string[] = [];
+      if (!e.Institution && !e.institution) missing.push('Institution Name');
+      if (!e.FieldOfStudy && !e.fieldOfStudy && !e.field_of_study && !e.field) missing.push('Field of Study');
+      if (!e.EndDate && !e.endDate && !e.end_date && !e.year) missing.push('Year / Duration');
+      if (missing.length > 0) {
+        gaps.push({ section: 'Education', item: name, missing, severity: 'low' });
+      }
+    });
+  }
+
+  // ── Check ACHIEVEMENTS ──────────────────────────────────────────────────────
+  const achievements = data.achievements || [];
+  achievements.forEach((a: any) => {
+    const name = a.Title || a.title || 'Unnamed Achievement';
+    const missing: string[] = [];
+    if (!a.DateReceived && !a.dateReceived && !a.date_received) missing.push('Date Received');
+    if (!a.Issuer && !a.issuer)                                  missing.push('Issuer / Organization');
+    if (!a.Description && !a.description)                        missing.push('Description');
+    if (missing.length > 0) {
+      gaps.push({ section: 'Achievement', item: name, missing, severity: 'low' });
     }
-  };
+  });
+
+  // ── Check PROFILE ───────────────────────────────────────────────────────────
+  const user = data.user || {};
+  const profileMissing: string[] = [];
+  if (!user.Phone && !user.phone)                                     profileMissing.push('Phone Number');
+  if (!user.Location && !user.location)                               profileMissing.push('Location');
+  if (!user.Designation && !user.designation)                         profileMissing.push('Designation / Job Title');
+  if ((!user.YearsIT && !user.yearsIT) || (user.YearsIT === 0 && user.yearsIT === 0)) profileMissing.push('Years of Experience');
+  if (profileMissing.length > 0) {
+    gaps.push({ section: 'Profile', item: 'Your Profile', missing: profileMissing, severity: profileMissing.length >= 3 ? 'high' : 'medium' });
+  }
+
+  // ── Summary counts ──────────────────────────────────────────────────────────
+  const highCount   = gaps.filter(g => g.severity === 'high').length;
+  const mediumCount = gaps.filter(g => g.severity === 'medium').length;
+  const lowCount    = gaps.filter(g => g.severity === 'low').length;
+  const totalMissing = gaps.reduce((n, g) => n + g.missing.length, 0);
+
+  const severityColor = (s: string) => s === 'high' ? '#EF4444' : s === 'medium' ? '#F59E0B' : '#3B82F6';
+  const severityBg    = (s: string) => s === 'high' ? 'rgba(239,68,68,0.08)' : s === 'medium' ? 'rgba(245,158,11,0.08)' : 'rgba(59,130,246,0.08)';
+  const severityBdr   = (s: string) => s === 'high' ? 'rgba(239,68,68,0.2)' : s === 'medium' ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)';
+  const sectionIcon   = (s: string) => s === 'Project' ? '📁' : s === 'Certification' ? '🏆' : s === 'Education' ? '🎓' : s === 'Achievement' ? '⭐' : s === 'Profile' ? '👤' : s === 'Projects' ? '📁' : s === 'Certifications' ? '🏆' : '📋';
 
   return (
-    <div style={{ animation: 'fadeUp 0.4s' }}>
-      <div style={{ padding: '24px', background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 24, paddingBottom: 40 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Target size={24} color="#EF4444" />
+    <div style={{ animation: 'fadeUp 0.4s', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Summary bar */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
+        {[
+          { label: 'Critical', count: highCount,   color: '#EF4444', bg: 'rgba(239,68,68,0.08)',   bdr: 'rgba(239,68,68,0.2)'   },
+          { label: 'Important', count: mediumCount, color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', bdr: 'rgba(245,158,11,0.2)' },
+          { label: 'Optional',  count: lowCount,    color: '#3B82F6', bg: 'rgba(59,130,246,0.08)', bdr: 'rgba(59,130,246,0.2)' },
+        ].map(s => (
+          <div key={s.label} style={{ padding: '14px 18px', background: s.bg, border: `1px solid ${s.bdr}`, borderRadius: 14, textAlign: 'center' }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: s.color, lineHeight: 1 }}>{s.count}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: s.color, marginTop: 4, textTransform: 'uppercase', letterSpacing: 1 }}>{s.label}</div>
           </div>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#EF4444', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 }}>AI Diagnostic</div>
-            <div style={{ fontWeight: 800, fontSize: 20, color: T.text }}>Professional Gaps Analysis</div>
-          </div>
+        ))}
+      </div>
+
+      {/* No gaps message */}
+      {gaps.length === 0 && (
+        <div style={{ padding: 40, textAlign: 'center', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: 16 }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: '#10B981' }}>Resume is Complete!</div>
+          <div style={{ fontSize: 13, color: T.sub, marginTop: 4 }}>All extracted data has the required fields filled in.</div>
         </div>
+      )}
 
-        <button onClick={generateAnalysis} disabled={loading}
-          style={{ width: '100%', padding: '12px', background: '#EF4444', borderRadius: 10, border: 'none', color: '#fff', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1, marginBottom: 24 }}>
-          {loading ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-          {loading ? 'Analyzing...' : 'Analyse Gaps'}
-        </button>
-
-        {error && !loading && (
-          <div style={{ marginBottom: 16, padding: '10px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#FCA5A5', borderRadius: 12, fontSize: 12, fontWeight: 700 }}>
-            ⚠️ AI Service unavailable. Showing fallback gap analysis.
+      {/* Gap items */}
+      {gaps.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12, color: T.sub, fontWeight: 700, padding: '6px 12px', background: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9', borderRadius: 8 }}>
+            📋 {totalMissing} missing fields found across {gaps.length} items — fix these in your resume and re-upload
           </div>
-        )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {loading && analysis.length === 0 && (
-            <div style={{ padding: 48, textAlign: 'center' }}>
-              <Loader2 className="animate-spin" size={32} color="#EF4444" style={{ margin: '0 auto 16px' }} />
-              <div style={{ fontWeight: 800, fontSize: 16, color: T.text }}>Synthesises skill map with the help of AI...</div>
-            </div>
-          )}
-          {analysis.map((gap, i) => (
-            <div key={i} style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.12)', borderRadius: 16, padding: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#FCA5A5', marginBottom: 8, lineHeight: 1.5 }}>{gap.title}</div>
-              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, marginBottom: 16 }}>
-                <strong>Impact:</strong> {gap.impact}
-              </div>
-              <div style={{ background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.15)', borderRadius: 12, padding: 16, display: 'flex', gap: 12 }}>
-                <div style={{ marginTop: 2 }}><Zap size={16} color="#22C55E" /></div>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: '#22C55E', textTransform: 'uppercase', marginBottom: 4 }}>How to fix this gap</div>
-                  <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5, opacity: 0.9 }}>{gap.fix}</div>
+          {/* Sort: high first, then medium, then low */}
+          {[...gaps].sort((a, b) => {
+            const order = { high: 0, medium: 1, low: 2 };
+            return order[a.severity] - order[b.severity];
+          }).map((gap, i) => (
+            <div key={i} style={{ background: severityBg(gap.severity), border: `1px solid ${severityBdr(gap.severity)}`, borderRadius: 14, padding: '14px 18px', borderLeft: `4px solid ${severityColor(gap.severity)}` }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 18 }}>{sectionIcon(gap.section)}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 6, background: severityColor(gap.severity) + '22', color: severityColor(gap.severity), textTransform: 'uppercase', letterSpacing: 1 }}>
+                      {gap.section}
+                    </span>
+                    <span style={{ fontWeight: 800, fontSize: 13, color: T.text }}>{gap.item}</span>
+                  </div>
                 </div>
+                <span style={{ fontSize: 10, fontWeight: 900, color: severityColor(gap.severity), flexShrink: 0 }}>
+                  {gap.missing.length} missing
+                </span>
+              </div>
+              {/* Missing fields */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {gap.missing.map((field, fi) => (
+                  <span key={fi} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: isDark ? 'rgba(0,0,0,0.3)' : '#fff', border: `1px solid ${severityBdr(gap.severity)}`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: T.text }}>
+                    <span style={{ color: severityColor(gap.severity) }}>✗</span> {field}
+                  </span>
+                ))}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {/* Footer note */}
+      <div style={{ padding: '12px 16px', background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: `1px solid ${T.bdr}`, borderRadius: 12, fontSize: 12, color: T.sub, lineHeight: 1.6 }}>
+        💡 <strong style={{ color: T.text }}>How to fix:</strong> Update your resume with the missing details above, then re-upload via <strong style={{ color: T.text }}>ZenScan</strong> to refresh your profile data.
       </div>
     </div>
   );
