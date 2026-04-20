@@ -410,12 +410,11 @@ export default function AIIntelligencePage({
            </div>
         </div>
 
-        {/* Dynamic Nav Tabs — ZenAICoach, ZenPath, Resume Gaps (ZenGap removed) */}
+        {/* Dynamic Nav Tabs — ZenAICoach, ZenPath (ZenGap and Resume Gaps removed) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 24, padding: 4, background: T.card, borderRadius: 16, width: '100%', border: `1px solid ${T.bdr}` }}>
           {[
             { id: 'coach', label: 'ZenAICoach', icon: Bot },
             { id: 'map',   label: 'ZenPath',    icon: Map },
-            { id: 'gaps',  label: 'Resume Gaps', icon: Target },
           ].map(t => (
             <button
               key={t.id}
@@ -435,7 +434,6 @@ export default function AIIntelligencePage({
 
         {activeTab === 'coach' && <CareerCoachTab data={data} T={T} />}
         {activeTab === 'map'   && <RoadmapTab data={data} T={T} />}
-        {activeTab === 'gaps'  && <DeepGapAnalysisTab data={data} T={T} />}
 
       </div>
 
