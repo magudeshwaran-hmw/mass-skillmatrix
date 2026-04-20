@@ -903,90 +903,78 @@ export default function BFSIDashboard() {
                           return;
                         }
 
-                        // ── Matching Engine ──────────────────────────────────
+                        // ── Matching Engine (3-Phase per SVG workflow) ───────
+                        // Phase 1: Rule-based pre-filter
+                        // Phase 2: Weighted scoring
+                        // Phase 3: Top 5 per SRF
                         const matches: Array<{ role: BFSIRole; employee: BFSIEmployee; score: number; matchedSkills: string[]; breakdown: string }> = [];
 
                         openRoles.forEach(role => {
-                          // Parse META for extra info
                           const meta = parseMeta(role);
                           const jdText = getJD(role).toLowerCase();
                           const rolePrimarySkill = (role.required_skills?.[0] || '').toLowerCase();
                           const roleTitle = (role.role_title || '').toLowerCase();
+                          const roleMatches: typeof matches = [];
 
                           poolEmployees.forEach(emp => {
-                            // Build full skill set from all available fields
                             const empAllSkills = [
                               ...(emp.current_skills || []),
                               emp.primary_skill || '',
                               emp.practice_name || '',
                             ].filter(Boolean).map(s => s.toLowerCase());
 
+                            // ── Phase 1: Rule-based pre-filter ──
+                            const hasOverlap = empAllSkills.some(es =>
+                              rolePrimarySkill.split(' ').some(w => w.length > 4 && es.includes(w)) ||
+                              roleTitle.split(' ').some(w => w.length > 4 && es.includes(w)) ||
+                              (jdText.length > 10 && es.length > 4 && jdText.includes(es))
+                            );
+                            if (!hasOverlap) return;
+
+                            // ── Phase 2: Weighted scoring ──
                             const matchedSkills: string[] = [];
                             let score = 0;
                             const breakdown: string[] = [];
 
-                            // 1. Primary skill match (40 pts) — most important
-                            const primaryMatch = empAllSkills.some(es =>
-                              es.includes(rolePrimarySkill) ||
-                              rolePrimarySkill.includes(es) ||
-                              // Handle abbreviations: "automation" matches "automation testing"
-                              rolePrimarySkill.split(' ').some(word => word.length > 4 && es.includes(word))
-                            );
-                            if (primaryMatch) {
+                            // Primary skill (40 pts)
+                            if (empAllSkills.some(es => es.includes(rolePrimarySkill) || rolePrimarySkill.includes(es) || rolePrimarySkill.split(' ').some(w => w.length > 4 && es.includes(w)))) {
                               score += 40;
                               matchedSkills.push(role.required_skills?.[0] || 'Primary Skill');
                               breakdown.push('Primary Skill ✓');
                             }
 
-                            // 2. JD keyword match (up to 30 pts) — scan JD for employee skills
+                            // JD keywords (up to 30 pts)
                             if (jdText.length > 10) {
-                              const jdMatched = empAllSkills.filter(es =>
-                                es.length > 3 && jdText.includes(es)
-                              );
+                              const jdMatched = empAllSkills.filter(es => es.length > 4 && jdText.includes(es));
                               const jdScore = Math.min(jdMatched.length * 6, 30);
                               if (jdScore > 0) {
                                 score += jdScore;
-                                jdMatched.slice(0, 3).forEach(s => {
-                                  if (!matchedSkills.includes(s)) matchedSkills.push(s);
-                                });
+                                jdMatched.slice(0, 3).forEach(s => { if (!matchedSkills.includes(s)) matchedSkills.push(s); });
                                 breakdown.push(`JD Keywords: ${jdMatched.length}`);
                               }
                             }
 
-                            // 3. Role title keyword match (15 pts)
-                            const titleMatch = empAllSkills.some(es =>
-                              es.length > 4 && roleTitle.includes(es)
-                            );
-                            if (titleMatch) {
-                              score += 15;
-                              breakdown.push('Role Title ✓');
+                            // Role title (15 pts)
+                            if (empAllSkills.some(es => es.length > 4 && roleTitle.includes(es))) {
+                              score += 15; breakdown.push('Role Title ✓');
                             }
 
-                            // 4. Grade match (15 pts)
+                            // Grade (15 pts)
                             const reqGrade = meta.grade || '';
                             const empGrade = (emp as any).grade || '';
-                            if (reqGrade && empGrade && reqGrade === empGrade) {
-                              score += 15;
-                              breakdown.push(`Grade: ${empGrade} ✓`);
-                            } else if (reqGrade && empGrade) {
-                              // Partial grade match (e.g. E2 vs E1 — same band)
-                              if (reqGrade[0] === empGrade[0]) {
-                                score += 7;
-                                breakdown.push(`Grade Band: ${empGrade[0]} ✓`);
-                              }
+                            if (reqGrade && empGrade) {
+                              if (reqGrade === empGrade) { score += 15; breakdown.push(`Grade: ${empGrade} ✓`); }
+                              else if (reqGrade[0] === empGrade[0]) { score += 7; breakdown.push(`Grade Band: ${empGrade[0]} ✓`); }
                             }
 
-                            // Only include if score > 0
                             if (score > 0) {
-                              matches.push({
-                                role,
-                                employee: emp,
-                                score: Math.min(score, 100),
-                                matchedSkills: [...new Set(matchedSkills)],
-                                breakdown: breakdown.join(' · ')
-                              });
+                              roleMatches.push({ role, employee: emp, score: Math.min(score, 100), matchedSkills: [...new Set(matchedSkills)], breakdown: breakdown.join(' · ') });
                             }
                           });
+
+                          // ── Phase 3: Top 5 per SRF ──
+                          roleMatches.sort((a, b) => b.score !== a.score ? b.score - a.score : (b.employee.aging_days || 0) - (a.employee.aging_days || 0));
+                          matches.push(...roleMatches.slice(0, 5));
                         });
 
                         if (matches.length === 0) {
@@ -994,17 +982,14 @@ export default function BFSIDashboard() {
                           return;
                         }
 
-                        // Sort by score desc, then by ageing desc (higher ageing = more urgent to place)
-                        matches.sort((a, b) => {
-                          if (b.score !== a.score) return b.score - a.score;
-                          return (b.employee.aging_days || 0) - (a.employee.aging_days || 0);
-                        });
+                        // Final sort: by score desc
+                        matches.sort((a, b) => b.score - a.score);
 
-                        toast.success(`Found ${matches.length} matches across ${openRoles.length} roles`);
+                        toast.success(`Found ${matches.length} matches across ${openRoles.length} roles (top 5 per SRF)`);
                         setSelectedMetric({
                           tab: 'match',
-                          metric: `🎯 Find a Match — ${matches.length} Results`,
-                          data: matches.slice(0, 100)
+                          metric: `🎯 Find a Match — ${matches.length} Results (Top 5 per SRF)`,
+                          data: matches
                         });
                       }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 28px', background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 900, border: 'none', boxShadow: '0 10px 20px rgba(16,185,129,0.25)' }}
@@ -1293,11 +1278,6 @@ export default function BFSIDashboard() {
                               {item.client_name && <> · <strong style={{ color: COLORS.info }}>{item.client_name}</strong></>}
                               {item.location && <> · 📍 {item.location}</>}
                             </div>
-                          </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.3)' : '#f8fafc', padding: '8px 14px', borderRadius: 10, border: `1px solid ${T.bdr}` }}>
-                            <div style={{ fontSize: 20, fontWeight: 800, color: (item.days_open || 0) > 90 ? COLORS.danger : COLORS.warning, lineHeight: 1 }}>{item.days_open || 0}</div>
-                            <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase' }}>Days</div>
-                            {meta.ageingBucket && <div style={{ fontSize: 9, color: T.sub, marginTop: 1 }}>{meta.ageingBucket}</div>}
                           </div>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', borderTop: `1px solid ${T.bdr}`, borderBottom: jdText ? `1px solid ${T.bdr}` : 'none' }}>
