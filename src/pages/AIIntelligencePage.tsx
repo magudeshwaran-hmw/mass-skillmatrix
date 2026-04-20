@@ -290,31 +290,16 @@ export default function AIIntelligencePage({
            </div>
         </div>
 
-        {/* Dynamic Nav Tabs */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 24, padding: 4, background: T.card, borderRadius: 16, width: '100%', border: `1px solid ${T.bdr}` }}>
-           {[
-             { id: 'coach', label: 'ZenAICoach', icon: Bot },
-             { id: 'map', label: 'ZenPath', icon: Map },
-             { id: 'gaps', label: 'Resume Gaps', icon: Target }
-           ].map(t => (
-             <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                style={{
-                  flex: 1, minWidth: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 12px', borderRadius: 12, border: 'none',
-                  background: activeTab === t.id ? '#3B82F6' : 'transparent',
-                  color: activeTab === t.id ? '#fff' : T.sub,
-                  fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: '0.2s'
-                }}
-             >
-                <t.icon size={16}/> {t.label}
-             </button>
-           ))}
+        {/* Dynamic Nav Tabs - Removed ZenAICoach and ZenPath, keeping only Resume Gaps */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ background: T.card, borderRadius: 16, padding: 16, border: `1px solid ${T.bdr}`, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <Target size={18} color="#3B82F6" />
+            <span style={{ fontWeight: 800, fontSize: 15, color: T.text }}>Resume Gaps Analysis</span>
+          </div>
         </div>
 
-        {activeTab === 'coach' && <CareerCoachTab data={data} T={T} />}
-        {activeTab === 'map' && <RoadmapTab data={data} T={T} />}
-        {activeTab === 'gaps' && <DeepGapAnalysisTab data={data} T={T} />}
+        {/* Show only Resume Gaps tab content */}
+        <DeepGapAnalysisTab data={data} T={T} />
 
       </div>
 

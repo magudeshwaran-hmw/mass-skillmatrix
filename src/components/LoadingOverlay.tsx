@@ -86,16 +86,6 @@ const LoadingOverlay = ({ active, text = 'Syncing data...' }: { active: boolean;
         animation: 'fadeIn 0.6s ease-out'
       }}>
         <div style={{ 
-          fontSize: 12, 
-          fontWeight: 900, 
-          color: headColor, 
-          textTransform: 'uppercase', 
-          letterSpacing: 6,
-          marginBottom: 10
-        }}>
-          Zensar IQ Core
-        </div>
-        <div style={{ 
           fontSize: 14, 
           fontWeight: 600, 
           color: subColor,

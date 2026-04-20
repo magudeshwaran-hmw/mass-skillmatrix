@@ -1067,150 +1067,229 @@ export default function BFSIDashboard() {
         </div>
       </div>
 
+      {/* ── JD Modal ── */}
+      {jdModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(10px)' }} onClick={() => setJdModal(null)}>
+          <div style={{ background: T.card, borderRadius: 24, border: `1px solid ${T.bdr}`, maxWidth: 800, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '20px 32px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg,#3b82f6,#6366f1)' }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 4 }}>Job Description</div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#fff' }}>{jdModal.title}</h3>
+              </div>
+              <button onClick={() => setJdModal(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 36, height: 36, borderRadius: 10, cursor: 'pointer', fontSize: 18 }}>✕</button>
+            </div>
+            <div style={{ padding: 32, overflowY: 'auto', flex: 1 }}>
+              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13, color: T.text, lineHeight: 1.8, margin: 0 }}>{jdModal.jd}</pre>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODALS */}
       {selectedMetric && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(10px)' }} onClick={() => { setSelectedMetric(null); setModalSearch(''); setModalLocationFilter('All'); setModalGradeFilter('All'); }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(10px)' }} onClick={() => { setSelectedMetric(null); setModalSearch(''); setModalLocationFilter('All'); }}>
           <div style={{ background: T.card, borderRadius: 24, border: `1px solid ${T.bdr}`, maxWidth: 1100, width: '100%', maxHeight: '85vh', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '24px 40px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: dark ? 'rgba(0,0,0,0.2)' : '#fff' }}>
-               <div>
-                 <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>{selectedMetric.metric} Detail View ({selectedMetric.data.length})</h2>
-                 <p style={{ margin: '4px 0 0', fontSize: 12, color: T.sub }}>Filtered: {selectedMetric.data.filter(it => {
-                    const s = modalSearch.toLowerCase();
-                    const name = it.employee_name || it.role_title || (it.employee?.employee_name) || '';
-                    const id = it.employee_id || it.role_id || (it.employee?.employee_id) || '';
-                    const matchSearch = name.toLowerCase().includes(s) || id.toLowerCase().includes(s);
-                    const matchLoc = modalLocationFilter === 'All' || it.location === modalLocationFilter || it.employee?.location === modalLocationFilter;
-                    return matchSearch && matchLoc;
-                 }).length} Records</p>
-               </div>
-               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                 <div style={{ display: 'flex', gap: 8 }}>
-                    <select 
-                      value={modalLocationFilter}
-                      onChange={(e) => setModalLocationFilter(e.target.value)}
-                      style={{ padding: '10px 16px', borderRadius: 10, background: dark ? '#0f172a' : '#fff', border: `1px solid ${T.bdr}`, color: T.text, fontSize: 12, fontWeight: 800, cursor: 'pointer', outline: 'none' }}
-                    >
-                      <option value="All">All Locations</option>
-                      {[...new Set(selectedMetric.data.map((d: any) => d.location || d.employee?.location).filter(Boolean))].sort().map((loc: any) => (
-                        <option key={loc} value={loc}>{loc}</option>
-                      ))}
-                    </select>
-                 </div>
-                 <div style={{ position: 'relative', minWidth: 220 }}>
-                    <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: T.sub }} />
-                    <input 
-                      type="text" 
-                      placeholder="Search ID/Name/Skill..." 
-                      value={modalSearch}
-                      onChange={(e) => setModalSearch(e.target.value)}
-                      style={{ width: '100%', padding: '10px 10px 10px 36px', background: dark ? '#0f172a' : '#f1f5f9', border: `1px solid ${T.bdr}`, borderRadius: 10, color: T.text, fontSize: 12, fontWeight: 700, outline: 'none' }}
-                    />
-                 </div>
-                 <button onClick={() => { setSelectedMetric(null); setModalSearch(''); setModalLocationFilter('All'); setModalGradeFilter('All'); }} style={{ background: 'transparent', border: 'none', color: T.text, fontSize: 24, cursor: 'pointer', padding: 4 }}>✕</button>
-               </div>
+            <div style={{ padding: '20px 32px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: dark ? 'rgba(0,0,0,0.2)' : '#fff' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{selectedMetric.metric}</h2>
+                <p style={{ margin: '3px 0 0', fontSize: 12, color: T.sub }}>{selectedMetric.data.length} total records</p>
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <div style={{ position: 'relative' }}>
+                  <Search size={13} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: T.sub }} />
+                  <input value={modalSearch} onChange={e => setModalSearch(e.target.value)}
+                    placeholder={selectedMetric.tab === 'demand' ? 'Search SRF / Customer / Skill...' : 'Search Name / ID...'}
+                    style={{ padding: '9px 9px 9px 32px', background: dark ? '#0f172a' : '#f1f5f9', border: `1px solid ${T.bdr}`, borderRadius: 10, color: T.text, fontSize: 12, fontWeight: 700, outline: 'none', width: 240 }} />
+                </div>
+                {selectedMetric.tab !== 'match' && (
+                  <select value={modalLocationFilter} onChange={e => setModalLocationFilter(e.target.value)}
+                    style={{ padding: '9px 14px', borderRadius: 10, background: dark ? '#0f172a' : '#fff', border: `1px solid ${T.bdr}`, color: T.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>
+                    <option value="All">All Locations</option>
+                    {[...new Set(selectedMetric.data.map((d: any) => d.location).filter(Boolean))].sort().map((loc: any) => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
+                )}
+                <button onClick={() => { setSelectedMetric(null); setModalSearch(''); setModalLocationFilter('All'); }}
+                  style={{ background: 'transparent', border: 'none', color: T.text, fontSize: 22, cursor: 'pointer', padding: 4 }}>✕</button>
+              </div>
             </div>
-            <div style={{ padding: 40, overflowY: 'auto', maxHeight: 'calc(85vh - 120px)' }}>
+            <div style={{ padding: 32, overflowY: 'auto', maxHeight: 'calc(85vh - 110px)' }}>
 
               {/* ── FIND A MATCH results ── */}
               {selectedMetric.tab === 'match' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {selectedMetric.data
-                    .filter((item: any) => {
-                      const s = modalSearch.toLowerCase();
-                      return !s || item.employee?.employee_name?.toLowerCase().includes(s) || item.role?.role_title?.toLowerCase().includes(s) || item.employee?.employee_id?.toLowerCase().includes(s);
-                    })
-                    .map((item: any, i: number) => (
-                    <div key={i} style={{ padding: '20px 28px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 16, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${item.score >= 80 ? COLORS.success : item.score >= 50 ? COLORS.warning : COLORS.info}` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-                        <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg,${item.score >= 80 ? '#10b981' : item.score >= 50 ? '#f59e0b' : '#3b82f6'},${item.score >= 80 ? '#059669' : item.score >= 50 ? '#f97316' : '#6366f1'})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 16, flexShrink: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selectedMetric.data.filter((item: any) => {
+                    const s = modalSearch.toLowerCase();
+                    return !s || item.employee?.employee_name?.toLowerCase().includes(s) || item.role?.role_title?.toLowerCase().includes(s) || item.employee?.employee_id?.toLowerCase().includes(s);
+                  }).map((item: any, i: number) => (
+                    <div key={i} style={{ padding: '18px 24px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 14, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${item.score >= 80 ? COLORS.success : item.score >= 50 ? COLORS.warning : COLORS.info}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+                        <div style={{ width: 46, height: 46, borderRadius: 12, background: `linear-gradient(135deg,${item.score >= 80 ? '#10b981,#059669' : item.score >= 50 ? '#f59e0b,#f97316' : '#3b82f6,#6366f1'})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
                           {item.score}%
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 900, fontSize: 15, color: T.text }}>{item.employee?.employee_name}</div>
-                          <div style={{ fontSize: 12, color: T.sub }}>ID: {item.employee?.employee_id} · {item.employee?.band || '—'} · {item.employee?.location || '—'}</div>
+                          <div style={{ fontWeight: 900, fontSize: 14, color: T.text }}>{item.employee?.employee_name}</div>
+                          <div style={{ fontSize: 11, color: T.sub }}>ID: {item.employee?.employee_id} · {(item.employee as any)?.grade || item.employee?.band || '—'} · {item.employee?.location || '—'}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>{item.role?.role_title}</div>
-                          <div style={{ fontSize: 11, color: T.sub }}>SRF: {item.role?.srf_no || 'N/A'} · {item.role?.type}</div>
+                          <div style={{ fontWeight: 800, fontSize: 13, color: T.text }}>{item.role?.role_title}</div>
+                          <div style={{ fontSize: 11, color: T.sub }}>SRF: {item.role?.role_id} · {item.role?.type}</div>
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {item.matchedSkills.map((s: string, j: number) => (
-                          <span key={j} style={{ padding: '4px 10px', background: `${COLORS.success}18`, border: `1px solid ${COLORS.success}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: COLORS.success }}>✓ {s}</span>
+                          <span key={j} style={{ padding: '3px 10px', background: `${COLORS.success}18`, border: `1px solid ${COLORS.success}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: COLORS.success }}>✓ {s}</span>
                         ))}
                       </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-               selectedMetric.data
-                 .filter((item: any) => {
-                   const s = modalSearch.toLowerCase();
-                   const matchSearch = (item.employee_name || item.role_title || '').toLowerCase().includes(s) || (item.employee_id || item.role_id || '').toLowerCase().includes(s);
-                   const matchLoc = modalLocationFilter === 'All' || item.location === modalLocationFilter;
-                   return matchSearch && matchLoc;
-                 })
-                 .map((item: any, i: number) => (
-                 <div key={i} style={{ padding: '24px 32px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 20, marginBottom: 14, border: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', gap: 16, borderLeft: `5px solid ${item.status === 'Deallocating' ? COLORS.warning : COLORS.info}` }}>
-                    {/* Row 1: Avatar + Name + Status badge + Location + Aging */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-                      <div style={{ width: 52, height: 52, borderRadius: 14, background: item.status === 'Deallocating' ? 'linear-gradient(135deg,#f59e0b,#f97316)' : 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 20, flexShrink: 0 }}>
-                        {(item.employee_name || item.role_title || '?')[0]}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 800, fontSize: 16, color: T.text }}>{item.employee_name || item.role_title}</span>
-                          <span style={{ fontSize: 10, fontWeight: 900, padding: '3px 10px', borderRadius: 999, background: item.status === 'Deallocating' ? `${COLORS.warning}22` : `${COLORS.info}22`, color: item.status === 'Deallocating' ? COLORS.warning : COLORS.info, border: `1px solid ${item.status === 'Deallocating' ? COLORS.warning : COLORS.info}55`, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                            {item.status === 'Deallocating' ? 'Deallocating' : 'Pool'}
-                          </span>
-                          {item.primary_skill && (
-                            <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : '#e2e8f0', color: T.sub, border: `1px solid ${T.bdr}` }}>
-                              {item.primary_skill}
-                            </span>
-                          )}
+
+              /* ── DEMAND (SRF) card layout ── */
+              ) : selectedMetric.tab === 'demand' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selectedMetric.data.filter((item: any) => {
+                    const s = modalSearch.toLowerCase();
+                    if (!s && modalLocationFilter === 'All') return true;
+                    const matchSearch = !s || (item.role_title || '').toLowerCase().includes(s) || (item.role_id || '').toLowerCase().includes(s) || (item.client_name || '').toLowerCase().includes(s) || (item.required_skills || []).join(' ').toLowerCase().includes(s);
+                    const matchLoc = modalLocationFilter === 'All' || (item.location || '').includes(modalLocationFilter);
+                    return matchSearch && matchLoc;
+                  }).map((item: any, i: number) => {
+                    const meta = (() => { try { const jd = item.job_description || ''; if (jd.startsWith('META:')) { const end = jd.indexOf('\n\nJD:'); return JSON.parse(end > 0 ? jd.slice(5, end) : jd.slice(5)); } } catch {} return {}; })();
+                    const jdText = (() => { const jd = item.job_description || ''; const idx = jd.indexOf('\n\nJD:\n'); return idx >= 0 ? jd.slice(idx + 6).trim() : (jd.startsWith('META:') ? '' : jd); })();
+                    const typeColor = item.type === 'Reactive' ? COLORS.danger : COLORS.purple;
+                    const pColor = item.fill_priority === 'P1' ? COLORS.danger : item.fill_priority === 'P2' ? COLORS.warning : COLORS.info;
+                    return (
+                      <div key={i} style={{ background: dark ? 'rgba(30,41,59,0.6)' : '#fff', borderRadius: 14, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${typeColor}`, overflow: 'hidden' }}>
+                        <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                          <div style={{ width: 42, height: 42, borderRadius: 10, background: `linear-gradient(135deg,${typeColor},${typeColor}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Briefcase size={18} color="#fff" />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 3 }}>
+                              <span style={{ fontWeight: 900, fontSize: 14, color: T.text }}>{item.role_title}</span>
+                              <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: `${typeColor}18`, color: typeColor, border: `1px solid ${typeColor}44` }}>{item.type}</span>
+                              <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: `${pColor}18`, color: pColor, border: `1px solid ${pColor}44` }}>{item.fill_priority || '—'}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: T.sub }}>
+                              SRF: <strong style={{ color: T.text }}>{item.role_id}</strong>
+                              {item.client_name && <> · <strong style={{ color: COLORS.info }}>{item.client_name}</strong></>}
+                              {item.location && <> · 📍 {item.location}</>}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.3)' : '#f8fafc', padding: '8px 14px', borderRadius: 10, border: `1px solid ${T.bdr}` }}>
+                            <div style={{ fontSize: 20, fontWeight: 800, color: (item.days_open || 0) > 90 ? COLORS.danger : COLORS.warning, lineHeight: 1 }}>{item.days_open || 0}</div>
+                            <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase' }}>Days</div>
+                            {meta.ageingBucket && <div style={{ fontSize: 9, color: T.sub, marginTop: 1 }}>{meta.ageingBucket}</div>}
+                          </div>
                         </div>
-                        <div style={{ fontSize: 12, color: T.sub, marginTop: 3 }}>
-                          {item.employee_id ? `PoolID: ${item.employee_id}` : `SRF: ${item.role_id}`} · {item.band || item.grade || '—'} · {item.location || '—'}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', borderTop: `1px solid ${T.bdr}`, borderBottom: jdText ? `1px solid ${T.bdr}` : 'none' }}>
+                          {[
+                            { label: 'Skill',      value: (item.required_skills || [])[0] || '—' },
+                            { label: 'Grade',      value: meta.grade || '—' },
+                            { label: 'Openings',   value: String(meta.openings || '1') },
+                            { label: 'Start Date', value: meta.startDate || '—' },
+                            { label: 'SPOC',       value: item.assigned_spoc || '—' },
+                            { label: 'Month',      value: meta.month || '—' },
+                          ].map((f, fi) => (
+                            <div key={f.label} style={{ padding: '8px 12px', borderRight: fi < 5 ? `1px solid ${T.bdr}` : 'none' }}>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{f.label}</div>
+                              <div style={{ fontSize: 11, fontWeight: 800, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.value}>{f.value}</div>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                      {/* Aging days + deallocation date */}
-                      <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.25)' : '#fff', padding: '10px 18px', borderRadius: 12, border: `1px solid ${T.bdr}` }}>
-                        <div style={{ fontSize: 22, fontWeight: 800, color: (item.aging_days || 0) > 30 ? COLORS.danger : COLORS.warning, lineHeight: 1 }}>{item.aging_days || 0}</div>
-                        <div style={{ fontSize: 10, color: T.sub, fontWeight: 700, marginTop: 2, textTransform: 'uppercase' }}>Days</div>
-                        {item.deallocation_date && (
-                          <div style={{ fontSize: 10, color: COLORS.warning, fontWeight: 800, marginTop: 4 }}>
-                            📅 {new Date(item.deallocation_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        {jdText && (
+                          <div style={{ padding: '10px 20px' }}>
+                            <button onClick={() => setJdModal({ title: item.role_title, jd: jdText })}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, background: `${COLORS.info}15`, color: COLORS.info, border: `1px solid ${COLORS.info}44`, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+                              <FileText size={12} /> View JD
+                            </button>
                           </div>
                         )}
                       </div>
-                    </div>
+                    );
+                  })}
+                </div>
 
-                    {/* Row 2: 5-column detail grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, padding: '14px 18px', background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.03)', borderRadius: 12 }}>
-                      {[
-                        { label: 'RMG Status',    value: item.rmg_status || '—' },
-                        { label: 'Pool Status',   value: item.pool_status || '—' },
-                        { label: 'Project',       value: item.project_name || '—' },
-                        { label: 'Customer',      value: item.customer || '—' },
-                        { label: 'PM',            value: item.pm_name || '—' },
-                      ].map(f => (
-                        <div key={f.label}>
-                          <div style={{ fontSize: 10, color: T.sub, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{f.label}</div>
-                          <div style={{ fontSize: 13, fontWeight: 800, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.value}>{f.value}</div>
+              /* ── SUPPLY (Pool / Deallocation) card layout ── */
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selectedMetric.data.filter((item: any) => {
+                    const s = modalSearch.toLowerCase();
+                    const matchSearch = !s || (item.employee_name || '').toLowerCase().includes(s) || (item.employee_id || '').toLowerCase().includes(s);
+                    const matchLoc = modalLocationFilter === 'All' || item.location === modalLocationFilter;
+                    return matchSearch && matchLoc;
+                  }).map((item: any, i: number) => {
+                    const dDate = item.deallocation_date ? new Date(item.deallocation_date) : null;
+                    const daysLeft = dDate ? Math.ceil((dDate.getTime() - Date.now()) / 86400000) : null;
+                    const urgency = daysLeft !== null && daysLeft <= 7 ? COLORS.danger : daysLeft !== null && daysLeft <= 21 ? COLORS.warning : COLORS.info;
+                    const isDealloc = item.status === 'Deallocating';
+                    return (
+                      <div key={i} style={{ padding: '18px 24px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 14, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${isDealloc ? COLORS.warning : COLORS.info}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 12, background: isDealloc ? 'linear-gradient(135deg,#f59e0b,#f97316)' : 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 17, flexShrink: 0 }}>
+                            {(item.employee_name || '?')[0]}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                              <span style={{ fontWeight: 900, fontSize: 14, color: T.text }}>{item.employee_name}</span>
+                              <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: isDealloc ? `${COLORS.warning}22` : `${COLORS.info}22`, color: isDealloc ? COLORS.warning : COLORS.info, border: `1px solid ${isDealloc ? COLORS.warning : COLORS.info}55`, textTransform: 'uppercase' }}>
+                                {isDealloc ? 'Deallocating' : 'Pool'}
+                              </span>
+                              {item.primary_skill && <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : '#e2e8f0', color: T.sub }}>{item.primary_skill}</span>}
+                            </div>
+                            <div style={{ fontSize: 11, color: T.sub }}>ID: {item.employee_id} · {(item as any).band || (item as any).grade || '—'} · {item.location || '—'}</div>
+                          </div>
+                          {/* Days counter */}
+                          <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.25)' : '#fff', padding: '10px 16px', borderRadius: 12, border: `1px solid ${T.bdr}` }}>
+                            {isDealloc && dDate ? (
+                              <>
+                                <div style={{ fontSize: 20, fontWeight: 800, color: urgency, lineHeight: 1 }}>{daysLeft !== null ? Math.abs(daysLeft) : 0}</div>
+                                <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', marginTop: 1 }}>Days Left</div>
+                                <div style={{ fontSize: 10, color: urgency, fontWeight: 800, marginTop: 4 }}>📅 {dDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontSize: 20, fontWeight: 800, color: (item.aging_days || 0) > 30 ? COLORS.danger : COLORS.success, lineHeight: 1 }}>{item.aging_days || 0}</div>
+                                <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', marginTop: 1 }}>Ageing</div>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-
-                    {/* Row 3: Skills */}
-                    {(item.current_skills || item.required_skills || []).filter((s: string) => s && s !== 'NOT_AVAILABLE').length > 0 && (
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {(item.current_skills || item.required_skills || []).filter((s: string) => s && s !== 'NOT_AVAILABLE').map((s: string, j: number) => (
-                          <span key={j} style={{ padding: '5px 12px', background: dark ? '#1e293b' : '#fff', border: `1px solid ${T.bdr}`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: T.sub }}>{s}</span>
-                        ))}
+                        {/* Details grid — different for Pool vs Deallocation */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, padding: '10px 14px', background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.03)', borderRadius: 10 }}>
+                          {(isDealloc ? [
+                            { label: 'Project',    value: item.project_name || '—' },
+                            { label: 'Customer',   value: item.customer || '—' },
+                            { label: 'PM',         value: item.pm_name || '—' },
+                            { label: 'Reason',     value: (item as any).release_reason || '—' },
+                            { label: 'RMG Status', value: item.rmg_status || '—' },
+                          ] : [
+                            { label: 'RMG Status', value: item.rmg_status || '—' },
+                            { label: 'Practice',   value: item.practice_name || '—' },
+                            { label: 'Customer',   value: item.customer || '—' },
+                            { label: 'PM',         value: item.pm_name || '—' },
+                            { label: 'Deployable', value: (item as any).deployable_flag ? '✅ Yes' : '❌ No' },
+                          ]).map(f => (
+                            <div key={f.label}>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>{f.label}</div>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.value}>{f.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Skills */}
+                        {(item.current_skills || []).filter((s: string) => s && s !== 'NOT_AVAILABLE').length > 0 && (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                            {(item.current_skills || []).filter((s: string) => s && s !== 'NOT_AVAILABLE').slice(0, 6).map((s: string, j: number) => (
+                              <span key={j} style={{ padding: '4px 10px', background: dark ? '#1e293b' : '#fff', border: `1px solid ${T.bdr}`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: T.sub }}>{s}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                 </div>
-               ))
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
