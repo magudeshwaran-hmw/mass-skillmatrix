@@ -257,76 +257,6 @@ export default function BFSIDashboard() {
     fetchDashboardData();
   }, []);
 
-  // Debug: Log skillGaps when data loads
-  useEffect(() => {
-    if (kpiData?.skillGaps) {
-      console.log('📊 skillGaps from API:', kpiData.skillGaps);
-      console.log('📊 ALL_BFSI_SKILLS:', ALL_BFSI_SKILLS);
-      
-      // List all skill names from API with their values
-      console.log('📊 === ALL API SKILL VALUES ===');
-      kpiData.skillGaps.forEach((sg, i) => {
-        console.log(`  ${i}: "${sg.skill}" → Pool=${sg.pool}, Dealloc=${sg.deallocation}, Reactive=${sg.reactive}`);
-      });
-      
-      // EXCEL vs API COMPARISON
-      console.log('📊 === EXCEL vs API COMPARISON ===');
-      const excelData = [
-        { skill: 'Automation Testing', pool: 17, dealloc: 13, reactive: 43 },
-        { skill: 'Automation Testing - SDET', pool: 4, dealloc: 2, reactive: 19 },
-        { skill: 'Functional Testing', pool: 8, dealloc: 6, reactive: 3 },
-        { skill: 'Functional Testing - Mobile', pool: 4, dealloc: 0, reactive: 3 },
-        { skill: 'Application testing', pool: 1, dealloc: 0, reactive: 8 },
-        { skill: 'DATABASE/ETL TESTING', pool: 3, dealloc: 0, reactive: 1 },
-        { skill: 'AI/ML TESTING', pool: 0, dealloc: 0, reactive: 0 },
-        { skill: 'Security Testing', pool: 0, dealloc: 0, reactive: 1 },
-        { skill: 'Performance Testing', pool: 1, dealloc: 0, reactive: 1 },
-      ];
-      
-      excelData.forEach(excel => {
-        const api = kpiData.skillGaps.find(sg => 
-          sg.skill.toLowerCase().replace(/[^a-z0-9]/g, '') === 
-          excel.skill.toLowerCase().replace(/[^a-z0-9]/g, '')
-        );
-        if (api) {
-          const poolMatch = api.pool === excel.pool ? '✅' : `❌ (API:${api.pool})`;
-          const deallocMatch = api.deallocation === excel.dealloc ? '✅' : `❌ (API:${api.deallocation})`;
-          console.log(`${excel.skill}: Pool=${excel.pool}${poolMatch} Dealloc=${excel.dealloc}${deallocMatch}`);
-        } else {
-          console.log(`${excel.skill}: ❌ NOT FOUND IN API`);
-        }
-      });
-      
-      // Test matching for Automation (non-SDET)
-      const automationSkill = ALL_BFSI_SKILLS[0];
-      const matched = kpiData.skillGaps.find(sg => {
-        const sLower = sg.skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return sLower.includes('automation') && !sLower.includes('sdet');
-      });
-      console.log('🔍 Automation match test:', { 
-        automationSkill, 
-        matchedSkillName: matched?.skill,
-        pool: matched?.pool, 
-        deallocation: matched?.deallocation,
-        reactive: matched?.reactive,
-      });
-      
-      // Test matching for Automation SDET
-      const sdetSkill = ALL_BFSI_SKILLS[1];
-      const matchedSDET = kpiData.skillGaps.find(sg => {
-        const sLower = sg.skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return sLower.includes('automation') && sLower.includes('sdet');
-      });
-      console.log('🔍 SDET match test:', { 
-        sdetSkill, 
-        matchedSkillName: matchedSDET?.skill,
-        pool: matchedSDET?.pool, 
-        deallocation: matchedSDET?.deallocation,
-        reactive: matchedSDET?.reactive,
-      });
-    }
-  }, [kpiData]);
-
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
@@ -1101,30 +1031,7 @@ export default function BFSIDashboard() {
                     ...ALL_BFSI_SKILLS.map((skill, idx) => {
                       const isReactive = demandSubTab === 'reactive';
 
-                      // Match skill row from the Excel Summary (skillGaps from API)
-                      const summarySkill = kpiData?.skillGaps?.find(sg => {
-                        const s = sg.skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const k = skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        if (k.includes('sdet'))        return s.includes('sdet');
-                        if (k.includes('mobile'))      return s.includes('mobile') && s.includes('functional');
-                        if (k.includes('ai') || k.includes('ml')) return s.includes('ai') || s.includes('ml') || s.includes('deep');
-                        if (k.includes('data') || k.includes('etl')) return s.includes('etl') || s.includes('database');
-                        if (k.includes('performance')) return s.includes('performance');
-                        if (k.includes('security'))    return s.includes('security');
-                        if (k.includes('accessibility')) return s.includes('accessibility');
-                        if (k.includes('digital'))     return s.includes('digital');
-                        if (k.includes('application')) return s.includes('application');
-                        if (k === 'automationtesting') return s.includes('automation') && !s.includes('sdet');
-                        if (k === 'functionaltesting') return s.includes('functional') && !s.includes('mobile');
-                        return false;
-                      });
-
-                      // Read directly from the API-returned fields (reactive / proactive)
-                      const skillValue = summarySkill
-                        ? (isReactive ? (Number(summarySkill.reactive) || 0) : (Number(summarySkill.proactive) || 0))
-                        : 0;
-
-                      // Filter roles by primary_skill field
+                      // Filter roles by primary_skill field — defined FIRST
                       const currentFilter = (r: BFSIRole) => {
                         const typeMatch = isReactive ? r.type === 'Reactive' : r.type === 'Proactive';
                         if (!typeMatch) return false;
@@ -1143,6 +1050,9 @@ export default function BFSIDashboard() {
                         if (k === 'functionaltesting') return rs.includes('functional') && !rs.includes('mobile');
                         return false;
                       };
+
+                      // Card count = DB filter count = modal count — always in sync
+                      const skillValue = roles.filter(currentFilter).length;
 
                       const labelMap: Record<string, string> = {
                         'Automation Testing': 'Automation',
