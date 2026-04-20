@@ -2,14 +2,13 @@ import { API_BASE } from '@/lib/api';
 /**
  * ResumeUploadPage.tsx — /employee/resume-upload
  * Step shown BEFORE skill matrix for first-time users.
- * Allows optional PDF/DOC resume upload to pre-fill skills, certs, and projects.
+ * Allows optional PDF resume upload to pre-fill skills, certs, and projects.
  */
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, SkipForward, Loader2, AlertCircle, Edit2, Trash2, CheckCircle } from 'lucide-react';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { SKILLS } from '@/lib/mockData';
-import { callResumeLLM } from '@/lib/llm';
 import { useAuth } from '@/lib/authContext';
 import { useApp } from '@/lib/AppContext';
 import { toast } from '@/lib/ToastContext';
@@ -17,51 +16,12 @@ import { getEmployee, saveSkillRatings, upsertEmployee } from '@/lib/localDB';
 import { apiSaveSkills, isServerAvailable } from '@/lib/api';
 import ZensarLoader from '@/components/ZensarLoader';
 import type { ProficiencyLevel, SkillRating } from '@/lib/types';
+import { extractTextFromPDF, extractEverythingFromResume } from '@/lib/resumeExtraction';
 
-async function extractTextFromPDF(file: File): Promise<string> {
-  try {
-    const pdfjsLib = (window as any).pdfjsLib;
-    if (!pdfjsLib) {
-      console.warn('⚠️ PDF.js not loaded, attempting text extraction fallback');
-      return await file.text();
-    }
-    
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
-    
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    
-    console.log(`📄 PDF loaded: ${pdf.numPages} pages`);
-    
-    let text = '';
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const pageText = content.items.map((item: any) => item.str).join(' ');
-      text += pageText + '\n\n';
-      console.log(`📄 Page ${i}: ${pageText.length} characters extracted`);
-    }
-    
-    console.log(`✅ Total text extracted: ${text.length} characters`);
-    console.log(`📝 First 500 chars: ${text.substring(0, 500)}`);
-    
-    if (text.length < 100) {
-      throw new Error('PDF text extraction failed - too little text extracted');
-    }
-    
-    return text;
-  } catch (err) {
-    console.error('❌ PDF extraction error:', err);
-    try { 
-      const fallbackText = await file.text();
-      console.log(`📝 Fallback text extraction: ${fallbackText.length} characters`);
-      return fallbackText;
-    } catch { 
-      return ''; 
-    }
-  }
-}
+export default function ResumeUploadPage({ 
+  isPopup: propIsPopup, 
+  onTabChange: propOnTabChange 
+}: { 
 
 async function extractEverythingFromResume(resumeText: string): Promise<any> {
   // NO LIMIT - Read entire resume (increased from 12000 to 50000 characters)
