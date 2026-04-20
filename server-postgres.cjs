@@ -2475,7 +2475,7 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
           const skills = [];
           const skillCols = ['ACTUALSKILL', 'ActualSkill', 'Actual Skill', 'l1_skills', 'L1 Skills', 'l2_skills', 'L2 Skills', 'Primary Skill Name', 'Skills', 'Skill'];
           for (const col of skillCols) {
-            if (row[col]) skills.push(...String(row[col]).split(',').map((s: string) => s.trim()).filter(Boolean));
+            if (row[col]) skills.push(...String(row[col]).split(',').map(s => s.trim()).filter(Boolean));
           }
 
           // Aging days - try all variations
@@ -2512,20 +2512,18 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
           // Primary skill
           const primarySkill = String(row['Primary Skill Name'] || row['PrimarySkill'] || row['Primary Skill'] || row['ACTUALSKILL'] || skills[0] || '').trim();
 
-          // Project / Customer / PM
-          const projectName = String(row['Project Name'] || row['Project'] || row['PROJECT'] || '').trim();
-          const customer = String(row['Customer'] || row['Client'] || row['CUSTOMER'] || '').trim();
-          const pmName = String(row['PM Name'] || row['PM'] || row['Manager'] || '').trim();
-
           // Customer
           const customer = String(
-            row['CustomerName'] || row['Customer Name'] || row['Customer'] || ''
+            row['CustomerName'] || row['Customer Name'] || row['Customer'] || row['Client'] || row['CUSTOMER'] || ''
           ).trim();
 
           // PM
           const pmName = String(
             row['PmName'] || row['PM Name'] || row['PM'] || row['Manager'] || ''
           ).trim();
+
+          // Project
+          const projectName = String(row['ProjectName'] || row['Project Name'] || row['Project'] || row['PROJECT'] || '').trim();
 
           // Deployable
           const deployable = String(row['DeployableFlag'] || '').toLowerCase().includes('deploy');
