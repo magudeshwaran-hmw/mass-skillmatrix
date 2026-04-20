@@ -338,6 +338,10 @@ async function initializeDatabase() {
     await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS srf_no VARCHAR(50)`);
     await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS aging_bucket VARCHAR(50)`);
     await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS type VARCHAR(50)`);
+    await query(`ALTER TABLE bfsi_roles ADD COLUMN IF NOT EXISTS location VARCHAR(255)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS pool_status VARCHAR(100)`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS comments TEXT`);
+    await query(`ALTER TABLE bfsi_workforce ADD COLUMN IF NOT EXISTS srf_no VARCHAR(50)`);
 
     // Create BFSI certifications pipeline table
     await query(`
@@ -2310,96 +2314,133 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
       }
       
       // ==========================================
-      // SHEET 2: Reactive - Urgent Role Requisitions (84 roles)
+      // HELPER: Process SRF rows (Reactive + Proactive share same columns)
+      // ==========================================
+      const processSRFSheet = async (sheetData, sheetType) => {
+        let count = 0;
+        for (const row of sheetData) {
+          const reqNo = String(row['Requisition No'] || '').trim();
+          if (!reqNo) continue;
+
+          const primarySkill = String(row['Primary Skill'] || '').trim();
+          const skills = primarySkill ? [primarySkill] : [];
+
+          // Location: City + Country + Shore
+          const city    = String(row['City']    || '').trim();
+          const country = String(row['Country'] || '').trim();
+          const shore   = String(row['Shore']   || '').trim();
+          const location = [city, country, shore].filter(Boolean).join(' · ');
+
+          // Grade
+          const grade = String(row['Grade Name'] || '').trim();
+
+          // Priority — shorten for display
+          const rawPriority = String(row['Priority'] || '').trim();
+          const priority = rawPriority.startsWith('P1') ? 'P1' : rawPriority.startsWith('P2') ? 'P2' : rawPriority.startsWith('P3') ? 'P3' : rawPriority || 'Medium';
+
+          // SPOC
+          const spoc = String(row['TSC SPOC (Name)'] || row['Actual TSC SPOC'] || '').trim();
+
+          // JD
+          const jd = String(row['External JD'] || row['Internal JD'] || '').trim();
+
+          // SRF Title
+          const srfTitle = String(row['SRF Title'] || row['Requisition Title'] || primarySkill || 'Open Role').trim();
+
+          // Phase / State
+          const phase = String(row['Requisition Current Phase'] || 'Open').trim();
+          const state = String(row['Requisition Current State'] || '').trim();
+
+          // Month, RBU, VBU, SGO
+          const month   = String(row['Month']   || '').trim();
+          const rbu     = String(row['RBU']     || '').trim();
+          const vbu     = String(row['VBU']     || '').trim();
+          const sgo     = String(row['SGO']     || '').trim();
+          const hireType = String(row['Hire Type'] || sheetType).trim();
+
+          // Openings
+          const openings = safeParseInt(row['Number of Openings'] || 1, 1);
+
+          // Resource Start Date
+          const startDate = String(row['Resource Start Date'] || '').trim();
+
+          // Ageing
+          const ageing = safeParseInt(row['Ageing'] || 0, 0);
+          const ageingBucket = String(row['Ageing Bucket'] || '').trim();
+
+          // Customer
+          const customer = String(row['Customer'] || row['Customer Group'] || '').trim();
+
+          // Project
+          const projectName = String(row['Project Name'] || '').trim();
+          const projectCode = String(row['Project Code'] || '').trim();
+
+          // Candidate info
+          const candidateName   = String(row['Offer Sent To (Candidate Name)'] || '').trim();
+          const candidateStatus = String(row['Candidate Status'] || '').trim();
+          const doj             = String(row['DOJ'] || '').trim();
+
+          await client.query(`
+            INSERT INTO bfsi_roles (
+              role_id, role_title, client_name, required_skills, days_open,
+              status, fill_priority, assigned_spoc, created_date, hire_type,
+              job_description, srf_no, aging_bucket, type, location
+            )
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+            ON CONFLICT (role_id) DO UPDATE SET
+              role_title       = EXCLUDED.role_title,
+              client_name      = EXCLUDED.client_name,
+              required_skills  = EXCLUDED.required_skills,
+              days_open        = EXCLUDED.days_open,
+              fill_priority    = EXCLUDED.fill_priority,
+              assigned_spoc    = EXCLUDED.assigned_spoc,
+              job_description  = EXCLUDED.job_description,
+              aging_bucket     = EXCLUDED.aging_bucket,
+              location         = EXCLUDED.location,
+              updated_at       = CURRENT_TIMESTAMP
+          `, [
+            reqNo, srfTitle, customer, skills, ageing,
+            phase, priority, spoc,
+            row['Requisition Creation Date'] || new Date().toISOString().split('T')[0],
+            hireType, jd, reqNo, ageingBucket, sheetType, location
+          ]);
+
+          // Store extra fields as JSON in job_description prefix for UI use
+          // We'll encode extra metadata as a JSON prefix so UI can parse it
+          const meta = JSON.stringify({
+            grade, shore, city, country, rbu, vbu, sgo, month,
+            openings, startDate, projectName, projectCode,
+            candidateName, candidateStatus, doj, state,
+            primarySkill, hireType, ageingBucket
+          });
+          await client.query(
+            `UPDATE bfsi_roles SET job_description = $1 WHERE role_id = $2`,
+            [`META:${meta}\n\nJD:\n${jd}`, reqNo]
+          );
+
+          count++;
+        }
+        return count;
+      };
+
+      // ==========================================
+      // SHEET 2: Reactive - Urgent Role Requisitions
       // ==========================================
       if (workbook.SheetNames.includes('Reactive')) {
         const reactiveSheet = workbook.Sheets['Reactive'];
         const reactiveData = XLSX.utils.sheet_to_json(reactiveSheet, { raw: false });
         console.log(`📋 Processing Reactive sheet: ${reactiveData.length} urgent roles`);
-        
-        for (const row of reactiveData) {
-          const reqNo = String(row['Requisition No'] || row['ReqNo'] || `R${Date.now()}${rolesCount}`);
-          
-          // Extract skills from various columns
-          const skills = [];
-          if (row['Skills']) skills.push(...String(row['Skills']).split(',').map(s => s.trim()));
-          if (row['Primary Skill']) skills.push(String(row['Primary Skill']));
-          if (row['ElementName']) skills.push(String(row['ElementName']));
-          
-          // Extract customer from various columns
-          const customer = row['CustomerName'] || row['Customer'] || row['Client'] || 'Unknown';
-          
-          await client.query(`
-            INSERT INTO bfsi_roles (
-              role_id, role_title, client_name, required_skills, days_open, 
-              status, fill_priority, assigned_spoc, created_date, hire_type,
-              job_description, srf_no, aging_bucket, type
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            ON CONFLICT (role_id) DO UPDATE SET
-              role_title = EXCLUDED.role_title,
-              required_skills = EXCLUDED.required_skills,
-              updated_at = CURRENT_TIMESTAMP
-          `, [
-            reqNo,
-            row['Job Title'] || row['JobTitle'] || row['Role'] || row['Role Title'] || row['Designation'] || row['Position'] || row['Requisition Title'] || 'Unknown Role',
-            customer,
-            [...new Set(skills)].filter(Boolean),
-            safeParseInt(row['Ageing'] || row['AgeingDays'] || row['DaysOpen'], 30),
-            'Open',
-            row['Priority'] || (safeParseInt(row['Ageing'], 0) > 60 ? 'URGENT' : 'HIGH'),
-            row['Recruiter'] || row['SPOC'] || '',
-            row['CreatedDate'] || new Date().toISOString().split('T')[0],
-            'Reactive',
-            row['Responsibilities'] || row['Job Description'] || '',
-            row['SRFNo'] || '',
-            row['Aging Bucket'] || row['AgeingBucket'] || '',
-            'Reactive'
-          ]);
-          rolesCount++;
-        }
+        rolesCount += await processSRFSheet(reactiveData, 'Reactive');
       }
-      
+
       // ==========================================
-      // SHEET 3: Proactive - Pipeline Roles (10 roles)
+      // SHEET 3: Proactive - Pipeline Roles
       // ==========================================
       if (workbook.SheetNames.includes('Proactive')) {
         const proactiveSheet = workbook.Sheets['Proactive'];
         const proactiveData = XLSX.utils.sheet_to_json(proactiveSheet, { raw: false });
         console.log(`📋 Processing Proactive sheet: ${proactiveData.length} pipeline roles`);
-        
-        for (const row of proactiveData) {
-          const skills = [];
-          if (row['Skills']) skills.push(...String(row['Skills']).split(',').map(s => s.trim()));
-          if (row['Skill Requirement']) skills.push(String(row['Skill Requirement']));
-          
-          await client.query(`
-            INSERT INTO bfsi_roles (
-              role_id, role_title, client_name, required_skills, days_open, 
-              status, fill_priority, assigned_spoc, created_date, hire_type,
-              job_description, type
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            ON CONFLICT (role_id) DO UPDATE SET
-              role_title = EXCLUDED.role_title,
-              required_skills = EXCLUDED.required_skills,
-              updated_at = CURRENT_TIMESTAMP
-          `, [
-            String(row['Req ID'] || row['Requisition'] || `P${Date.now()}${rolesCount}`),
-            row['Role Title'] || row['Job Title'] || row['JobTitle'] || row['Role'] || row['Designation'] || row['Position'] || 'Proactive Role',
-            row['Customer'] || row['Client'] || 'TBD',
-            [...new Set(skills)].filter(Boolean),
-            safeParseInt(row['Ageing'], 60),
-            'Open',
-            'Medium',
-            row['Recruiter'] || '',
-            row['CreatedDate'] || new Date().toISOString().split('T')[0],
-            'Proactive',
-            row['Description'] || row['Job Description'] || '',
-            'Proactive'
-          ]);
-          rolesCount++;
-        }
+        rolesCount += await processSRFSheet(proactiveData, 'Proactive');
       }
       
       // ==========================================
@@ -2476,6 +2517,25 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
           const customer = String(row['Customer'] || row['Client'] || row['CUSTOMER'] || '').trim();
           const pmName = String(row['PM Name'] || row['PM'] || row['Manager'] || '').trim();
 
+          // Customer
+          const customer = String(
+            row['CustomerName'] || row['Customer Name'] || row['Customer'] || ''
+          ).trim();
+
+          // PM
+          const pmName = String(
+            row['PmName'] || row['PM Name'] || row['PM'] || row['Manager'] || ''
+          ).trim();
+
+          // Deployable
+          const deployable = String(row['DeployableFlag'] || '').toLowerCase().includes('deploy');
+
+          // Comments
+          const comments = String(row['Comments'] || '').trim();
+
+          // SRF No
+          const srfNo = String(row['SRFNo'] || row['SRF No'] || '').trim();
+
           // Try to update first
           const updateResult = await client.query(
             `UPDATE bfsi_workforce SET 
@@ -2483,16 +2543,16 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
               grade = $5, location = $6, practice_name = $7, service_line = $8,
               employee_name = CASE WHEN employee_name = 'Unknown' OR employee_name IS NULL THEN $10 ELSE employee_name END,
               primary_skill = CASE WHEN primary_skill IS NULL OR primary_skill = '' THEN $11 ELSE primary_skill END,
-              project_name = CASE WHEN $12 != '' THEN $12 ELSE project_name END,
-              customer = CASE WHEN $13 != '' THEN $13 ELSE customer END,
-              pm_name = CASE WHEN $14 != '' THEN $14 ELSE pm_name END,
+              customer = CASE WHEN $12 != '' THEN $12 ELSE customer END,
+              pm_name = CASE WHEN $13 != '' THEN $13 ELSE pm_name END,
+              deployable_flag = $14,
               current_skills = CASE WHEN array_length($15::text[], 1) > 0 THEN $15 ELSE current_skills END,
               updated_at = CURRENT_TIMESTAMP 
             WHERE employee_id = $9`,
             [
               'Available-Pool', agingDays, rmgStatus, poolStatus,
               grade, location, practice, serviceLine,
-              empId, empName, primarySkill, projectName, customer, pmName,
+              empId, empName, primarySkill, customer, pmName, deployable,
               [...new Set(skills)].filter(Boolean)
             ]
           );
@@ -2503,7 +2563,7 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
               INSERT INTO bfsi_workforce (
                 employee_id, employee_name, current_skills, status, 
                 aging_days, rmg_status, pool_status, grade, location, 
-                practice_name, service_line, primary_skill, project_name, customer, pm_name
+                practice_name, service_line, primary_skill, customer, pm_name, deployable_flag
               )
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
               ON CONFLICT (employee_id) DO UPDATE SET
@@ -2515,13 +2575,16 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
                 location = EXCLUDED.location,
                 practice_name = EXCLUDED.practice_name,
                 service_line = EXCLUDED.service_line,
+                customer = EXCLUDED.customer,
+                pm_name = EXCLUDED.pm_name,
+                deployable_flag = EXCLUDED.deployable_flag,
                 updated_at = CURRENT_TIMESTAMP
             `, [
               empId, empName,
               [...new Set(skills)].filter(Boolean),
               'Available-Pool', agingDays, rmgStatus, poolStatus,
               grade, location, practice, serviceLine,
-              primarySkill, projectName, customer, pmName
+              primarySkill, customer, pmName, deployable
             ]);
           }
           poolCount++;
@@ -2569,13 +2632,14 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
             row['ACTUALSKILL'] || row['Skill'] || ''
           ).trim();
 
-          const projectName = String(row['Project Name'] || row['Project'] || row['PROJECT'] || '').trim();
-          const customer = String(row['Customer'] || row['Client'] || '').trim();
-          const pmName = String(row['PM Name'] || row['PM'] || row['Manager'] || '').trim();
+          const projectName = String(row['ProjectName'] || row['Project Name'] || row['Project'] || '').trim();
+          const customer = String(row['CustomerName'] || row['Customer'] || row['Client'] || '').trim();
+          const pmName = String(row['ProjectManager'] || row['PM Name'] || row['PM'] || row['Manager'] || '').trim();
           const location = String(row['Location'] || row['LOCATION'] || '').trim();
           const band = String(row['Band'] || row['Grade'] || row['BAND'] || '').trim();
           const rmgStatus = String(row['RmgStatus'] || row['RMG Status'] || row['RMGStatus'] || '').trim();
-          const releaseReason = String(row['Reason For Deallocation'] || row['Release Reason'] || row['Reason'] || '').trim();
+          const releaseReason = String(row['DEALLOCATION_REASON'] || row['Reason For Deallocation'] || row['Release Reason'] || row['Reason'] || '').trim();
+          const deallocWeek = String(row['DeallocationWeek'] || row['Deallocation Week'] || '').trim();
 
           const updResult = await client.query(
             `UPDATE bfsi_workforce 
@@ -2590,10 +2654,11 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
                  pm_name = CASE WHEN $8 != '' THEN $8 ELSE pm_name END,
                  location = CASE WHEN $9 != '' THEN $9 ELSE location END,
                  rmg_status = CASE WHEN $10 != '' THEN $10 ELSE rmg_status END,
+                 pool_status = CASE WHEN $11 != '' THEN $11 ELSE pool_status END,
                  updated_at = CURRENT_TIMESTAMP 
-             WHERE employee_id = $11`,
+             WHERE employee_id = $12`,
             ['Deallocating', releaseDate, releaseReason, agingDays,
-             primarySkill, projectName, customer, pmName, location, rmgStatus, empId]
+             primarySkill, projectName, customer, pmName, location, rmgStatus, deallocWeek, empId]
           );
 
           if (updResult.rowCount === 0) {

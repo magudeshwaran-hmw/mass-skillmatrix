@@ -140,80 +140,129 @@ export default function BFSIDashboard() {
   const [modalLocationFilter, setModalLocationFilter] = useState('All');
   const [modalGradeFilter, setModalGradeFilter] = useState('All');
   const [weeklyReport, setWeeklyReport] = useState<any | null>(null);
+  const [jdModal, setJdModal] = useState<{ title: string; jd: string } | null>(null);
+
+  // ── Demand filters ──
+  const [dSkill, setDSkill]       = useState('All');
+  const [dCustomer, setDCustomer] = useState('All');
+  const [dCountry, setDCountry]   = useState('All');
+  const [dShore, setDShore]       = useState('All');
+  const [dGrade, setDGrade]       = useState('All');
+  const [dPriority, setDPriority] = useState('All');
+  const [dMonth, setDMonth]       = useState('All');
+  const [dAgeing, setDAgeing]     = useState('All');
+  const [dSearch, setDSearch]     = useState('');
+
+  // ── Pool filters ──
+  const [pSkill, setPSkill]       = useState('All');
+  const [pGrade, setPGrade]       = useState('All');
+  const [pLocation, setPLocation] = useState('All');
+  const [pRmg, setPRmg]           = useState('All');
+  const [pDeploy, setPDeploy]     = useState('All');
+  const [pSearch, setPSearch]     = useState('');
+
+  // ── Deallocation filters ──
+  const [dlSkill, setDlSkill]     = useState('All');
+  const [dlBand, setDlBand]       = useState('All');
+  const [dlLoc, setDlLoc]         = useState('All');
+  const [dlRmg, setDlRmg]         = useState('All');
+  const [dlReason, setDlReason]   = useState('All');
+  const [dlSearch, setDlSearch]   = useState('');
+
+  // ── Helper: parse META from job_description ──
+  const parseMeta = (role: BFSIRole): Record<string, any> => {
+    try {
+      const jd = role.job_description || '';
+      if (jd.startsWith('META:')) {
+        const end = jd.indexOf('\n\nJD:');
+        const metaStr = end > 0 ? jd.slice(5, end) : jd.slice(5);
+        return JSON.parse(metaStr);
+      }
+    } catch {}
+    return {};
+  };
+
+  const getJD = (role: BFSIRole): string => {
+    const jd = role.job_description || '';
+    const idx = jd.indexOf('\n\nJD:\n');
+    return idx >= 0 ? jd.slice(idx + 6).trim() : jd;
+  };
+
+  // ── Filtered roles ──
+  const filteredRoles = useMemo(() => {
+    const type = demandSubTab === 'reactive' ? 'Reactive' : 'Proactive';
+    return roles.filter(r => {
+      if (r.type !== type) return false;
+      const meta = parseMeta(r);
+      const s = dSearch.toLowerCase();
+      if (s && !r.role_title?.toLowerCase().includes(s) &&
+               !r.srf_no?.toLowerCase().includes(s) &&
+               !r.client_name?.toLowerCase().includes(s) &&
+               !(r.required_skills || []).join(' ').toLowerCase().includes(s)) return false;
+      if (dSkill !== 'All' && !(r.required_skills || []).some(sk => sk.toLowerCase().includes(dSkill.toLowerCase()))) return false;
+      if (dCustomer !== 'All' && r.client_name !== dCustomer) return false;
+      if (dCountry !== 'All' && !r.location?.includes(dCountry)) return false;
+      if (dShore !== 'All' && !r.location?.includes(dShore)) return false;
+      if (dGrade !== 'All' && meta.grade !== dGrade) return false;
+      if (dPriority !== 'All' && r.fill_priority !== dPriority) return false;
+      if (dMonth !== 'All' && meta.month !== dMonth) return false;
+      if (dAgeing !== 'All' && meta.ageingBucket !== dAgeing) return false;
+      return true;
+    });
+  }, [roles, demandSubTab, dSearch, dSkill, dCustomer, dCountry, dShore, dGrade, dPriority, dMonth, dAgeing]);
+
+  // ── Filtered pool ──
+  const filteredPool = useMemo(() => {
+    return workforce.filter(w => {
+      if (w.status !== 'Available-Pool') return false;
+      const s = pSearch.toLowerCase();
+      if (s && !w.employee_name?.toLowerCase().includes(s) && !w.employee_id?.toLowerCase().includes(s)) return false;
+      if (pSkill !== 'All' && !(w.current_skills || []).some(sk => sk.toLowerCase().includes(pSkill.toLowerCase())) && w.primary_skill?.toLowerCase() !== pSkill.toLowerCase()) return false;
+      if (pGrade !== 'All' && w.grade !== pGrade) return false;
+      if (pLocation !== 'All' && w.location !== pLocation) return false;
+      if (pRmg !== 'All' && w.rmg_status !== pRmg) return false;
+      if (pDeploy !== 'All') {
+        const isDeployable = (w as any).deployable_flag === true || (w as any).deployable_flag === 'true';
+        if (pDeploy === 'Deployable' && !isDeployable) return false;
+        if (pDeploy === 'Not Deployable' && isDeployable) return false;
+      }
+      return true;
+    });
+  }, [workforce, pSearch, pSkill, pGrade, pLocation, pRmg, pDeploy]);
+
+  // ── Filtered deallocation ──
+  const filteredDealloc = useMemo(() => {
+    return workforce.filter(w => {
+      if (w.status !== 'Deallocating') return false;
+      const s = dlSearch.toLowerCase();
+      if (s && !w.employee_name?.toLowerCase().includes(s) && !w.employee_id?.toLowerCase().includes(s)) return false;
+      if (dlSkill !== 'All' && w.primary_skill?.toLowerCase() !== dlSkill.toLowerCase()) return false;
+      if (dlBand !== 'All' && (w as any).band !== dlBand) return false;
+      if (dlLoc !== 'All' && w.location !== dlLoc) return false;
+      if (dlRmg !== 'All' && w.rmg_status !== dlRmg) return false;
+      if (dlReason !== 'All' && w.release_reason !== dlReason) return false;
+      return true;
+    });
+  }, [workforce, dlSearch, dlSkill, dlBand, dlLoc, dlRmg, dlReason]);
+
+  // ── Unique values for filter dropdowns ──
+  const uniq = (arr: (string | undefined | null)[]) =>
+    [...new Set(arr.filter(Boolean) as string[])].sort();
+
+  const demandRoles = roles.filter(r => r.type === (demandSubTab === 'reactive' ? 'Reactive' : 'Proactive'));
+  const demandMetas = demandRoles.map(r => parseMeta(r));
+
+  const filterSelect = (label: string, val: string, set: (v: string) => void, opts: string[], color = COLORS.info) => (
+    <select value={val} onChange={e => set(e.target.value)}
+      style={{ padding: '8px 12px', borderRadius: 10, background: val !== 'All' ? `${color}18` : (dark ? '#1e293b' : '#fff'), border: `1px solid ${val !== 'All' ? color : T.bdr}`, color: val !== 'All' ? color : T.text, fontSize: 12, fontWeight: 700, cursor: 'pointer', outline: 'none' }}>
+      <option value="All">{label}</option>
+      {opts.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
-
-  // Debug: Log skillGaps when data loads
-  useEffect(() => {
-    if (kpiData?.skillGaps) {
-      console.log('📊 skillGaps from API:', kpiData.skillGaps);
-      console.log('📊 ALL_BFSI_SKILLS:', ALL_BFSI_SKILLS);
-      
-      // List all skill names from API with their values
-      console.log('📊 === ALL API SKILL VALUES ===');
-      kpiData.skillGaps.forEach((sg, i) => {
-        console.log(`  ${i}: "${sg.skill}" → Pool=${sg.pool}, Dealloc=${sg.deallocation}, Reactive=${sg.reactive}`);
-      });
-      
-      // EXCEL vs API COMPARISON
-      console.log('📊 === EXCEL vs API COMPARISON ===');
-      const excelData = [
-        { skill: 'Automation Testing', pool: 17, dealloc: 13, reactive: 43 },
-        { skill: 'Automation Testing - SDET', pool: 4, dealloc: 2, reactive: 19 },
-        { skill: 'Functional Testing', pool: 8, dealloc: 6, reactive: 3 },
-        { skill: 'Functional Testing - Mobile', pool: 4, dealloc: 0, reactive: 3 },
-        { skill: 'Application testing', pool: 1, dealloc: 0, reactive: 8 },
-        { skill: 'DATABASE/ETL TESTING', pool: 3, dealloc: 0, reactive: 1 },
-        { skill: 'AI/ML TESTING', pool: 0, dealloc: 0, reactive: 0 },
-        { skill: 'Security Testing', pool: 0, dealloc: 0, reactive: 1 },
-        { skill: 'Performance Testing', pool: 1, dealloc: 0, reactive: 1 },
-      ];
-      
-      excelData.forEach(excel => {
-        const api = kpiData.skillGaps.find(sg => 
-          sg.skill.toLowerCase().replace(/[^a-z0-9]/g, '') === 
-          excel.skill.toLowerCase().replace(/[^a-z0-9]/g, '')
-        );
-        if (api) {
-          const poolMatch = api.pool === excel.pool ? '✅' : `❌ (API:${api.pool})`;
-          const deallocMatch = api.deallocation === excel.dealloc ? '✅' : `❌ (API:${api.deallocation})`;
-          console.log(`${excel.skill}: Pool=${excel.pool}${poolMatch} Dealloc=${excel.dealloc}${deallocMatch}`);
-        } else {
-          console.log(`${excel.skill}: ❌ NOT FOUND IN API`);
-        }
-      });
-      
-      // Test matching for Automation (non-SDET)
-      const automationSkill = ALL_BFSI_SKILLS[0];
-      const matched = kpiData.skillGaps.find(sg => {
-        const sLower = sg.skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return sLower.includes('automation') && !sLower.includes('sdet');
-      });
-      console.log('🔍 Automation match test:', { 
-        automationSkill, 
-        matchedSkillName: matched?.skill,
-        pool: matched?.pool, 
-        deallocation: matched?.deallocation,
-        reactive: matched?.reactive,
-      });
-      
-      // Test matching for Automation SDET
-      const sdetSkill = ALL_BFSI_SKILLS[1];
-      const matchedSDET = kpiData.skillGaps.find(sg => {
-        const sLower = sg.skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-        return sLower.includes('automation') && sLower.includes('sdet');
-      });
-      console.log('🔍 SDET match test:', { 
-        sdetSkill, 
-        matchedSkillName: matchedSDET?.skill,
-        pool: matchedSDET?.pool, 
-        deallocation: matchedSDET?.deallocation,
-        reactive: matchedSDET?.reactive,
-      });
-    }
-  }, [kpiData]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -1156,17 +1205,193 @@ export default function BFSIDashboard() {
         </div>
       )}
 
+      {/* ── JD Modal ── */}
+      {jdModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(10px)' }} onClick={() => setJdModal(null)}>
+          <div style={{ background: T.card, borderRadius: 24, border: `1px solid ${T.bdr}`, maxWidth: 800, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '20px 32px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg,#3b82f6,#6366f1)' }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 900, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 4 }}>Job Description</div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#fff' }}>{jdModal.title}</h3>
+              </div>
+              <button onClick={() => setJdModal(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 36, height: 36, borderRadius: 10, cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+            <div style={{ padding: 32, overflowY: 'auto', flex: 1 }}>
+              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13, color: T.text, lineHeight: 1.8, margin: 0 }}>{jdModal.jd}</pre>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Weekly Report Modal ── */}
       {weeklyReport && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(20px)' }} onClick={() => setWeeklyReport(null)}>
-          <div style={{ background: T.card, borderRadius: 32, border: `1px solid ${T.bdr}`, maxWidth: 900, width: '100%', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
-             <div style={{ padding: 64, textAlign: 'center' }}>
-                <Target size={64} color={COLORS.info} style={{ marginBottom: 24 }} />
-                <h2 style={{ fontSize: 32, fontWeight: 800, color: T.text, marginBottom: 16 }}>Executive Intelligence Report</h2>
-                <div style={{ background: dark ? 'rgba(255,255,255,0.05)' : '#f8fafc', padding: 32, borderRadius: 24, marginBottom: 40 }}>
-                   <p style={{ fontSize: 18, color: T.sub, fontStyle: 'italic', lineHeight: 1.8 }}>"High-fidelity synchronization complete. Supply: <b>{totalSupplyValue}</b> resources mapped. Demand: <b>{totalDemandValue}</b> roles active. Fulfillment status operating at peak alignment."</p>
+          <div style={{ background: T.card, borderRadius: 24, border: `1px solid ${T.bdr}`, maxWidth: 1100, width: '100%', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ padding: '24px 40px', background: 'linear-gradient(135deg,#1e293b,#0f172a)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${T.bdr}` }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 4 }}>BFSI Testing Practice</div>
+                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#fff' }}>📊 Weekly Intelligence Report</h2>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Generated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+              </div>
+              <button onClick={() => setWeeklyReport(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', width: 40, height: 40, borderRadius: 12, cursor: 'pointer', fontSize: 20 }}>✕</button>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, padding: '32px 40px' }}>
+              {/* KPI Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+                {[
+                  { label: 'Total Pool', val: workforce.filter(w => w.status === 'Available-Pool').length, color: COLORS.info, icon: '👥' },
+                  { label: 'Deallocating', val: workforce.filter(w => w.status === 'Deallocating').length, color: COLORS.warning, icon: '⏳' },
+                  { label: 'Reactive SRFs', val: roles.filter(r => r.type === 'Reactive').length, color: COLORS.danger, icon: '🔴' },
+                  { label: 'Proactive SRFs', val: roles.filter(r => r.type === 'Proactive').length, color: COLORS.purple, icon: '🟣' },
+                ].map(k => (
+                  <div key={k.label} style={{ background: dark ? '#1e293b' : '#f8fafc', borderRadius: 16, padding: '20px 24px', border: `1px solid ${T.bdr}`, borderTop: `4px solid ${k.color}` }}>
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>{k.icon}</div>
+                    <div style={{ fontSize: 32, fontWeight: 800, color: T.text }}>{k.val}</div>
+                    <div style={{ fontSize: 12, color: T.sub, fontWeight: 700 }}>{k.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Summary Table from Excel Summary sheet */}
+              <div style={{ marginBottom: 32 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: T.text, marginBottom: 16 }}>📋 Demand vs Supply Summary</h3>
+                <div style={{ overflowX: 'auto', borderRadius: 12, border: `1px solid ${T.bdr}` }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: dark ? '#1e293b' : '#f1f5f9' }}>
+                        {['Primary Skill', 'Reactive SRF', 'Proactive', 'Demand Total', 'Pool', 'Deallocation', 'Supply Total', 'GAP'].map(h => (
+                          <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Primary Skill' ? 'left' : 'center', fontWeight: 900, color: T.sub, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(kpiData?.skillGaps || []).map((sg, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
+                          <td style={{ padding: '12px 16px', fontWeight: 700, color: T.text }}>{sg.skill}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', color: COLORS.danger, fontWeight: 700 }}>{sg.reactive || 0}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', color: COLORS.purple, fontWeight: 700 }}>{sg.proactive || 0}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: T.text }}>{sg.demand || 0}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', color: COLORS.info, fontWeight: 700 }}>{sg.pool || 0}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', color: COLORS.warning, fontWeight: 700 }}>{sg.deallocation || 0}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: COLORS.success }}>{sg.supply || 0}</td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 900, color: (sg.gap || 0) < 0 ? COLORS.danger : COLORS.success }}>{sg.gap || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <button onClick={() => setWeeklyReport(null)} style={{ background: COLORS.info, color: '#fff', padding: '16px 48px', borderRadius: 16, border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: 16 }}>DISMISS REPORT</button>
-             </div>
+              </div>
+
+              {/* Pool Table */}
+              <div style={{ marginBottom: 32 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: T.text, marginBottom: 16 }}>👥 Pool Resources ({workforce.filter(w => w.status === 'Available-Pool').length})</h3>
+                <div style={{ overflowX: 'auto', borderRadius: 12, border: `1px solid ${T.bdr}` }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: dark ? '#1e293b' : '#f1f5f9' }}>
+                        {['Emp ID', 'Name', 'Grade', 'Location', 'Skill', 'Ageing Days', 'Ageing Bucket', 'RMG Status', 'Deployable'].map(h => (
+                          <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 900, color: T.sub, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {workforce.filter(w => w.status === 'Available-Pool').map((emp, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
+                          <td style={{ padding: '10px 14px', color: T.sub, fontWeight: 700 }}>{emp.employee_id}</td>
+                          <td style={{ padding: '10px 14px', fontWeight: 800, color: T.text }}>{emp.employee_name}</td>
+                          <td style={{ padding: '10px 14px', color: T.sub }}>{(emp as any).grade || '—'}</td>
+                          <td style={{ padding: '10px 14px', color: T.sub }}>{emp.location || '—'}</td>
+                          <td style={{ padding: '10px 14px', color: COLORS.info, fontWeight: 700 }}>{emp.primary_skill || '—'}</td>
+                          <td style={{ padding: '10px 14px', textAlign: 'center', color: (emp.aging_days || 0) > 30 ? COLORS.danger : COLORS.success, fontWeight: 800 }}>{emp.aging_days || 0}</td>
+                          <td style={{ padding: '10px 14px', color: T.sub }}>{(emp as any).pool_status || '—'}</td>
+                          <td style={{ padding: '10px 14px', color: T.sub, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.rmg_status || '—'}</td>
+                          <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                            <span style={{ fontSize: 10, fontWeight: 900, padding: '3px 8px', borderRadius: 6, background: (emp as any).deployable_flag ? `${COLORS.success}18` : `${COLORS.danger}18`, color: (emp as any).deployable_flag ? COLORS.success : COLORS.danger }}>
+                              {(emp as any).deployable_flag ? 'Yes' : 'No'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Deallocation Table */}
+              <div style={{ marginBottom: 32 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: T.text, marginBottom: 16 }}>⏳ Deallocation Pipeline ({workforce.filter(w => w.status === 'Deallocating').length})</h3>
+                <div style={{ overflowX: 'auto', borderRadius: 12, border: `1px solid ${T.bdr}` }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: dark ? '#1e293b' : '#f1f5f9' }}>
+                        {['Emp ID', 'Name', 'Band', 'Location', 'Skill', 'Project', 'Customer', 'PM', 'Deallocation Date', 'Days Left', 'Reason', 'RMG Status'].map(h => (
+                          <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 900, color: T.sub, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {workforce.filter(w => w.status === 'Deallocating').map((emp, i) => {
+                        const dDate = emp.deallocation_date ? new Date(emp.deallocation_date) : null;
+                        const daysLeft = dDate ? Math.ceil((dDate.getTime() - Date.now()) / 86400000) : null;
+                        return (
+                          <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
+                            <td style={{ padding: '10px 14px', color: T.sub, fontWeight: 700 }}>{emp.employee_id}</td>
+                            <td style={{ padding: '10px 14px', fontWeight: 800, color: T.text }}>{emp.employee_name}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{(emp as any).band || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{emp.location || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: COLORS.info, fontWeight: 700 }}>{emp.primary_skill || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.project_name || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{emp.customer || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{emp.pm_name || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: COLORS.warning, fontWeight: 700 }}>{dDate ? dDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 900, color: daysLeft !== null && daysLeft <= 7 ? COLORS.danger : COLORS.warning }}>{daysLeft !== null ? daysLeft : '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emp.release_reason || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{emp.rmg_status || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Reactive SRF Table */}
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: T.text, marginBottom: 16 }}>🔴 Open Reactive SRFs ({roles.filter(r => r.type === 'Reactive').length})</h3>
+                <div style={{ overflowX: 'auto', borderRadius: 12, border: `1px solid ${T.bdr}` }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: dark ? '#1e293b' : '#f1f5f9' }}>
+                        {['SRF No', 'Title', 'Skill', 'Customer', 'Location', 'Grade', 'Priority', 'Ageing', 'SPOC', 'Month'].map(h => (
+                          <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 900, color: T.sub, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: `1px solid ${T.bdr}`, whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {roles.filter(r => r.type === 'Reactive').map((role, i) => {
+                        const meta = parseMeta(role);
+                        return (
+                          <tr key={i} style={{ borderBottom: `1px solid ${T.bdr}`, background: i % 2 === 0 ? 'transparent' : (dark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.01)') }}>
+                            <td style={{ padding: '10px 14px', color: COLORS.info, fontWeight: 700 }}>{role.srf_no || role.role_id}</td>
+                            <td style={{ padding: '10px 14px', fontWeight: 700, color: T.text, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role.role_title}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{(role.required_skills || [])[0] || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{role.client_name || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{role.location || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{meta.grade || '—'}</td>
+                            <td style={{ padding: '10px 14px' }}><span style={{ fontSize: 10, fontWeight: 900, padding: '3px 8px', borderRadius: 6, background: role.fill_priority === 'P1' ? `${COLORS.danger}18` : `${COLORS.warning}18`, color: role.fill_priority === 'P1' ? COLORS.danger : COLORS.warning }}>{role.fill_priority}</span></td>
+                            <td style={{ padding: '10px 14px', color: (role.days_open || 0) > 90 ? COLORS.danger : COLORS.warning, fontWeight: 800 }}>{role.days_open || 0}d</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{role.assigned_spoc || '—'}</td>
+                            <td style={{ padding: '10px 14px', color: T.sub }}>{meta.month || '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
