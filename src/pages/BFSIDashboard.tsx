@@ -627,23 +627,27 @@ export default function BFSIDashboard() {
                         ? (isPool ? (Number(summarySkill.pool) || 0) : (Number(summarySkill.deallocation) || 0))
                         : 0;
 
-                      // Filter by primary_skill (most reliable field) — matches how DB stores it
+                      // Filter by primary_skill OR current_skills — covers all skill fields from Excel
                       const currentFilter = (w: BFSIEmployee) => {
                         const statusMatch = isPool ? w.status === 'Available-Pool' : w.status === 'Deallocating';
                         if (!statusMatch) return false;
-                        const ps = (w.primary_skill || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const k  = skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        if (k.includes('sdet'))        return ps.includes('sdet');
-                        if (k.includes('mobile'))      return ps.includes('mobile') && ps.includes('functional');
-                        if (k.includes('ai') || k.includes('ml')) return ps.includes('ai') || ps.includes('ml');
-                        if (k.includes('data') || k.includes('etl')) return ps.includes('etl') || ps.includes('database');
-                        if (k.includes('performance')) return ps.includes('performance');
-                        if (k.includes('security'))    return ps.includes('security');
-                        if (k.includes('accessibility')) return ps.includes('accessibility');
-                        if (k.includes('digital'))      return ps.includes('digital');
-                        if (k.includes('application')) return ps.includes('application');
-                        if (k === 'automationtesting') return ps.includes('automation') && !ps.includes('sdet');
-                        if (k === 'functionaltesting') return ps.includes('functional') && !ps.includes('mobile');
+                        // Check all skill fields
+                        const allSkills = [
+                          w.primary_skill || '',
+                          ...(w.current_skills || []),
+                        ].map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                        const k = skill.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        if (k.includes('sdet'))        return allSkills.some(s => s.includes('sdet'));
+                        if (k.includes('mobile'))      return allSkills.some(s => s.includes('mobile') && s.includes('functional'));
+                        if (k.includes('ai') || k.includes('ml')) return allSkills.some(s => s.includes('ai') || s.includes('ml'));
+                        if (k.includes('data') || k.includes('etl')) return allSkills.some(s => s.includes('etl') || s.includes('database') || s.includes('data'));
+                        if (k.includes('performance')) return allSkills.some(s => s.includes('performance'));
+                        if (k.includes('security'))    return allSkills.some(s => s.includes('security'));
+                        if (k.includes('accessibility')) return allSkills.some(s => s.includes('accessibility'));
+                        if (k.includes('digital'))     return allSkills.some(s => s.includes('digital'));
+                        if (k.includes('application')) return allSkills.some(s => s.includes('application'));
+                        if (k === 'automationtesting') return allSkills.some(s => s.includes('automation') && !s.includes('sdet'));
+                        if (k === 'functionaltesting') return allSkills.some(s => s.includes('functional') && !s.includes('mobile'));
                         return false;
                       };
 
@@ -714,76 +718,100 @@ export default function BFSIDashboard() {
 
                 <div style={{ padding: 32 }}>
                   {supplySubTab === 'pool' ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 24 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 20 }}>
                       {workforce.filter(w => w.status === 'Available-Pool').map((emp, i) => {
                         const rmgColor = emp.rmg_status?.includes('Interview') ? COLORS.warning
                           : emp.rmg_status?.includes('Reskilling') ? COLORS.purple
                           : emp.rmg_status?.includes('Rejection') ? COLORS.danger
                           : emp.rmg_status?.includes('Proactively') ? COLORS.success
                           : COLORS.info;
+                        const isDeployable = (emp as any).deployable_flag === true || String((emp as any).deployable_flag).toLowerCase() === 'deployable';
                         return (
-                        <div key={i} style={{ 
-                          background: dark ? 'rgba(30,41,59,0.5)' : '#fff', 
-                          borderRadius: 20, 
-                          padding: 24, 
-                          border: `1px solid ${T.bdr}`,
-                          position: 'relative',
-                          transition: '0.3s',
-                          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                        }} className="hover-card">
-                          <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-                            <div style={{ width: 52, height: 52, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 20, boxShadow: '0 8px 16px rgba(59,130,246,0.2)', flexShrink: 0 }}>{emp.employee_name?.[0]}</div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontWeight: 900, fontSize: 15, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.employee_name}</div>
-                              <div style={{ fontSize: 12, color: COLORS.info, fontWeight: 700, marginTop: 2 }}>{emp.primary_skill || '—'}</div>
-                              <div style={{ fontSize: 11, color: T.sub, marginTop: 1 }}>ID: {emp.employee_id} · {emp.band || '—'} · {emp.location || '—'}</div>
+                          <div key={i} style={{ background: dark ? 'rgba(30,41,59,0.5)' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, overflow: 'hidden', transition: '0.3s', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} className="hover-card">
+                            {/* Header */}
+                            <div style={{ padding: '16px 20px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                              <div style={{ width: 46, height: 46, borderRadius: 12, background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 18, flexShrink: 0 }}>{emp.employee_name?.[0]}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 900, fontSize: 14, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.employee_name}</div>
+                                <div style={{ fontSize: 12, color: COLORS.info, fontWeight: 700, marginTop: 1 }}>{emp.primary_skill || '—'}</div>
+                                <div style={{ fontSize: 11, color: T.sub, marginTop: 1 }}>ID: {emp.employee_id} · {(emp as any).grade || '—'} · {emp.location || '—'}</div>
+                              </div>
+                              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                <div style={{ fontSize: 22, fontWeight: 800, color: (emp.aging_days||0) > 30 ? COLORS.danger : COLORS.success, lineHeight: 1 }}>{emp.aging_days || 0}</div>
+                                <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase' }}>Days</div>
+                              </div>
                             </div>
-                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                              <div style={{ fontSize: 22, fontWeight: 800, color: (emp.aging_days||0) > 30 ? COLORS.danger : COLORS.success, lineHeight: 1 }}>{emp.aging_days || 0}</div>
-                              <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', letterSpacing: 1 }}>Days</div>
+                            {/* Details grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}` }}>
+                              {[
+                                { label: 'RMG Status', value: emp.rmg_status || '—' },
+                                { label: 'Customer',   value: emp.customer || '—' },
+                                { label: 'PM',         value: emp.pm_name || '—' },
+                              ].map(f => (
+                                <div key={f.label} style={{ padding: '8px 12px', borderRight: f.label !== 'PM' ? `1px solid ${T.bdr}` : 'none' }}>
+                                  <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{f.label}</div>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.value}>{f.value}</div>
+                                </div>
+                              ))}
+                            </div>
+                            {/* Footer: skills + deployable */}
+                            <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 6, background: isDeployable ? `${COLORS.success}18` : `${COLORS.danger}18`, color: isDeployable ? COLORS.success : COLORS.danger, border: `1px solid ${isDeployable ? COLORS.success : COLORS.danger}44` }}>
+                                {isDeployable ? '✅ Deployable' : '❌ Not Deployable'}
+                              </span>
+                              {(emp.current_skills || []).filter(s => s && s !== 'NOT_AVAILABLE').slice(0, 3).map((s, j) => (
+                                <span key={j} style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', background: dark ? 'rgba(255,255,255,0.06)' : '#f1f5f9', borderRadius: 6, border: `1px solid ${T.bdr}`, color: T.sub }}>{s}</span>
+                              ))}
                             </div>
                           </div>
-                          {/* RMG Status badge */}
-                          {emp.rmg_status && (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, background: `${rmgColor}18`, border: `1px solid ${rmgColor}44`, marginBottom: 10 }}>
-                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: rmgColor }} />
-                              <span style={{ fontSize: 10, fontWeight: 800, color: rmgColor }}>{emp.rmg_status}</span>
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                            {(emp.current_skills || []).filter(s => s && s !== 'NOT_AVAILABLE').slice(0, 3).map((s, j) => (
-                              <span key={j} style={{ fontSize: 10, fontWeight: 700, padding: '5px 10px', background: dark ? 'rgba(15,23,42,0.6)' : '#f1f5f9', borderRadius: 8, border: `1px solid ${T.bdr}`, color: T.sub }}>{s}</span>
-                            ))}
-                          </div>
-                        </div>
                         );
                       })}
                     </div>
                   ) : (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 16 }}>
                       {workforce.filter(w => w.status === 'Deallocating').map((emp, i) => {
-                         const daysRem = emp.aging_days || 0;
-                         // Compute release date from deallocation_date or aging_days ahead
-                         const releaseDate = emp.deallocation_date
-                           ? new Date(emp.deallocation_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-                           : new Date(Date.now() + (daysRem * 86400000)).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-                         const urgency = daysRem <= 7 ? COLORS.danger : daysRem <= 21 ? COLORS.warning : COLORS.info;
-                         return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', background: dark ? 'rgba(30,41,59,0.5)' : '#f8fafc', borderRadius: 16, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${urgency}` }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0 }}>
-                              <div style={{ width: 46, height: 46, borderRadius: 12, background: `linear-gradient(135deg,${urgency},${urgency}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 17, flexShrink: 0 }}>{emp.employee_name?.[0]}</div>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ fontWeight: 900, fontSize: 15, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.employee_name}</div>
+                        const dDate = emp.deallocation_date ? new Date(emp.deallocation_date) : null;
+                        const daysLeft = dDate ? Math.ceil((dDate.getTime() - Date.now()) / 86400000) : (emp.aging_days || 0);
+                        const releaseDate = dDate
+                          ? dDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+                          : '—';
+                        const urgency = daysLeft <= 7 ? COLORS.danger : daysLeft <= 21 ? COLORS.warning : COLORS.info;
+                        return (
+                          <div key={i} style={{ background: dark ? 'rgba(30,41,59,0.5)' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${urgency}`, overflow: 'hidden' }}>
+                            {/* Header */}
+                            <div style={{ padding: '14px 18px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                              <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${urgency},${urgency}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 17, flexShrink: 0 }}>{emp.employee_name?.[0]}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 900, fontSize: 14, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emp.employee_name}</div>
                                 <div style={{ fontSize: 12, color: COLORS.info, fontWeight: 700, marginTop: 1 }}>{emp.primary_skill || '—'}</div>
-                                <div style={{ fontSize: 11, color: T.sub, marginTop: 1 }}>ID: {emp.employee_id} · {emp.band || '—'} · {emp.project_name || '—'}</div>
+                                <div style={{ fontSize: 11, color: T.sub, marginTop: 1 }}>ID: {emp.employee_id} · {(emp as any).band || '—'} · {emp.location || '—'}</div>
+                              </div>
+                              <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.25)' : '#f8fafc', padding: '8px 14px', borderRadius: 10, border: `1px solid ${T.bdr}` }}>
+                                <div style={{ fontSize: 18, fontWeight: 800, color: urgency, lineHeight: 1 }}>{Math.abs(daysLeft)}</div>
+                                <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', marginTop: 1 }}>Days Left</div>
+                                <div style={{ fontSize: 10, color: urgency, fontWeight: 800, marginTop: 3 }}>📅 {releaseDate}</div>
                               </div>
                             </div>
-                            <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.25)' : '#fff', padding: '10px 18px', borderRadius: 12, border: `1px solid ${T.bdr}`, marginLeft: 16 }}>
-                              <div style={{ fontSize: 20, fontWeight: 800, color: urgency, lineHeight: 1 }}>{daysRem} <span style={{ fontSize: 11, fontWeight: 700 }}>days</span></div>
-                              <div style={{ fontSize: 10, color: T.sub, marginTop: 3 }}>Release: <span style={{ fontWeight: 800, color: T.text }}>{releaseDate}</span></div>
+                            {/* Details grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}` }}>
+                              {[
+                                { label: 'Project',  value: emp.project_name || '—' },
+                                { label: 'Customer', value: emp.customer || '—' },
+                                { label: 'PM',       value: emp.pm_name || '—' },
+                              ].map(f => (
+                                <div key={f.label} style={{ padding: '8px 12px', borderRight: f.label !== 'PM' ? `1px solid ${T.bdr}` : 'none' }}>
+                                  <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{f.label}</div>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.value}>{f.value}</div>
+                                </div>
+                              ))}
+                            </div>
+                            {/* Footer: RMG + Reason */}
+                            <div style={{ padding: '8px 16px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                              {emp.rmg_status && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', background: `${COLORS.warning}18`, borderRadius: 6, border: `1px solid ${COLORS.warning}44`, color: COLORS.warning }}>{emp.rmg_status}</span>}
+                              {(emp as any).release_reason && <span style={{ fontSize: 10, color: T.sub, fontWeight: 600 }}>{(emp as any).release_reason}</span>}
                             </div>
                           </div>
-                         );
+                        );
                       })}
                     </div>
                   )}
@@ -1182,32 +1210,72 @@ export default function BFSIDashboard() {
               </div>
 
               <div style={{ background: dark ? '#0f172a' : '#fff', borderRadius: 20, border: `1px solid ${T.bdr}`, overflow: 'hidden' }}>
-                <div style={{ padding: '24px 32px', borderBottom: `1px solid ${T.bdr}` }}>
-                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900 }}> Requisition Roadmap ({demandSubTab.toUpperCase()})</h3>
+                <div style={{ padding: '20px 32px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900 }}>
+                    {demandSubTab === 'reactive' ? '🔴 Reactive SRFs' : '🟣 Proactive SRFs'}
+                    <span style={{ marginLeft: 10, fontSize: 13, fontWeight: 700, color: T.sub }}>({filteredRoles.length} shown)</span>
+                  </h3>
                 </div>
-                <div style={{ padding: 32 }}>
-                  {roles.filter(r => demandSubTab === 'reactive' ? r.type === 'Reactive' : r.type === 'Proactive').map((role, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 24, background: dark ? 'rgba(30,41,59,0.5)' : '#f8fafc', borderRadius: 16, border: `1px solid ${T.bdr}`, marginBottom: 12, borderLeft: `6px solid ${role.type === 'Reactive' ? COLORS.danger : COLORS.purple}` }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-                          <span style={{ fontWeight: 800, fontSize: 17, color: T.text }}>{role.role_title}</span>
-                          <span style={{ padding: '6px 12px', background: role.type === 'Reactive' ? `${COLORS.danger}15` : `${COLORS.purple}15`, color: role.type === 'Reactive' ? COLORS.danger : COLORS.purple, borderRadius: 10, fontSize: 11, fontWeight: 900 }}>{role.type}</span>
+                <div style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {filteredRoles.map((role, i) => {
+                    const meta = parseMeta(role);
+                    const jdText = getJD(role);
+                    const typeColor = role.type === 'Reactive' ? COLORS.danger : COLORS.purple;
+                    const pColor = role.fill_priority === 'P1' ? COLORS.danger : role.fill_priority === 'P2' ? COLORS.warning : COLORS.info;
+                    return (
+                      <div key={i} style={{ background: dark ? 'rgba(30,41,59,0.6)' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${typeColor}`, overflow: 'hidden' }}>
+                        {/* Header */}
+                        <div style={{ padding: '16px 24px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${typeColor},${typeColor}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Briefcase size={20} color="#fff" />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                              <span style={{ fontWeight: 900, fontSize: 15, color: T.text }}>{role.role_title}</span>
+                              <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: `${typeColor}18`, color: typeColor, border: `1px solid ${typeColor}44` }}>{role.type}</span>
+                              <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: `${pColor}18`, color: pColor, border: `1px solid ${pColor}44` }}>{role.fill_priority || '—'}</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: T.sub }}>
+                              SRF: <strong style={{ color: T.text }}>{role.role_id}</strong>
+                              {role.client_name && <> · <strong style={{ color: COLORS.info }}>{role.client_name}</strong></>}
+                              {role.location && <> · 📍 {role.location}</>}
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ fontSize: 13, color: T.sub, fontWeight: 700 }}>{role.client_name} • SRF: {role.srf_no || 'N/A'}</div>
+                        {/* Details grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}` }}>
+                          {[
+                            { label: 'Skill',      value: (role.required_skills || [])[0] || '—' },
+                            { label: 'Grade',      value: meta.grade || '—' },
+                            { label: 'Openings',   value: String(meta.openings || '1') },
+                            { label: 'Start Date', value: meta.startDate || '—' },
+                            { label: 'SPOC',       value: role.assigned_spoc || '—' },
+                            { label: 'Month',      value: meta.month || '—' },
+                          ].map((f, fi) => (
+                            <div key={f.label} style={{ padding: '10px 14px', borderRight: fi < 5 ? `1px solid ${T.bdr}` : 'none' }}>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>{f.label}</div>
+                              <div style={{ fontSize: 12, fontWeight: 800, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.value}>{f.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Footer: View JD */}
+                        {jdText && (
+                          <div style={{ padding: '10px 24px' }}>
+                            <button onClick={() => setJdModal({ title: role.role_title, jd: jdText })}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: `${COLORS.info}15`, color: COLORS.info, border: `1px solid ${COLORS.info}44`, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+                              <FileText size={13} /> View JD
+                            </button>
+                          </div>
+                        )}
                       </div>
-
-                      <div style={{ flex: 1.5, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                         {(role.required_skills || []).slice(0, 4).map((s, j) => (
-                           <span key={j} style={{ fontSize: 10, fontWeight: 800, padding: '6px 14px', background: dark ? '#0f172a' : '#fff', borderRadius: 8, border: `1px solid ${T.bdr}`, color: T.text }}>{s}</span>
-                         ))}
-                      </div>
-
-                      <div style={{ textAlign: 'right', minWidth: 160 }}>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: role.fill_priority === 'High' ? COLORS.danger : T.text }}>{role.fill_priority} Priority</div>
-                        <div style={{ fontSize: 12, color: T.sub, marginTop: 4 }}>Live for {role.days_open} days</div>
-                      </div>
+                    );
+                  })}
+                  {filteredRoles.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: 48, color: T.sub }}>
+                      <Briefcase size={40} color={T.bdr} style={{ margin: '0 auto 12px' }} />
+                      <div style={{ fontWeight: 700 }}>No SRFs match your filters</div>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             </div>
