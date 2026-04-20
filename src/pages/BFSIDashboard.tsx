@@ -888,31 +888,123 @@ export default function BFSIDashboard() {
                     {/* Find a Match button */}
                     <button
                       onClick={() => {
-                        const poolEmployees = workforce.filter(w => w.status === 'Available-Pool' || w.status === 'Deallocating');
-                        const openRoles = roles.filter(r => r.status === 'Open');
-                        if (poolEmployees.length === 0 || openRoles.length === 0) {
-                          toast.error('No pool employees or open roles to match. Please upload Excel data first.');
+                        const poolEmployees = workforce.filter(w =>
+                          w.status === 'Available-Pool' || w.status === 'Deallocating'
+                        );
+                        const openRoles = roles.filter(r =>
+                          r.type === 'Reactive' || r.type === 'Proactive'
+                        );
+                        if (poolEmployees.length === 0) {
+                          toast.error('No pool employees found. Please upload Excel data first.');
                           return;
                         }
-                        // Score each employee against each open role
-                        const matches: Array<{ role: BFSIRole; employee: BFSIEmployee; score: number; matchedSkills: string[] }> = [];
+                        if (openRoles.length === 0) {
+                          toast.error('No open roles found. Please upload Excel data first.');
+                          return;
+                        }
+
+                        // ── Matching Engine ──────────────────────────────────
+                        const matches: Array<{ role: BFSIRole; employee: BFSIEmployee; score: number; matchedSkills: string[]; breakdown: string }> = [];
+
                         openRoles.forEach(role => {
-                          const reqSkills = role.required_skills || [];
+                          // Parse META for extra info
+                          const meta = parseMeta(role);
+                          const jdText = getJD(role).toLowerCase();
+                          const rolePrimarySkill = (role.required_skills?.[0] || '').toLowerCase();
+                          const roleTitle = (role.role_title || '').toLowerCase();
+
                           poolEmployees.forEach(emp => {
-                            const empSkills = emp.current_skills || [];
-                            const matched = reqSkills.filter(rs =>
-                              empSkills.some(es => es.toLowerCase().includes(rs.toLowerCase()) || rs.toLowerCase().includes(es.toLowerCase()))
+                            // Build full skill set from all available fields
+                            const empAllSkills = [
+                              ...(emp.current_skills || []),
+                              emp.primary_skill || '',
+                              emp.practice_name || '',
+                            ].filter(Boolean).map(s => s.toLowerCase());
+
+                            const matchedSkills: string[] = [];
+                            let score = 0;
+                            const breakdown: string[] = [];
+
+                            // 1. Primary skill match (40 pts) — most important
+                            const primaryMatch = empAllSkills.some(es =>
+                              es.includes(rolePrimarySkill) ||
+                              rolePrimarySkill.includes(es) ||
+                              // Handle abbreviations: "automation" matches "automation testing"
+                              rolePrimarySkill.split(' ').some(word => word.length > 4 && es.includes(word))
                             );
-                            const score = reqSkills.length > 0 ? Math.round((matched.length / reqSkills.length) * 100) : 0;
-                            if (score > 0) matches.push({ role, employee: emp, score, matchedSkills: matched });
+                            if (primaryMatch) {
+                              score += 40;
+                              matchedSkills.push(role.required_skills?.[0] || 'Primary Skill');
+                              breakdown.push('Primary Skill ✓');
+                            }
+
+                            // 2. JD keyword match (up to 30 pts) — scan JD for employee skills
+                            if (jdText.length > 10) {
+                              const jdMatched = empAllSkills.filter(es =>
+                                es.length > 3 && jdText.includes(es)
+                              );
+                              const jdScore = Math.min(jdMatched.length * 6, 30);
+                              if (jdScore > 0) {
+                                score += jdScore;
+                                jdMatched.slice(0, 3).forEach(s => {
+                                  if (!matchedSkills.includes(s)) matchedSkills.push(s);
+                                });
+                                breakdown.push(`JD Keywords: ${jdMatched.length}`);
+                              }
+                            }
+
+                            // 3. Role title keyword match (15 pts)
+                            const titleMatch = empAllSkills.some(es =>
+                              es.length > 4 && roleTitle.includes(es)
+                            );
+                            if (titleMatch) {
+                              score += 15;
+                              breakdown.push('Role Title ✓');
+                            }
+
+                            // 4. Grade match (15 pts)
+                            const reqGrade = meta.grade || '';
+                            const empGrade = (emp as any).grade || '';
+                            if (reqGrade && empGrade && reqGrade === empGrade) {
+                              score += 15;
+                              breakdown.push(`Grade: ${empGrade} ✓`);
+                            } else if (reqGrade && empGrade) {
+                              // Partial grade match (e.g. E2 vs E1 — same band)
+                              if (reqGrade[0] === empGrade[0]) {
+                                score += 7;
+                                breakdown.push(`Grade Band: ${empGrade[0]} ✓`);
+                              }
+                            }
+
+                            // Only include if score > 0
+                            if (score > 0) {
+                              matches.push({
+                                role,
+                                employee: emp,
+                                score: Math.min(score, 100),
+                                matchedSkills: [...new Set(matchedSkills)],
+                                breakdown: breakdown.join(' · ')
+                              });
+                            }
                           });
                         });
-                        // Sort by score desc
-                        matches.sort((a, b) => b.score - a.score);
+
+                        if (matches.length === 0) {
+                          toast.error('No matches found. Skills in pool may not align with open SRF requirements.');
+                          return;
+                        }
+
+                        // Sort by score desc, then by ageing desc (higher ageing = more urgent to place)
+                        matches.sort((a, b) => {
+                          if (b.score !== a.score) return b.score - a.score;
+                          return (b.employee.aging_days || 0) - (a.employee.aging_days || 0);
+                        });
+
+                        toast.success(`Found ${matches.length} matches across ${openRoles.length} roles`);
                         setSelectedMetric({
                           tab: 'match',
-                          metric: `Find a Match — Top ${Math.min(matches.length, 50)} Results`,
-                          data: matches.slice(0, 50)
+                          metric: `🎯 Find a Match — ${matches.length} Results`,
+                          data: matches.slice(0, 100)
                         });
                       }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 28px', background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 900, border: 'none', boxShadow: '0 10px 20px rgba(16,185,129,0.25)' }}
@@ -1122,28 +1214,52 @@ export default function BFSIDashboard() {
                   {selectedMetric.data.filter((item: any) => {
                     const s = modalSearch.toLowerCase();
                     return !s || item.employee?.employee_name?.toLowerCase().includes(s) || item.role?.role_title?.toLowerCase().includes(s) || item.employee?.employee_id?.toLowerCase().includes(s);
-                  }).map((item: any, i: number) => (
-                    <div key={i} style={{ padding: '18px 24px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 14, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${item.score >= 80 ? COLORS.success : item.score >= 50 ? COLORS.warning : COLORS.info}` }}>
+                  }).map((item: any, i: number) => {
+                    const scoreColor = item.score >= 70 ? COLORS.success : item.score >= 40 ? COLORS.warning : COLORS.info;
+                    return (
+                    <div key={i} style={{ padding: '18px 24px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 14, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${scoreColor}` }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
-                        <div style={{ width: 46, height: 46, borderRadius: 12, background: `linear-gradient(135deg,${item.score >= 80 ? '#10b981,#059669' : item.score >= 50 ? '#f59e0b,#f97316' : '#3b82f6,#6366f1'})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>
-                          {item.score}%
+                        {/* Score badge */}
+                        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg,${scoreColor},${scoreColor}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                          <span style={{ fontWeight: 900, fontSize: 16, lineHeight: 1 }}>{item.score}%</span>
+                          <span style={{ fontSize: 8, fontWeight: 700, opacity: 0.85 }}>MATCH</span>
                         </div>
-                        <div style={{ flex: 1 }}>
+                        {/* Employee info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 900, fontSize: 14, color: T.text }}>{item.employee?.employee_name}</div>
-                          <div style={{ fontSize: 11, color: T.sub }}>ID: {item.employee?.employee_id} · {(item.employee as any)?.grade || item.employee?.band || '—'} · {item.employee?.location || '—'}</div>
+                          <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>
+                            ID: {item.employee?.employee_id} · {(item.employee as any)?.grade || '—'} · {item.employee?.location || '—'} · {item.employee?.aging_days || 0} days ageing
+                          </div>
+                          {item.breakdown && (
+                            <div style={{ fontSize: 10, color: scoreColor, fontWeight: 700, marginTop: 3 }}>{item.breakdown}</div>
+                          )}
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontWeight: 800, fontSize: 13, color: T.text }}>{item.role?.role_title}</div>
-                          <div style={{ fontSize: 11, color: T.sub }}>SRF: {item.role?.role_id} · {item.role?.type}</div>
+                        {/* Role info */}
+                        <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.3)' : '#fff', padding: '10px 16px', borderRadius: 12, border: `1px solid ${T.bdr}`, minWidth: 160 }}>
+                          <div style={{ fontWeight: 800, fontSize: 12, color: T.text, marginBottom: 2 }}>{item.role?.role_title}</div>
+                          <div style={{ fontSize: 10, color: T.sub }}>SRF: {item.role?.role_id}</div>
+                          <div style={{ fontSize: 10, color: item.role?.type === 'Reactive' ? COLORS.danger : COLORS.purple, fontWeight: 700, marginTop: 2 }}>{item.role?.type}</div>
+                          <div style={{ fontSize: 10, color: T.sub, marginTop: 1 }}>{item.role?.client_name || '—'}</div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {item.matchedSkills.map((s: string, j: number) => (
-                          <span key={j} style={{ padding: '3px 10px', background: `${COLORS.success}18`, border: `1px solid ${COLORS.success}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: COLORS.success }}>✓ {s}</span>
-                        ))}
-                      </div>
+                      {/* Matched skills */}
+                      {item.matchedSkills?.length > 0 && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {item.matchedSkills.map((s: string, j: number) => (
+                            <span key={j} style={{ padding: '3px 10px', background: `${COLORS.success}18`, border: `1px solid ${COLORS.success}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: COLORS.success }}>✓ {s}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
+                  {selectedMetric.data.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: 48, color: T.sub }}>
+                      <Sparkles size={40} color={T.bdr} style={{ margin: '0 auto 12px' }} />
+                      <div style={{ fontWeight: 700 }}>No matches found</div>
+                      <div style={{ fontSize: 12, marginTop: 4 }}>Upload Excel data with Pool employees and open SRFs</div>
+                    </div>
+                  )}
                 </div>
 
               /* ── DEMAND (SRF) card layout ── */
