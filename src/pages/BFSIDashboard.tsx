@@ -1020,7 +1020,8 @@ export default function BFSIDashboard() {
                           return;
                         }
 
-                        // ── Group by employee (employee-centric view) ──
+                        // ── Group by employee, then restructure to SRF-centric for display ──
+                        // But store employee data with each SRF for the match context
                         const empMap: Record<string, {
                           employee: BFSIEmployee;
                           roles: Array<{ role: BFSIRole; score: number; matchedSkills: string[]; breakdown: string }>;
@@ -1036,19 +1037,31 @@ export default function BFSIDashboard() {
                           if (m.score > empMap[eid].topScore) empMap[eid].topScore = m.score;
                         });
 
-                        // Sort employees by top score desc, then ageing desc
-                        const empList = Object.values(empMap).sort((a, b) =>
-                          b.topScore !== a.topScore ? b.topScore - a.topScore : (b.employee.aging_days || 0) - (a.employee.aging_days || 0)
-                        );
+                        // Build SRF-centric list: each matched SRF with its best employee
+                        // Deduplicate SRFs, attach best matching employee
+                        const srfMap: Record<string, { role: BFSIRole; bestEmployee: BFSIEmployee; score: number; matchedSkills: string[]; breakdown: string; allEmployees: BFSIEmployee[] }> = {};
+                        matches.forEach(m => {
+                          const rid = m.role.role_id;
+                          if (!srfMap[rid]) {
+                            srfMap[rid] = { role: m.role, bestEmployee: m.employee, score: m.score, matchedSkills: m.matchedSkills, breakdown: m.breakdown, allEmployees: [] };
+                          }
+                          srfMap[rid].allEmployees.push(m.employee);
+                          if (m.score > srfMap[rid].score) {
+                            srfMap[rid].bestEmployee = m.employee;
+                            srfMap[rid].score = m.score;
+                            srfMap[rid].matchedSkills = m.matchedSkills;
+                            srfMap[rid].breakdown = m.breakdown;
+                          }
+                        });
 
-                        const uniqueEmps = empList.length;
-                        const totalSRFs = openRoles.length;
+                        const srfList = Object.values(srfMap).sort((a, b) => b.score - a.score);
+                        const uniqueEmps = Object.keys(empMap).length;
 
-                        toast.success(`${uniqueEmps} employees matched across ${totalSRFs} SRFs`);
+                        toast.success(`${srfList.length} SRFs matched · ${uniqueEmps} employees available`);
                         setSelectedMetric({
                           tab: 'match',
-                          metric: `🎯 Find a Match — ${uniqueEmps} Employees`,
-                          data: empList
+                          metric: `🎯 Find a Match — ${srfList.length} SRFs`,
+                          data: srfList
                         });
                       }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 28px', background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 900, border: 'none', boxShadow: '0 10px 20px rgba(16,185,129,0.25)' }}
@@ -1252,111 +1265,131 @@ export default function BFSIDashboard() {
             </div>
             <div style={{ padding: 32, overflowY: 'auto', maxHeight: 'calc(85vh - 110px)' }}>
 
-              {/* ── FIND A MATCH results — employee-centric view ── */}
+              {/* ── FIND A MATCH results — SRF cards (like demand dashboard) ── */}
               {selectedMetric.tab === 'match' && (() => {
                 const s = modalSearch.toLowerCase().trim();
 
-                // Filter employees by search — name, ID, any skill (l1/l2/l3/l4/actual)
+                // Filter SRF cards by search — SRF title, SRF no, customer, skill, grade, employee name/ID
                 const filtered = (selectedMetric.data as any[]).filter((item: any) => {
                   if (!s) return true;
-                  const emp = item.employee as BFSIEmployee;
-                  const allSkills = [
-                    emp.primary_skill || '',
-                    ...(emp.current_skills || []),
-                    emp.practice_name || '',
-                    emp.service_line || '',
-                    emp.location || '',
-                    (emp as any).grade || '',
-                    emp.employee_id || '',
-                    emp.employee_name || '',
-                    // matched SRF titles
-                    ...(item.roles || []).map((r: any) => r.role?.role_title || ''),
-                    ...(item.roles || []).map((r: any) => r.role?.client_name || ''),
+                  const role = item.role as BFSIRole;
+                  const meta = parseMeta(role);
+                  const jd = getJD(role);
+                  const searchFields = [
+                    role.role_title || '',
+                    role.role_id || '',
+                    role.client_name || '',
+                    role.location || '',
+                    (role.required_skills || []).join(' '),
+                    meta.grade || '',
+                    meta.month || '',
+                    meta.startDate || '',
+                    role.assigned_spoc || '',
+                    // Also search by matched employee
+                    item.bestEmployee?.employee_name || '',
+                    item.bestEmployee?.employee_id || '',
+                    item.bestEmployee?.primary_skill || '',
+                    ...(item.allEmployees || []).map((e: any) => e.employee_name || ''),
+                    ...(item.allEmployees || []).map((e: any) => e.primary_skill || ''),
                   ].map(x => x.toLowerCase());
-                  return allSkills.some(x => x.includes(s));
+                  return searchFields.some(x => x.includes(s));
                 });
 
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {/* Summary bar */}
-                    <div style={{ fontSize: 12, color: T.sub, fontWeight: 700, padding: '8px 14px', background: dark ? 'rgba(255,255,255,0.04)' : '#f1f5f9', borderRadius: 10, display: 'flex', gap: 16 }}>
-                      <span>👥 {filtered.length} employees</span>
-                      <span>📋 {(selectedMetric.data as any[]).reduce((n: number, e: any) => n + (e.roles?.length || 0), 0)} total SRF matches</span>
-                      {s && <span style={{ color: COLORS.info }}>🔍 Filtered by: "{s}"</span>}
+                    {/* Summary */}
+                    <div style={{ fontSize: 12, color: T.sub, fontWeight: 700, padding: '8px 14px', background: dark ? 'rgba(255,255,255,0.04)' : '#f1f5f9', borderRadius: 10, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                      <span>📋 {filtered.length} SRFs matched</span>
+                      <span>👥 {[...new Set((selectedMetric.data as any[]).flatMap((i: any) => (i.allEmployees || []).map((e: any) => e.employee_id)))].length} employees available</span>
+                      {s && <span style={{ color: COLORS.info }}>🔍 "{s}"</span>}
                     </div>
 
                     {filtered.length === 0 && (
                       <div style={{ textAlign: 'center', padding: 48, color: T.sub }}>
                         <Search size={36} color={T.bdr} style={{ margin: '0 auto 12px' }} />
-                        <div style={{ fontWeight: 700 }}>No employees match "{s}"</div>
-                        <div style={{ fontSize: 12, marginTop: 4 }}>Try searching by name, ID, skill, or location</div>
+                        <div style={{ fontWeight: 700 }}>No SRFs match "{s}"</div>
+                        <div style={{ fontSize: 12, marginTop: 4 }}>Try: skill name, SRF no, customer, grade, employee name</div>
                       </div>
                     )}
 
                     {filtered.map((item: any, i: number) => {
-                      const emp = item.employee as BFSIEmployee;
-                      const empRoles: any[] = item.roles || [];
-                      const topScore = item.topScore || 0;
-                      const scoreColor = topScore >= 70 ? COLORS.success : topScore >= 50 ? COLORS.warning : COLORS.info;
-                      const isDealloc = emp.status === 'Deallocating';
+                      const role = item.role as BFSIRole;
+                      const meta = parseMeta(role);
+                      const jdText = getJD(role);
+                      const typeColor = role.type === 'Reactive' ? COLORS.danger : COLORS.purple;
+                      const pColor = role.fill_priority === 'P1' ? COLORS.danger : role.fill_priority === 'P2' ? COLORS.warning : COLORS.info;
+                      const matchedEmps: BFSIEmployee[] = item.allEmployees || [];
 
                       return (
-                        <div key={emp.employee_id} style={{ border: `1px solid ${T.bdr}`, borderRadius: 16, overflow: 'hidden', borderLeft: `5px solid ${scoreColor}` }}>
-                          {/* Employee header */}
-                          <div style={{ padding: '16px 20px', background: dark ? 'rgba(255,255,255,0.03)' : '#fff', display: 'flex', alignItems: 'center', gap: 14 }}>
-                            {/* Rank + Score */}
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                              <div style={{ fontSize: 10, fontWeight: 900, color: T.sub }}>#{i + 1}</div>
-                              <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg,${scoreColor},${scoreColor}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                                <span style={{ fontWeight: 900, fontSize: 14, lineHeight: 1 }}>{topScore}%</span>
-                              </div>
+                        <div key={role.role_id} style={{ background: dark ? 'rgba(30,41,59,0.6)' : '#fff', borderRadius: 16, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${typeColor}`, overflow: 'hidden' }}>
+
+                          {/* Row 1: Header — same as demand dashboard */}
+                          <div style={{ padding: '16px 24px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                            <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${typeColor},${typeColor}99)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <Briefcase size={20} color="#fff" />
                             </div>
-                            {/* Avatar */}
-                            <div style={{ width: 44, height: 44, borderRadius: 12, background: isDealloc ? 'linear-gradient(135deg,#f59e0b,#f97316)' : 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 18, flexShrink: 0 }}>
-                              {(emp.employee_name || '?')[0]}
-                            </div>
-                            {/* Employee info */}
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
-                                <span style={{ fontWeight: 900, fontSize: 15, color: T.text }}>{emp.employee_name}</span>
-                                <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: isDealloc ? `${COLORS.warning}22` : `${COLORS.info}22`, color: isDealloc ? COLORS.warning : COLORS.info, border: `1px solid ${isDealloc ? COLORS.warning : COLORS.info}55`, textTransform: 'uppercase' }}>
-                                  {isDealloc ? 'Deallocating' : 'Pool'}
-                                </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                                <span style={{ fontWeight: 900, fontSize: 15, color: T.text }}>{role.role_title}</span>
+                                <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: `${typeColor}18`, color: typeColor, border: `1px solid ${typeColor}44` }}>{role.type}</span>
+                                <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: `${pColor}18`, color: pColor, border: `1px solid ${pColor}44` }}>{role.fill_priority || '—'}</span>
                               </div>
-                              <div style={{ fontSize: 11, color: T.sub }}>
-                                ID: {emp.employee_id} · {(emp as any).grade || '—'} · {emp.location || '—'} · {emp.aging_days || 0}d ageing
-                              </div>
-                              {/* All skills */}
-                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
-                                {[emp.primary_skill, ...(emp.current_skills || [])].filter((sk, idx, arr) => sk && sk !== 'NOT_AVAILABLE' && arr.indexOf(sk) === idx).slice(0, 6).map((sk, j) => (
-                                  <span key={j} style={{ padding: '2px 8px', background: j === 0 ? `${COLORS.info}18` : (dark ? 'rgba(255,255,255,0.06)' : '#f1f5f9'), border: `1px solid ${j === 0 ? COLORS.info + '44' : T.bdr}`, borderRadius: 6, fontSize: 10, fontWeight: 700, color: j === 0 ? COLORS.info : T.sub }}>
-                                    {sk}
-                                  </span>
-                                ))}
+                              <div style={{ fontSize: 12, color: T.sub }}>
+                                SRF: <strong style={{ color: T.text }}>{role.role_id}</strong>
+                                {role.client_name && <> · <strong style={{ color: COLORS.info }}>{role.client_name}</strong></>}
+                                {role.location && <> · 📍 {role.location}</>}
                               </div>
                             </div>
-                            {/* SRF count */}
-                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                              <div style={{ fontSize: 20, fontWeight: 800, color: scoreColor }}>{empRoles.length}</div>
-                              <div style={{ fontSize: 10, color: T.sub, fontWeight: 700 }}>SRF{empRoles.length !== 1 ? 's' : ''}</div>
+                            {/* Match badge */}
+                            <div style={{ textAlign: 'right', flexShrink: 0, background: `${COLORS.success}15`, padding: '8px 14px', borderRadius: 12, border: `1px solid ${COLORS.success}44` }}>
+                              <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.success, lineHeight: 1 }}>{matchedEmps.length}</div>
+                              <div style={{ fontSize: 9, fontWeight: 900, color: COLORS.success, textTransform: 'uppercase' }}>Matched</div>
                             </div>
                           </div>
 
-                          {/* Matched SRFs */}
-                          <div style={{ padding: '10px 16px', background: dark ? 'rgba(0,0,0,0.2)' : '#f8fafc', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {empRoles.map((er: any, ri: number) => {
-                              const rc = er.score >= 70 ? COLORS.success : er.score >= 50 ? COLORS.warning : COLORS.info;
-                              const typeColor = er.role?.type === 'Reactive' ? COLORS.danger : COLORS.purple;
-                              return (
-                                <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: dark ? 'rgba(255,255,255,0.03)' : '#fff', borderRadius: 10, border: `1px solid ${T.bdr}` }}>
-                                  <span style={{ fontSize: 11, fontWeight: 900, color: rc, minWidth: 36 }}>{er.score}%</span>
-                                  <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 6px', borderRadius: 6, background: `${typeColor}18`, color: typeColor, flexShrink: 0 }}>{er.role?.type}</span>
-                                  <span style={{ fontSize: 12, fontWeight: 700, color: T.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{er.role?.role_title}</span>
-                                  <span style={{ fontSize: 10, color: T.sub, flexShrink: 0 }}>{er.role?.role_id}</span>
-                                  <span style={{ fontSize: 10, color: T.sub, flexShrink: 0 }}>{er.breakdown}</span>
+                          {/* Row 2: Details grid — same as demand dashboard */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}` }}>
+                            {[
+                              { label: 'Skill',      value: (role.required_skills || [])[0] || '—' },
+                              { label: 'Grade',      value: meta.grade || '—' },
+                              { label: 'Openings',   value: String(meta.openings || '1') },
+                              { label: 'Start Date', value: meta.startDate || '—' },
+                              { label: 'SPOC',       value: role.assigned_spoc || '—' },
+                              { label: 'Month',      value: meta.month || '—' },
+                            ].map((f, fi) => (
+                              <div key={f.label} style={{ padding: '10px 14px', borderRight: fi < 5 ? `1px solid ${T.bdr}` : 'none' }}>
+                                <div style={{ fontSize: 9, fontWeight: 900, color: T.sub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>{f.label}</div>
+                                <div style={{ fontSize: 12, fontWeight: 800, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.value}>{f.value}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Row 3: Matched employees + View JD */}
+                          <div style={{ padding: '12px 24px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                            {/* View JD button */}
+                            {jdText && (
+                              <button onClick={() => setJdModal({ title: role.role_title, jd: jdText })}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: `${COLORS.info}15`, color: COLORS.info, border: `1px solid ${COLORS.info}44`, fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+                                <FileText size={13} /> View JD
+                              </button>
+                            )}
+                            {/* Matched employee avatars */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 11, color: T.sub, fontWeight: 700 }}>Best matches:</span>
+                              {matchedEmps.slice(0, 5).map((emp, ei) => (
+                                <div key={ei} title={`${emp.employee_name} · ${(emp as any).grade || '—'} · ${emp.primary_skill}`}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: dark ? 'rgba(255,255,255,0.06)' : '#f1f5f9', borderRadius: 8, border: `1px solid ${T.bdr}`, cursor: 'default' }}>
+                                  <div style={{ width: 20, height: 20, borderRadius: 6, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, fontWeight: 800 }}>
+                                    {(emp.employee_name || '?')[0]}
+                                  </div>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: T.text }}>{emp.employee_name?.split(' ')[0]}</span>
+                                  <span style={{ fontSize: 10, color: T.sub }}>{(emp as any).grade || '—'}</span>
                                 </div>
-                              );
-                            })}
+                              ))}
+                              {matchedEmps.length > 5 && (
+                                <span style={{ fontSize: 11, color: T.sub, fontWeight: 700 }}>+{matchedEmps.length - 5} more</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
