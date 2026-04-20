@@ -2475,7 +2475,7 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
           const empId = String(row['Emp Number'] || row['EmpId'] || '');
           if (!empId) continue;
           
-          const releaseDate = parseExcelDate(row['Estimated Release Date'] || row['Release Date']);
+          const releaseDate = parseExcelDate(row['DeallocationDt'] || row['Estimated Release Date'] || row['Release Date'] || row['Deallocation Date']);
           
           // Update employee with deallocation info
           await client.query(

@@ -684,27 +684,147 @@ export default function BFSIDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 40 }}>
               
               <div style={{ background: dark ? '#0f172a' : '#f8fafc', borderRadius: 20, border: `1px solid ${T.bdr}`, padding: 32 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 }}>
+
+                {/* ── Demand Summary Cards (like Supply) ── */}
+                {(() => {
+                  const reactiveSRF  = kpiData?.reactiveRoles  ?? kpiData?.skillGaps?.reduce((s, sg) => s + (Number(sg.reactive)  || 0), 0) ?? 0;
+                  const proactiveSRF = kpiData?.proactiveRoles ?? kpiData?.skillGaps?.reduce((s, sg) => s + (Number(sg.proactive) || 0), 0) ?? 0;
+                  const demandTotal  = kpiData?.totalDemand    ?? (reactiveSRF + proactiveSRF);
+                  return (
+                    <div style={{ display: 'flex', gap: 16, marginBottom: 28 }}>
+                      {/* Reactive SRF Total */}
+                      <div
+                        onClick={() => { setDemandSubTab('reactive'); setSelectedMetric({ tab: 'demand', metric: 'Reactive SRF Total', data: roles.filter(r => r.type === 'Reactive') }); }}
+                        style={{
+                          flex: 1, borderRadius: 16, padding: '20px 28px',
+                          background: demandSubTab === 'reactive'
+                            ? 'linear-gradient(135deg, rgba(239,68,68,0.18), rgba(249,115,22,0.12))'
+                            : (dark ? 'rgba(255,255,255,0.03)' : '#fff'),
+                          border: `2px solid ${demandSubTab === 'reactive' ? COLORS.danger : T.bdr}`,
+                          display: 'flex', alignItems: 'center', gap: 20,
+                          cursor: 'pointer', transition: 'all 0.25s',
+                          boxShadow: demandSubTab === 'reactive' ? `0 8px 24px rgba(239,68,68,0.18)` : 'none',
+                        }}
+                      >
+                        <div style={{ width: 54, height: 54, borderRadius: 14, background: 'linear-gradient(135deg,#ef4444,#f97316)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(239,68,68,0.35)', flexShrink: 0 }}>
+                          <Briefcase size={26} color="#fff" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 900, color: COLORS.danger, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Reactive SRF Total</div>
+                          <div style={{ fontSize: 38, fontWeight: 800, color: T.text, lineHeight: 1 }}>{reactiveSRF}</div>
+                          <div style={{ fontSize: 12, color: T.sub, marginTop: 5 }}>Urgent open positions</div>
+                        </div>
+                        <ArrowRight size={16} color={COLORS.danger} style={{ flexShrink: 0, opacity: 0.7 }} />
+                      </div>
+
+                      {/* Proactive SRF Total */}
+                      <div
+                        onClick={() => { setDemandSubTab('proactive'); setSelectedMetric({ tab: 'demand', metric: 'Proactive SRF Total', data: roles.filter(r => r.type === 'Proactive') }); }}
+                        style={{
+                          flex: 1, borderRadius: 16, padding: '20px 28px',
+                          background: demandSubTab === 'proactive'
+                            ? 'linear-gradient(135deg, rgba(139,92,246,0.18), rgba(99,102,241,0.12))'
+                            : (dark ? 'rgba(255,255,255,0.03)' : '#fff'),
+                          border: `2px solid ${demandSubTab === 'proactive' ? COLORS.purple : T.bdr}`,
+                          display: 'flex', alignItems: 'center', gap: 20,
+                          cursor: 'pointer', transition: 'all 0.25s',
+                          boxShadow: demandSubTab === 'proactive' ? `0 8px 24px rgba(139,92,246,0.18)` : 'none',
+                        }}
+                      >
+                        <div style={{ width: 54, height: 54, borderRadius: 14, background: 'linear-gradient(135deg,#8b5cf6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(139,92,246,0.35)', flexShrink: 0 }}>
+                          <Target size={26} color="#fff" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 900, color: COLORS.purple, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Proactive SRF Total</div>
+                          <div style={{ fontSize: 38, fontWeight: 800, color: T.text, lineHeight: 1 }}>{proactiveSRF}</div>
+                          <div style={{ fontSize: 12, color: T.sub, marginTop: 5 }}>Pipeline positions</div>
+                        </div>
+                        <ArrowRight size={16} color={COLORS.purple} style={{ flexShrink: 0, opacity: 0.7 }} />
+                      </div>
+
+                      {/* Demand Total */}
+                      <div
+                        onClick={() => setSelectedMetric({ tab: 'demand', metric: 'Demand Total', data: roles })}
+                        style={{
+                          flex: 1, borderRadius: 16, padding: '20px 28px',
+                          background: 'linear-gradient(135deg, rgba(79,70,229,0.13), rgba(99,102,241,0.08))',
+                          border: `2px solid rgba(79,70,229,0.4)`,
+                          display: 'flex', alignItems: 'center', gap: 20,
+                          cursor: 'pointer', transition: 'all 0.25s',
+                        }}
+                      >
+                        <div style={{ width: 54, height: 54, borderRadius: 14, background: 'linear-gradient(135deg,#4f46e5,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(79,70,229,0.35)', flexShrink: 0 }}>
+                          <CheckCircle size={26} color="#fff" />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 11, fontWeight: 900, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4 }}>Demand Total</div>
+                          <div style={{ fontSize: 38, fontWeight: 800, color: T.text, lineHeight: 1 }}>{demandTotal}</div>
+                          <div style={{ fontSize: 12, color: T.sub, marginTop: 5 }}>Reactive {reactiveSRF} + Proactive {proactiveSRF}</div>
+                        </div>
+                        <ArrowRight size={16} color="#4f46e5" style={{ flexShrink: 0, opacity: 0.7 }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
                   <div>
                     <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: T.text }}>Open Positions</h2>
                     <p style={{ margin: '4px 0 0', fontSize: 14, color: T.sub }}>Skills in demand · Roles open now</p>
                   </div>
-                  <div style={{ display: 'flex', background: dark ? '#1e293b' : '#fff', padding: 6, borderRadius: 14, border: `1px solid ${T.bdr}` }}>
-                    <button 
-                      onClick={() => setDemandSubTab('reactive')}
-                      style={{ padding: '12px 32px', borderRadius: 10, border: 'none', background: demandSubTab === 'reactive' ? COLORS.danger : 'transparent', color: demandSubTab === 'reactive' ? '#fff' : T.sub, cursor: 'pointer', fontSize: 14, fontWeight: 900, transition: '0.3s' }}
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    {/* Find a Match button */}
+                    <button
+                      onClick={() => {
+                        const poolEmployees = workforce.filter(w => w.status === 'Available-Pool' || w.status === 'Deallocating');
+                        const openRoles = roles.filter(r => r.status === 'Open');
+                        if (poolEmployees.length === 0 || openRoles.length === 0) {
+                          toast.error('No pool employees or open roles to match. Please upload Excel data first.');
+                          return;
+                        }
+                        // Score each employee against each open role
+                        const matches: Array<{ role: BFSIRole; employee: BFSIEmployee; score: number; matchedSkills: string[] }> = [];
+                        openRoles.forEach(role => {
+                          const reqSkills = role.required_skills || [];
+                          poolEmployees.forEach(emp => {
+                            const empSkills = emp.current_skills || [];
+                            const matched = reqSkills.filter(rs =>
+                              empSkills.some(es => es.toLowerCase().includes(rs.toLowerCase()) || rs.toLowerCase().includes(es.toLowerCase()))
+                            );
+                            const score = reqSkills.length > 0 ? Math.round((matched.length / reqSkills.length) * 100) : 0;
+                            if (score > 0) matches.push({ role, employee: emp, score, matchedSkills: matched });
+                          });
+                        });
+                        // Sort by score desc
+                        matches.sort((a, b) => b.score - a.score);
+                        setSelectedMetric({
+                          tab: 'match',
+                          metric: `Find a Match — Top ${Math.min(matches.length, 50)} Results`,
+                          data: matches.slice(0, 50)
+                        });
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 28px', background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', borderRadius: 12, cursor: 'pointer', fontSize: 13, fontWeight: 900, border: 'none', boxShadow: '0 10px 20px rgba(16,185,129,0.25)' }}
                     >
-                      Reactive SRF
+                      <Sparkles size={18} />
+                      FIND A MATCH
                     </button>
-                    <button 
-                      onClick={() => setDemandSubTab('proactive')}
-                      style={{ padding: '12px 32px', borderRadius: 10, border: 'none', background: demandSubTab === 'proactive' ? COLORS.purple : 'transparent', color: demandSubTab === 'proactive' ? '#fff' : T.sub, cursor: 'pointer', fontSize: 14, fontWeight: 900, transition: '0.3s' }}
-                    >
-                      Proactive SRF
-                    </button>
+                    {/* Reactive / Proactive toggle */}
+                    <div style={{ display: 'flex', background: dark ? '#1e293b' : '#fff', padding: 6, borderRadius: 14, border: `1px solid ${T.bdr}` }}>
+                      <button
+                        onClick={() => setDemandSubTab('reactive')}
+                        style={{ padding: '12px 32px', borderRadius: 10, border: 'none', background: demandSubTab === 'reactive' ? COLORS.danger : 'transparent', color: demandSubTab === 'reactive' ? '#fff' : T.sub, cursor: 'pointer', fontSize: 14, fontWeight: 900, transition: '0.3s' }}
+                      >
+                        Reactive SRF
+                      </button>
+                      <button
+                        onClick={() => setDemandSubTab('proactive')}
+                        style={{ padding: '12px 32px', borderRadius: 10, border: 'none', background: demandSubTab === 'proactive' ? COLORS.purple : 'transparent', color: demandSubTab === 'proactive' ? '#fff' : T.sub, cursor: 'pointer', fontSize: 14, fontWeight: 900, transition: '0.3s' }}
+                      >
+                        Proactive SRF
+                      </button>
+                    </div>
                   </div>
                 </div>
-
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 20 }}>
                   {[
                     { 
@@ -844,13 +964,14 @@ export default function BFSIDashboard() {
                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>{selectedMetric.metric} Detail View ({selectedMetric.data.length})</h2>
                  <p style={{ margin: '4px 0 0', fontSize: 12, color: T.sub }}>Filtered: {selectedMetric.data.filter(it => {
                     const s = modalSearch.toLowerCase();
-                    const matchSearch = (it.employee_name || it.role_title || '').toLowerCase().includes(s) || (it.employee_id || it.role_id || '').toLowerCase().includes(s);
-                    const matchLoc = modalLocationFilter === 'All' || it.location === modalLocationFilter;
+                    const name = it.employee_name || it.role_title || (it.employee?.employee_name) || '';
+                    const id = it.employee_id || it.role_id || (it.employee?.employee_id) || '';
+                    const matchSearch = name.toLowerCase().includes(s) || id.toLowerCase().includes(s);
+                    const matchLoc = modalLocationFilter === 'All' || it.location === modalLocationFilter || it.employee?.location === modalLocationFilter;
                     return matchSearch && matchLoc;
                  }).length} Records</p>
                </div>
                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                 {/* Selection-based filters */}
                  <div style={{ display: 'flex', gap: 8 }}>
                     <select 
                       value={modalLocationFilter}
@@ -858,17 +979,16 @@ export default function BFSIDashboard() {
                       style={{ padding: '10px 16px', borderRadius: 10, background: dark ? '#0f172a' : '#fff', border: `1px solid ${T.bdr}`, color: T.text, fontSize: 12, fontWeight: 800, cursor: 'pointer', outline: 'none' }}
                     >
                       <option value="All">All Locations</option>
-                      {[...new Set(selectedMetric.data.map(d => d.location).filter(Boolean))].sort().map(loc => (
+                      {[...new Set(selectedMetric.data.map((d: any) => d.location || d.employee?.location).filter(Boolean))].sort().map((loc: any) => (
                         <option key={loc} value={loc}>{loc}</option>
                       ))}
                     </select>
                  </div>
-
                  <div style={{ position: 'relative', minWidth: 220 }}>
                     <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: T.sub }} />
                     <input 
                       type="text" 
-                      placeholder="Search ID/Name..." 
+                      placeholder="Search ID/Name/Skill..." 
                       value={modalSearch}
                       onChange={(e) => setModalSearch(e.target.value)}
                       style={{ width: '100%', padding: '10px 10px 10px 36px', background: dark ? '#0f172a' : '#f1f5f9', border: `1px solid ${T.bdr}`, borderRadius: 10, color: T.text, fontSize: 12, fontWeight: 700, outline: 'none' }}
@@ -878,8 +998,41 @@ export default function BFSIDashboard() {
                </div>
             </div>
             <div style={{ padding: 40, overflowY: 'auto', maxHeight: 'calc(85vh - 120px)' }}>
-               {selectedMetric.data
-                 .filter(item => {
+
+              {/* ── FIND A MATCH results ── */}
+              {selectedMetric.tab === 'match' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {selectedMetric.data
+                    .filter((item: any) => {
+                      const s = modalSearch.toLowerCase();
+                      return !s || item.employee?.employee_name?.toLowerCase().includes(s) || item.role?.role_title?.toLowerCase().includes(s) || item.employee?.employee_id?.toLowerCase().includes(s);
+                    })
+                    .map((item: any, i: number) => (
+                    <div key={i} style={{ padding: '20px 28px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 16, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${item.score >= 80 ? COLORS.success : item.score >= 50 ? COLORS.warning : COLORS.info}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: 12, background: `linear-gradient(135deg,${item.score >= 80 ? '#10b981' : item.score >= 50 ? '#f59e0b' : '#3b82f6'},${item.score >= 80 ? '#059669' : item.score >= 50 ? '#f97316' : '#6366f1'})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 16, flexShrink: 0 }}>
+                          {item.score}%
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 900, fontSize: 15, color: T.text }}>{item.employee?.employee_name}</div>
+                          <div style={{ fontSize: 12, color: T.sub }}>ID: {item.employee?.employee_id} · {item.employee?.band || '—'} · {item.employee?.location || '—'}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>{item.role?.role_title}</div>
+                          <div style={{ fontSize: 11, color: T.sub }}>SRF: {item.role?.srf_no || 'N/A'} · {item.role?.type}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {item.matchedSkills.map((s: string, j: number) => (
+                          <span key={j} style={{ padding: '4px 10px', background: `${COLORS.success}18`, border: `1px solid ${COLORS.success}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: COLORS.success }}>✓ {s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+               selectedMetric.data
+                 .filter((item: any) => {
                    const s = modalSearch.toLowerCase();
                    const matchSearch = (item.employee_name || item.role_title || '').toLowerCase().includes(s) || (item.employee_id || item.role_id || '').toLowerCase().includes(s);
                    const matchLoc = modalLocationFilter === 'All' || item.location === modalLocationFilter;
@@ -889,15 +1042,68 @@ export default function BFSIDashboard() {
                  <div key={i} style={{ padding: '24px 32px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 20, marginBottom: 14, border: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', gap: 16, borderLeft: `5px solid ${item.status === 'Deallocating' ? COLORS.warning : COLORS.info}` }}>
                     {/* Row 1: Avatar + Name + Status badge + Location + Aging */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-                      {/* Avatar */}
                       <div style={{ width: 52, height: 52, borderRadius: 14, background: item.status === 'Deallocating' ? 'linear-gradient(135deg,#f59e0b,#f97316)' : 'linear-gradient(135deg,#3b82f6,#6366f1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: 20, flexShrink: 0 }}>
                         {(item.employee_name || item.role_title || '?')[0]}
                       </div>
-                      {/* Name + meta */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                           <span style={{ fontWeight: 800, fontSize: 16, color: T.text }}>{item.employee_name || item.role_title}</span>
-                          {/* Pool / Deallocating badge */}
+                          <span style={{ fontSize: 10, fontWeight: 900, padding: '3px 10px', borderRadius: 999, background: item.status === 'Deallocating' ? `${COLORS.warning}22` : `${COLORS.info}22`, color: item.status === 'Deallocating' ? COLORS.warning : COLORS.info, border: `1px solid ${item.status === 'Deallocating' ? COLORS.warning : COLORS.info}55`, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                            {item.status === 'Deallocating' ? 'Deallocating' : 'Pool'}
+                          </span>
+                          {item.primary_skill && (
+                            <span style={{ fontSize: 10, fontWeight: 800, padding: '3px 10px', borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : '#e2e8f0', color: T.sub, border: `1px solid ${T.bdr}` }}>
+                              {item.primary_skill}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: T.sub, marginTop: 3 }}>
+                          {item.employee_id ? `PoolID: ${item.employee_id}` : `SRF: ${item.role_id}`} · {item.band || item.grade || '—'} · {item.location || '—'}
+                        </div>
+                      </div>
+                      {/* Aging days + deallocation date */}
+                      <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.25)' : '#fff', padding: '10px 18px', borderRadius: 12, border: `1px solid ${T.bdr}` }}>
+                        <div style={{ fontSize: 22, fontWeight: 800, color: (item.aging_days || 0) > 30 ? COLORS.danger : COLORS.warning, lineHeight: 1 }}>{item.aging_days || 0}</div>
+                        <div style={{ fontSize: 10, color: T.sub, fontWeight: 700, marginTop: 2, textTransform: 'uppercase' }}>Days</div>
+                        {item.deallocation_date && (
+                          <div style={{ fontSize: 10, color: COLORS.warning, fontWeight: 800, marginTop: 4 }}>
+                            📅 {new Date(item.deallocation_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Row 2: 5-column detail grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, padding: '14px 18px', background: dark ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.03)', borderRadius: 12 }}>
+                      {[
+                        { label: 'RMG Status',    value: item.rmg_status || '—' },
+                        { label: 'Pool Status',   value: item.pool_status || '—' },
+                        { label: 'Project',       value: item.project_name || '—' },
+                        { label: 'Customer',      value: item.customer || '—' },
+                        { label: 'PM',            value: item.pm_name || '—' },
+                      ].map(f => (
+                        <div key={f.label}>
+                          <div style={{ fontSize: 10, color: T.sub, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{f.label}</div>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.value}>{f.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Row 3: Skills */}
+                    {(item.current_skills || item.required_skills || []).filter((s: string) => s && s !== 'NOT_AVAILABLE').length > 0 && (
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {(item.current_skills || item.required_skills || []).filter((s: string) => s && s !== 'NOT_AVAILABLE').map((s: string, j: number) => (
+                          <span key={j} style={{ padding: '5px 12px', background: dark ? '#1e293b' : '#fff', border: `1px solid ${T.bdr}`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: T.sub }}>{s}</span>
+                        ))}
+                      </div>
+                    )}
+                 </div>
+               ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
                           <span style={{ fontSize: 10, fontWeight: 900, padding: '3px 10px', borderRadius: 999, background: item.status === 'Deallocating' ? `${COLORS.warning}22` : `${COLORS.info}22`, color: item.status === 'Deallocating' ? COLORS.warning : COLORS.info, border: `1px solid ${item.status === 'Deallocating' ? COLORS.warning : COLORS.info}55`, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                             {item.status === 'Deallocating' ? 'Deallocating' : 'Pool'}
                           </span>

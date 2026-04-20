@@ -118,7 +118,7 @@ export default function LandingPage() {
               <span style={{ fontSize:11, fontWeight:800, color:'#8B5CF6', letterSpacing:'0.1em', textTransform:'uppercase' }}>End-to-End Platform</span>
             </div>
             <h2 style={{ fontSize:'clamp(28px,4vw,44px)', fontWeight:900, color:WT, fontFamily:"'Space Grotesk',sans-serif", letterSpacing:'-0.03em', marginBottom:14 }}>
-              How ZenNavigator Works
+              How ZenSkillMap Works
             </h2>
             <p style={{ color:T.muted, fontSize:15, maxWidth:520, margin:'0 auto', lineHeight:1.7 }}>
               From a single resume upload to data-driven talent decisions — every step powered by AI.
@@ -133,7 +133,7 @@ export default function LandingPage() {
               dark={dark} WT={WT} T={T}
               color="#3B82F6"
               icon={<LogIn size={22} color="#fff" />}
-              label="ZenNavigator"
+              label="ZenSkillMap"
               sub="AI-powered skill intelligence portal"
               badge={null}
               wide
@@ -262,23 +262,10 @@ export default function LandingPage() {
             />
             <FlowArrow dark={dark} color="#F59E0B" />
 
-            {/* ── ZENGAP ── */}
+            {/* ── ZENCERT (was ④, now ③ after removing ZenGap) ── */}
             <FlowModule
               dark={dark} WT={WT} T={T}
-              num="③" color="#F59E0B" label="ZenGap" labelSub="gap analysis"
-              children={
-                <div style={{ textAlign:'center', padding:'4px 0' }}>
-                  <div style={{ color:WT, fontSize:13, fontWeight:600, marginBottom:4 }}>Compares resume skills vs professional target competency</div>
-                  <div style={{ color:T.muted, fontSize:12 }}>Shows missing skills · Recommends upskilling · Generates 90-day roadmap</div>
-                </div>
-              }
-            />
-            <FlowArrow dark={dark} color="#EC4899" />
-
-            {/* ── ZENCERT ── */}
-            <FlowModule
-              dark={dark} WT={WT} T={T}
-              num="④" color="#EC4899" label="ZenCert" labelSub="certification tracker"
+              num="③" color="#EC4899" label="ZenCert" labelSub="certification tracker"
               children={
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10 }}>
                   {[
@@ -300,7 +287,7 @@ export default function LandingPage() {
             {/* ── ZENALIGN ── */}
             <FlowModule
               dark={dark} WT={WT} T={T}
-              num="⑤" color="#8B5CF6" label="ZenAlign" labelSub="resume to company format"
+              num="④" color="#8B5CF6" label="ZenAlign" labelSub="resume to company format"
               children={
                 <div style={{ textAlign:'center', padding:'4px 0' }}>
                   <div style={{ color:WT, fontSize:13, fontWeight:600, marginBottom:4 }}>Fetches employee resume · Reformats to Zensar standard template</div>
@@ -313,7 +300,7 @@ export default function LandingPage() {
             {/* ── ZENRADAR ── */}
             <FlowModule
               dark={dark} WT={WT} T={T}
-              num="⑥" color="#06B6D4" label="ZenRadar" labelSub="leadership dashboard"
+              num="⑤" color="#06B6D4" label="ZenRadar" labelSub="leadership dashboard"
               children={
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10 }}>
                   {[
@@ -335,7 +322,7 @@ export default function LandingPage() {
             {/* ── ZENTALENTHUB ── */}
             <FlowModule
               dark={dark} WT={WT} T={T}
-              num="⑦" color="#F97316" label="ZenTalentHub" labelSub="supply & demand"
+              num="⑥" color="#F97316" label="ZenTalentHub" labelSub="supply & demand"
               children={
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                   {[
@@ -367,7 +354,7 @@ export default function LandingPage() {
               </div>
               <div style={{ color:WT, fontWeight:900, fontSize:18, marginBottom:8, fontFamily:"'Space Grotesk',sans-serif" }}>Outcomes</div>
               <div style={{ color:T.muted, fontSize:13, lineHeight:1.7 }}>
-                Data-driven talent decisions · Reduced skill gaps · Right skill, right project, right time
+                Data-driven talent decisions · Reduced skill gaps · Right skill, right project, right time · <strong style={{ color: WT }}>Updated Skill Matrix</strong>
               </div>
             </div>
 
@@ -376,7 +363,6 @@ export default function LandingPage() {
               {[
                 { c:'#10B981', l:'ZenScan' },
                 { c:'#3B82F6', l:'ZenMatrix' },
-                { c:'#F59E0B', l:'ZenGap' },
                 { c:'#EC4899', l:'ZenCert' },
                 { c:'#8B5CF6', l:'ZenAlign' },
                 { c:'#06B6D4', l:'ZenRadar' },

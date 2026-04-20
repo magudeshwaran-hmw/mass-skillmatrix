@@ -162,7 +162,7 @@ Format: Return a JSON object ONLY with a "steps" array containing 3 objects:
        {loading && (
          <div style={{ background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 24, padding: 48, textAlign: 'center' }}>
             <Loader2 className="animate-spin" size={32} color="#3B82F6" style={{ margin: '0 auto 16px' }} />
-            <div style={{ fontWeight: 800, fontSize: 16 }}>AI is synthesizing your roadmap...</div>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>Synthesises skill map with the help of AI...</div>
             <div style={{ fontSize: 13, color: T.sub, marginTop: 4 }}>Analyzing ${data.gapSkills?.length || 0} skill gaps against Zensar QI standards.</div>
          </div>
        )}
@@ -295,7 +295,7 @@ export default function AIIntelligencePage({
            {[
              { id: 'coach', label: 'ZenAICoach', icon: Bot },
              { id: 'map', label: 'ZenPath', icon: Map },
-             { id: 'gaps', label: 'ZenGap', icon: Target }
+             { id: 'gaps', label: 'Resume Gaps', icon: Target }
            ].map(t => (
              <button
                 key={t.id}
