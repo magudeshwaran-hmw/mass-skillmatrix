@@ -2473,9 +2473,9 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
             row['Employee Name'] || row['Name'] || row['EMPNAME'] || 'Unknown'
           ).trim();
 
-          // Skills - try all variations
+          // Skills - store ALL skill levels so filtering matches Summary sheet counts
           const skills = [];
-          const skillCols = ['ACTUALSKILL', 'ActualSkill', 'Actual Skill', 'l1_skills', 'L1 Skills', 'l2_skills', 'L2 Skills', 'Primary Skill Name', 'Skills', 'Skill'];
+          const skillCols = ['l3_skills', 'l4_skills', 'ACTUALSKILL', 'ActualSkill', 'l1_skills', 'l2_skills', 'Primary Skill Name'];
           for (const col of skillCols) {
             if (row[col]) skills.push(...String(row[col]).split(',').map(s => s.trim()).filter(Boolean));
           }
@@ -2632,6 +2632,12 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
             row['ACTUALSKILL'] || row['Skill'] || ''
           ).trim();
 
+          // Store L3/L4 skills for deallocation employees too (for skill card filtering)
+          const deallocSkills = [];
+          ['l3_skills', 'l4_skills', 'ACTUALSKILL', 'l1_skills', 'l2_skills'].forEach(col => {
+            if (row[col]) deallocSkills.push(...String(row[col]).split(',').map(s => s.trim()).filter(Boolean));
+          });
+
           const projectName = String(row['ProjectName'] || row['Project Name'] || row['Project'] || '').trim();
           const customer = String(row['CustomerName'] || row['Customer'] || row['Client'] || '').trim();
           const pmName = String(row['ProjectManager'] || row['PM Name'] || row['PM'] || row['Manager'] || '').trim();
@@ -2655,10 +2661,12 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
                  location = CASE WHEN $9 != '' THEN $9 ELSE location END,
                  rmg_status = CASE WHEN $10 != '' THEN $10 ELSE rmg_status END,
                  pool_status = CASE WHEN $11 != '' THEN $11 ELSE pool_status END,
+                 current_skills = CASE WHEN array_length($13::text[], 1) > 0 THEN $13 ELSE current_skills END,
                  updated_at = CURRENT_TIMESTAMP 
              WHERE employee_id = $12`,
             ['Deallocating', releaseDate, releaseReason, agingDays,
-             primarySkill, projectName, customer, pmName, location, rmgStatus, deallocWeek, empId]
+             primarySkill, projectName, customer, pmName, location, rmgStatus, deallocWeek, empId,
+             [...new Set(deallocSkills)].filter(Boolean)]
           );
 
           if (updResult.rowCount === 0) {

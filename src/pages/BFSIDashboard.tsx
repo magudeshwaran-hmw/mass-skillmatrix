@@ -627,27 +627,25 @@ export default function BFSIDashboard() {
                         ? (isPool ? (Number(summarySkill.pool) || 0) : (Number(summarySkill.deallocation) || 0))
                         : 0;
 
-                      // Filter by primary_skill OR current_skills — covers all skill fields from Excel
+                      // Filter using L3 skills (current_skills array) — matches how Summary sheet counts
+                      // Summary sheet counts are based on l3_skills, stored in current_skills in DB
                       const currentFilter = (w: BFSIEmployee) => {
                         const statusMatch = isPool ? w.status === 'Available-Pool' : w.status === 'Deallocating';
                         if (!statusMatch) return false;
-                        // Check all skill fields
-                        const allSkills = [
-                          w.primary_skill || '',
-                          ...(w.current_skills || []),
-                        ].map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                        // Check L3/L4 skills (stored in current_skills) — this matches Summary sheet counts
+                        const l3Skills = (w.current_skills || []).map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''));
                         const k = skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        if (k.includes('sdet'))        return allSkills.some(s => s.includes('sdet'));
-                        if (k.includes('mobile'))      return allSkills.some(s => s.includes('mobile') && s.includes('functional'));
-                        if (k.includes('ai') || k.includes('ml')) return allSkills.some(s => s.includes('ai') || s.includes('ml'));
-                        if (k.includes('data') || k.includes('etl')) return allSkills.some(s => s.includes('etl') || s.includes('database') || s.includes('data'));
-                        if (k.includes('performance')) return allSkills.some(s => s.includes('performance'));
-                        if (k.includes('security'))    return allSkills.some(s => s.includes('security'));
-                        if (k.includes('accessibility')) return allSkills.some(s => s.includes('accessibility'));
-                        if (k.includes('digital'))     return allSkills.some(s => s.includes('digital'));
-                        if (k.includes('application')) return allSkills.some(s => s.includes('application'));
-                        if (k === 'automationtesting') return allSkills.some(s => s.includes('automation') && !s.includes('sdet'));
-                        if (k === 'functionaltesting') return allSkills.some(s => s.includes('functional') && !s.includes('mobile'));
+                        if (k.includes('sdet'))          return l3Skills.some(s => s.includes('sdet'));
+                        if (k.includes('mobile'))        return l3Skills.some(s => s.includes('mobile') && s.includes('functional'));
+                        if (k.includes('ai') || k.includes('ml')) return l3Skills.some(s => s.includes('ai') || s.includes('ml') || s.includes('deep'));
+                        if (k.includes('data') || k.includes('etl')) return l3Skills.some(s => s.includes('etl') || s.includes('data'));
+                        if (k.includes('performance'))   return l3Skills.some(s => s.includes('performance') || s.includes('nonfunctional'));
+                        if (k.includes('security'))      return l3Skills.some(s => s.includes('security'));
+                        if (k.includes('accessibility')) return l3Skills.some(s => s.includes('accessibility'));
+                        if (k.includes('digital'))       return l3Skills.some(s => s.includes('digital'));
+                        if (k.includes('application'))   return l3Skills.some(s => s.includes('application'));
+                        if (k === 'automationtesting')   return l3Skills.some(s => s.includes('automation') && !s.includes('sdet'));
+                        if (k === 'functionaltesting')   return l3Skills.some(s => s.includes('functional') && !s.includes('mobile'));
                         return false;
                       };
 
