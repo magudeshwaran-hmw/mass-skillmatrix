@@ -1230,62 +1230,99 @@ export default function BFSIDashboard() {
             </div>
             <div style={{ padding: 32, overflowY: 'auto', maxHeight: 'calc(85vh - 110px)' }}>
 
-              {/* ── FIND A MATCH results ── */}
-              {selectedMetric.tab === 'match' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {selectedMetric.data.filter((item: any) => {
-                    const s = modalSearch.toLowerCase();
-                    return !s || item.employee?.employee_name?.toLowerCase().includes(s) || item.role?.role_title?.toLowerCase().includes(s) || item.employee?.employee_id?.toLowerCase().includes(s);
-                  }).map((item: any, i: number) => {
-                    const scoreColor = item.score >= 70 ? COLORS.success : item.score >= 40 ? COLORS.warning : COLORS.info;
-                    return (
-                    <div key={i} style={{ padding: '18px 24px', background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 14, border: `1px solid ${T.bdr}`, borderLeft: `5px solid ${scoreColor}` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
-                        {/* Score badge */}
-                        <div style={{ width: 52, height: 52, borderRadius: 14, background: `linear-gradient(135deg,${scoreColor},${scoreColor}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
-                          <span style={{ fontWeight: 900, fontSize: 16, lineHeight: 1 }}>{item.score}%</span>
-                          <span style={{ fontSize: 8, fontWeight: 700, opacity: 0.85 }}>MATCH</span>
-                        </div>
-                        {/* Employee info */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 900, fontSize: 14, color: T.text }}>{item.employee?.employee_name}</div>
-                          <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>
-                            ID: {item.employee?.employee_id} · {(item.employee as any)?.grade || '—'} · {item.employee?.location || '—'} · {item.employee?.aging_days || 0} days ageing
-                          </div>
-                          {item.breakdown && (
-                            <div style={{ fontSize: 10, color: scoreColor, fontWeight: 700, marginTop: 3 }}>{item.breakdown}</div>
-                          )}
-                        </div>
-                        {/* Role info */}
-                        <div style={{ textAlign: 'right', flexShrink: 0, background: dark ? 'rgba(0,0,0,0.3)' : '#fff', padding: '10px 16px', borderRadius: 12, border: `1px solid ${T.bdr}`, minWidth: 160 }}>
-                          <div style={{ fontWeight: 800, fontSize: 12, color: T.text, marginBottom: 2 }}>{item.role?.role_title}</div>
-                          <div style={{ fontSize: 10, color: T.sub }}>SRF: {item.role?.role_id}</div>
-                          <div style={{ fontSize: 10, color: item.role?.type === 'Reactive' ? COLORS.danger : COLORS.purple, fontWeight: 700, marginTop: 2 }}>{item.role?.type}</div>
-                          <div style={{ fontSize: 10, color: T.sub, marginTop: 1 }}>{item.role?.client_name || '—'}</div>
-                        </div>
-                      </div>
-                      {/* Matched skills */}
-                      {item.matchedSkills?.length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                          {item.matchedSkills.map((s: string, j: number) => (
-                            <span key={j} style={{ padding: '3px 10px', background: `${COLORS.success}18`, border: `1px solid ${COLORS.success}44`, borderRadius: 8, fontSize: 11, fontWeight: 700, color: COLORS.success }}>✓ {s}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    );
-                  })}
-                  {selectedMetric.data.length === 0 && (
-                    <div style={{ textAlign: 'center', padding: 48, color: T.sub }}>
-                      <Sparkles size={40} color={T.bdr} style={{ margin: '0 auto 12px' }} />
-                      <div style={{ fontWeight: 700 }}>No matches found</div>
-                      <div style={{ fontSize: 12, marginTop: 4 }}>Upload Excel data with Pool employees and open SRFs</div>
-                    </div>
-                  )}
-                </div>
+              {/* ── FIND A MATCH results — grouped by SRF ── */}
+              {selectedMetric.tab === 'match' && (() => {
+                const filtered = selectedMetric.data.filter((item: any) => {
+                  const s = modalSearch.toLowerCase();
+                  return !s || item.employee?.employee_name?.toLowerCase().includes(s) ||
+                    item.role?.role_title?.toLowerCase().includes(s) ||
+                    item.employee?.employee_id?.toLowerCase().includes(s) ||
+                    item.role?.role_id?.toLowerCase().includes(s);
+                });
 
-              /* ── DEMAND (SRF) card layout ── */
-              ) : selectedMetric.tab === 'demand' ? (
+                // Group by SRF
+                const grouped: Record<string, any[]> = {};
+                filtered.forEach((item: any) => {
+                  const key = item.role?.role_id || 'unknown';
+                  if (!grouped[key]) grouped[key] = [];
+                  grouped[key].push(item);
+                });
+
+                const srfIds = Object.keys(grouped);
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                    <div style={{ fontSize: 12, color: T.sub, fontWeight: 700, padding: '8px 12px', background: dark ? 'rgba(255,255,255,0.04)' : '#f1f5f9', borderRadius: 10 }}>
+                      📊 {srfIds.length} SRFs matched · {filtered.length} total employee-role pairs · Top 5 per SRF
+                    </div>
+                    {srfIds.map(srfId => {
+                      const items = grouped[srfId];
+                      const role = items[0]?.role;
+                      const typeColor = role?.type === 'Reactive' ? COLORS.danger : COLORS.purple;
+                      return (
+                        <div key={srfId} style={{ border: `1px solid ${T.bdr}`, borderRadius: 16, overflow: 'hidden' }}>
+                          {/* SRF Header */}
+                          <div style={{ padding: '14px 20px', background: dark ? 'rgba(255,255,255,0.04)' : '#f8fafc', borderBottom: `1px solid ${T.bdr}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: '50%', background: typeColor, flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ fontWeight: 900, fontSize: 14, color: T.text }}>{role?.role_title}</span>
+                              <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 999, background: `${typeColor}18`, color: typeColor, border: `1px solid ${typeColor}44` }}>{role?.type}</span>
+                            </div>
+                            <div style={{ fontSize: 11, color: T.sub, flexShrink: 0 }}>
+                              SRF: <strong style={{ color: T.text }}>{srfId}</strong>
+                              {role?.client_name && <> · {role.client_name}</>}
+                            </div>
+                            <div style={{ fontSize: 11, fontWeight: 800, color: COLORS.success, flexShrink: 0 }}>
+                              {items.length} match{items.length !== 1 ? 'es' : ''}
+                            </div>
+                          </div>
+                          {/* Top 5 employees */}
+                          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {items.map((item: any, i: number) => {
+                              const scoreColor = item.score >= 70 ? COLORS.success : item.score >= 40 ? COLORS.warning : COLORS.info;
+                              return (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: dark ? 'rgba(255,255,255,0.02)' : '#fff', borderRadius: 10, border: `1px solid ${T.bdr}`, borderLeft: `4px solid ${scoreColor}` }}>
+                                  {/* Rank */}
+                                  <div style={{ width: 24, height: 24, borderRadius: 8, background: `${scoreColor}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: scoreColor, flexShrink: 0 }}>
+                                    #{i + 1}
+                                  </div>
+                                  {/* Score */}
+                                  <div style={{ width: 44, height: 44, borderRadius: 10, background: `linear-gradient(135deg,${scoreColor},${scoreColor}99)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
+                                    <span style={{ fontWeight: 900, fontSize: 13, lineHeight: 1 }}>{item.score}%</span>
+                                  </div>
+                                  {/* Employee */}
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 800, fontSize: 13, color: T.text }}>{item.employee?.employee_name}</div>
+                                    <div style={{ fontSize: 10, color: T.sub }}>
+                                      {item.employee?.employee_id} · {(item.employee as any)?.grade || '—'} · {item.employee?.location || '—'} · {item.employee?.aging_days || 0}d ageing
+                                    </div>
+                                    {item.breakdown && <div style={{ fontSize: 10, color: scoreColor, fontWeight: 700, marginTop: 2 }}>{item.breakdown}</div>}
+                                  </div>
+                                  {/* Matched skills */}
+                                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 200 }}>
+                                    {(item.matchedSkills || []).slice(0, 3).map((s: string, j: number) => (
+                                      <span key={j} style={{ padding: '2px 8px', background: `${COLORS.success}18`, border: `1px solid ${COLORS.success}44`, borderRadius: 6, fontSize: 10, fontWeight: 700, color: COLORS.success }}>✓ {s}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {srfIds.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: 48, color: T.sub }}>
+                        <Sparkles size={40} color={T.bdr} style={{ margin: '0 auto 12px' }} />
+                        <div style={{ fontWeight: 700 }}>No matches found for your search</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ── DEMAND (SRF) card layout ── */}
+              {selectedMetric.tab === 'demand' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {selectedMetric.data.filter((item: any) => {
                     const s = modalSearch.toLowerCase();
@@ -1344,9 +1381,10 @@ export default function BFSIDashboard() {
                     );
                   })}
                 </div>
+              )}
 
-              /* ── SUPPLY (Pool / Deallocation) card layout ── */
-              ) : (
+              {/* ── SUPPLY (Pool / Deallocation) card layout ── */}
+              {selectedMetric.tab !== 'match' && selectedMetric.tab !== 'demand' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {selectedMetric.data.filter((item: any) => {
                     const s = modalSearch.toLowerCase();
