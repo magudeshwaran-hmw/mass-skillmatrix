@@ -2409,30 +2409,91 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
         const poolSheet = workbook.Sheets['Pool'];
         const poolData = XLSX.utils.sheet_to_json(poolSheet, { raw: false });
         console.log(`📋 Processing Pool sheet: ${poolData.length} available resources`);
+        // Log actual column names from first row to debug mapping
+        if (poolData.length > 0) {
+          console.log('📋 Pool sheet columns:', Object.keys(poolData[0]));
+          console.log('📋 Pool first row sample:', JSON.stringify(poolData[0]).substring(0, 500));
+        }
         
         for (const row of poolData) {
-          const empId = String(row['EmpId'] || '');
+          // Try all possible column name variations for employee ID
+          const empId = String(
+            row['EmpId'] || row['Emp Id'] || row['EMP ID'] || row['EmployeeId'] ||
+            row['Employee Id'] || row['Emp Number'] || row['EmpNumber'] ||
+            row['EMPID'] || row['empid'] || row['emp_id'] || ''
+          ).trim();
           if (!empId) continue;
           
-          // Update existing employee with pool-specific data or insert new
+          // Employee name - try all variations
+          const empName = String(
+            row['EmpName'] || row['Emp Name'] || row['EmployeeName'] ||
+            row['Employee Name'] || row['Name'] || row['EMPNAME'] || 'Unknown'
+          ).trim();
+
+          // Skills - try all variations
           const skills = [];
-          if (row['ACTUALSKILL']) skills.push(...String(row['ACTUALSKILL']).split(',').map(s => s.trim()));
-          if (row['l1_skills']) skills.push(...String(row['l1_skills']).split(',').map(s => s.trim()));
-          if (row['l2_skills']) skills.push(...String(row['l2_skills']).split(',').map(s => s.trim()));
-          
+          const skillCols = ['ACTUALSKILL', 'ActualSkill', 'Actual Skill', 'l1_skills', 'L1 Skills', 'l2_skills', 'L2 Skills', 'Primary Skill Name', 'Skills', 'Skill'];
+          for (const col of skillCols) {
+            if (row[col]) skills.push(...String(row[col]).split(',').map((s: string) => s.trim()).filter(Boolean));
+          }
+
+          // Aging days - try all variations
+          const agingDays = safeParseInt(
+            row['AgeingDays'] || row['Ageing Days'] || row['AgingDays'] ||
+            row['Aging Days'] || row['Aging'] || row['Ageing'] ||
+            row['AGEINGDAYS'] || row['Days'] || 0, 0
+          );
+
+          // RMG Status
+          const rmgStatus = String(
+            row['RmgStatus'] || row['RMG Status'] || row['RMGStatus'] ||
+            row['Rmg Status'] || row['RMG_STATUS'] || ''
+          ).trim();
+
+          // Pool Status / Result
+          const poolStatus = String(
+            row['Result'] || row['Pool Result'] || row['PoolResult'] ||
+            row['Pool Status'] || row['PoolStatus'] || row['STATUS'] || ''
+          ).trim();
+
+          // Grade / Band
+          const grade = String(row['Grade'] || row['GRADE'] || row['Band'] || row['BAND'] || '').trim();
+
+          // Location
+          const location = String(row['Location'] || row['LOCATION'] || row['Loc'] || '').trim();
+
+          // Practice
+          const practice = String(row['Practice Name'] || row['Practice'] || row['PRACTICE'] || row['PracticeName'] || '').trim();
+
+          // Service Line
+          const serviceLine = String(row['Service Lines'] || row['Service Line'] || row['ServiceLine'] || row['SERVICE_LINE'] || '').trim();
+
+          // Primary skill
+          const primarySkill = String(row['Primary Skill Name'] || row['PrimarySkill'] || row['Primary Skill'] || row['ACTUALSKILL'] || skills[0] || '').trim();
+
+          // Project / Customer / PM
+          const projectName = String(row['Project Name'] || row['Project'] || row['PROJECT'] || '').trim();
+          const customer = String(row['Customer'] || row['Client'] || row['CUSTOMER'] || '').trim();
+          const pmName = String(row['PM Name'] || row['PM'] || row['Manager'] || '').trim();
+
           // Try to update first
           const updateResult = await client.query(
-            'UPDATE bfsi_workforce SET status = $1, aging_days = $2, rmg_status = $3, pool_status = $4, grade = $5, location = $6, practice_name = $7, service_line = $8, updated_at = CURRENT_TIMESTAMP WHERE employee_id = $9',
+            `UPDATE bfsi_workforce SET 
+              status = $1, aging_days = $2, rmg_status = $3, pool_status = $4, 
+              grade = $5, location = $6, practice_name = $7, service_line = $8,
+              employee_name = CASE WHEN employee_name = 'Unknown' OR employee_name IS NULL THEN $10 ELSE employee_name END,
+              primary_skill = CASE WHEN primary_skill IS NULL OR primary_skill = '' THEN $11 ELSE primary_skill END,
+              project_name = CASE WHEN $12 != '' THEN $12 ELSE project_name END,
+              customer = CASE WHEN $13 != '' THEN $13 ELSE customer END,
+              pm_name = CASE WHEN $14 != '' THEN $14 ELSE pm_name END,
+              current_skills = CASE WHEN array_length($15::text[], 1) > 0 THEN $15 ELSE current_skills END,
+              updated_at = CURRENT_TIMESTAMP 
+            WHERE employee_id = $9`,
             [
-              'Available-Pool',
-              safeParseInt(row['AgeingDays'] || row['Aging'], 0),
-              row['RmgStatus'] || row['RMG Status'] || '',
-              row['Result'] || row['Pool Result'] || '',
-              row['Grade'] || '',
-              row['Location'] || '',
-              row['Practice Name'] || row['Practice'] || '',
-              row['Service Lines'] || row['Service Line'] || '',
-              empId
+              'Available-Pool', agingDays, rmgStatus, poolStatus,
+              grade, location, practice, serviceLine,
+              empId, empName, primarySkill, projectName, customer, pmName,
+              [...new Set(skills)].filter(Boolean)
             ]
           );
           
@@ -2442,21 +2503,25 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
               INSERT INTO bfsi_workforce (
                 employee_id, employee_name, current_skills, status, 
                 aging_days, rmg_status, pool_status, grade, location, 
-                practice_name, service_line
+                practice_name, service_line, primary_skill, project_name, customer, pm_name
               )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+              ON CONFLICT (employee_id) DO UPDATE SET
+                status = 'Available-Pool',
+                aging_days = EXCLUDED.aging_days,
+                rmg_status = EXCLUDED.rmg_status,
+                pool_status = EXCLUDED.pool_status,
+                grade = EXCLUDED.grade,
+                location = EXCLUDED.location,
+                practice_name = EXCLUDED.practice_name,
+                service_line = EXCLUDED.service_line,
+                updated_at = CURRENT_TIMESTAMP
             `, [
-              empId,
-              row['EmpName'] || row['Emp Name'] || 'Unknown',
+              empId, empName,
               [...new Set(skills)].filter(Boolean),
-              'Available-Pool',
-              safeParseInt(row['AgeingDays'] || row['Aging'], 0),
-              row['RmgStatus'] || row['RMG Status'] || '',
-              row['Result'] || row['Pool Result'] || 'In Pool',
-              row['Grade'] || '',
-              row['Location'] || '',
-              row['Practice Name'] || row['Practice'] || '',
-              row['Service Lines'] || row['Service Line'] || ''
+              'Available-Pool', agingDays, rmgStatus, poolStatus,
+              grade, location, practice, serviceLine,
+              primarySkill, projectName, customer, pmName
             ]);
           }
           poolCount++;
@@ -2470,30 +2535,83 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
         const deallocSheet = workbook.Sheets['Deallocation'];
         const deallocData = XLSX.utils.sheet_to_json(deallocSheet, { raw: false });
         console.log(`📋 Processing Deallocation sheet: ${deallocData.length} releasing employees`);
+        if (deallocData.length > 0) {
+          console.log('📋 Deallocation sheet columns:', Object.keys(deallocData[0]));
+          console.log('📋 Deallocation first row sample:', JSON.stringify(deallocData[0]).substring(0, 500));
+        }
         
         for (const row of deallocData) {
-          const empId = String(row['Emp Number'] || row['EmpId'] || '');
+          const empId = String(
+            row['Emp Number'] || row['EmpId'] || row['Emp Id'] || row['EMP ID'] ||
+            row['EmployeeId'] || row['Employee Id'] || row['EmpNumber'] || row['EMPID'] || ''
+          ).trim();
           if (!empId) continue;
-          
-          const releaseDate = parseExcelDate(row['DeallocationDt'] || row['Estimated Release Date'] || row['Release Date'] || row['Deallocation Date']);
-          
-          // Update employee with deallocation info
-          await client.query(
+
+          const empName = String(
+            row['Emp Name'] || row['EmpName'] || row['Employee Name'] ||
+            row['EmployeeName'] || row['Name'] || 'Unknown'
+          ).trim();
+
+          // DeallocationDt is the L1 column in Excel
+          const releaseDate = parseExcelDate(
+            row['DeallocationDt'] || row['Deallocation Dt'] || row['Deallocation Date'] ||
+            row['DeallocationDate'] || row['Estimated Release Date'] || row['Release Date'] ||
+            row['ReleaseDate'] || row['Release_Date']
+          );
+
+          const agingDays = safeParseInt(
+            row['AgeingDays'] || row['Ageing Days'] || row['AgingDays'] ||
+            row['Aging Days'] || row['Aging'] || row['Ageing'] || row['Days'] || 0, 0
+          );
+
+          const primarySkill = String(
+            row['Primary Skill Name'] || row['PrimarySkill'] || row['Primary Skill'] ||
+            row['ACTUALSKILL'] || row['Skill'] || ''
+          ).trim();
+
+          const projectName = String(row['Project Name'] || row['Project'] || row['PROJECT'] || '').trim();
+          const customer = String(row['Customer'] || row['Client'] || '').trim();
+          const pmName = String(row['PM Name'] || row['PM'] || row['Manager'] || '').trim();
+          const location = String(row['Location'] || row['LOCATION'] || '').trim();
+          const band = String(row['Band'] || row['Grade'] || row['BAND'] || '').trim();
+          const rmgStatus = String(row['RmgStatus'] || row['RMG Status'] || row['RMGStatus'] || '').trim();
+          const releaseReason = String(row['Reason For Deallocation'] || row['Release Reason'] || row['Reason'] || '').trim();
+
+          const updResult = await client.query(
             `UPDATE bfsi_workforce 
              SET status = $1, 
                  deallocation_date = $2,
-                 return_to_pool_date = $3,
-                 release_reason = $4,
+                 return_to_pool_date = $2,
+                 release_reason = $3,
+                 aging_days = CASE WHEN $4 > 0 THEN $4 ELSE aging_days END,
+                 primary_skill = CASE WHEN $5 != '' THEN $5 ELSE primary_skill END,
+                 project_name = CASE WHEN $6 != '' THEN $6 ELSE project_name END,
+                 customer = CASE WHEN $7 != '' THEN $7 ELSE customer END,
+                 pm_name = CASE WHEN $8 != '' THEN $8 ELSE pm_name END,
+                 location = CASE WHEN $9 != '' THEN $9 ELSE location END,
+                 rmg_status = CASE WHEN $10 != '' THEN $10 ELSE rmg_status END,
                  updated_at = CURRENT_TIMESTAMP 
-             WHERE employee_id = $5`,
-            [
-              'Deallocating',
-              releaseDate,
-              releaseDate,
-              row['Reason For Deallocation'] || '',
-              empId
-            ]
+             WHERE employee_id = $11`,
+            ['Deallocating', releaseDate, releaseReason, agingDays,
+             primarySkill, projectName, customer, pmName, location, rmgStatus, empId]
           );
+
+          if (updResult.rowCount === 0) {
+            await client.query(`
+              INSERT INTO bfsi_workforce (
+                employee_id, employee_name, status, deallocation_date,
+                return_to_pool_date, release_reason, aging_days, primary_skill,
+                project_name, customer, pm_name, location, rmg_status
+              ) VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+              ON CONFLICT (employee_id) DO UPDATE SET
+                status = 'Deallocating',
+                deallocation_date = EXCLUDED.deallocation_date,
+                release_reason = EXCLUDED.release_reason,
+                updated_at = CURRENT_TIMESTAMP
+            `, [empId, empName, 'Deallocating', releaseDate,
+                releaseReason, agingDays, primarySkill, projectName,
+                customer, pmName, location, rmgStatus]);
+          }
           deallocationCount++;
         }
       }
@@ -2741,6 +2859,27 @@ app.post('/api/bfsi/reskill', async (req, res) => {
     `, [employeeId, programName, today.toISOString().split('T')[0], completionDate.toISOString().split('T')[0], durationWeeks, 'In Progress']);
     
     res.json({ success: true, message: 'Reskilling program started' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Debug: Inspect actual column names from uploaded Excel
+app.post('/api/bfsi/debug-columns', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const result = {};
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(sheet, { raw: false });
+      result[sheetName] = {
+        rowCount: data.length,
+        columns: data.length > 0 ? Object.keys(data[0]) : [],
+        firstRow: data.length > 0 ? data[0] : {}
+      };
+    }
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
