@@ -1,11 +1,9 @@
 /**
  * resumeExtraction.ts
- * SINGLE shared resume extraction logic used by ALL pages:
- * - ResumeUploadPage (employee)
- * - AdminResumeUploadPage (admin)
- * - AdminDashboard (add employee scanner)
+ * SINGLE shared resume extraction — used by ALL pages:
+ *   ResumeUploadPage · AdminResumeUploadPage · AdminDashboard
  *
- * One prompt = consistent results everywhere.
+ * Handles ANY resume format: structured, unstructured, QA, non-QA, Indian, global.
  */
 
 import { callResumeLLM } from './llm';
@@ -29,11 +27,12 @@ export async function extractTextFromPDF(file: File): Promise<string> {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
+      // Join items with space, preserve line breaks
       const pageText = content.items.map((item: any) => item.str).join(' ');
       text += pageText + '\n\n';
     }
 
-    if (text.trim().length < 100) {
+    if (text.trim().length < 50) {
       throw new Error('Too little text extracted from PDF');
     }
 
@@ -52,105 +51,155 @@ export async function extractTextFromPDF(file: File): Promise<string> {
 // ─── Master Extraction Prompt ─────────────────────────────────────────────────
 export async function extractEverythingFromResume(resumeText: string): Promise<any> {
   const fullText = resumeText.slice(0, 50000);
+  console.log(`🤖 ZenScan extracting from ${fullText.length} characters`);
 
-  console.log(`🤖 Extracting from ${fullText.length} characters`);
+  const prompt = `You are ZenScan — an expert AI resume parser for Zensar Technologies.
+Your job is to extract ALL structured data from ANY professional resume, regardless of format.
 
-  const prompt = `🚨 CRITICAL EXTRACTION TASK 🚨
-
-You are extracting structured data from a PROFESSIONAL RESUME.
-
-═══════════════════════════════════════════════════════════════
-STEP 1: EXTRACT ALL PROJECTS
-═══════════════════════════════════════════════════════════════
-
-HOW TO FIND PROJECTS:
-- Look for "PROFESSIONAL EXPERIENCE" section
-- Each line starting with "Project -" or "Project:" is ONE separate project
-- Extract from that line until the next "Project -" line
-
-FORMAT: "Project - [CLIENT] at [COMPANY] [DATE RANGE]"
-
-EXTRACT FROM EACH PROJECT:
-- ProjectName: Client name + brief description
-- Client: Client name
-- Role: From "Role:" line
-- StartDate: From date range
-- EndDate: From date range (null if ongoing)
-- IsOngoing: true if "Present" or "Ongoing"
-- Description: From "Project Description:" section
-- Technologies: From "Technology/Skills/Tools used" - split by commas
-- Outcome: From "Key activities" or "Major achievements"
-- Domain: Banking/Healthcare/Insurance/etc based on client
-
-⚠️ CRITICAL: Count ALL "Project -" lines. Extract EVERY SINGLE ONE.
-If you see 8 "Project -" lines → extract 8 projects.
-If you see 12 "Project -" lines → extract 12 projects.
-DO NOT stop at 3 or 5. Extract ALL of them.
-
-═══════════════════════════════════════════════════════════════
-STEP 2: EXTRACT ACHIEVEMENTS/AWARDS
-═══════════════════════════════════════════════════════════════
-
-ONLY extract REAL named awards:
-✅ Pegasus, Gold Award, Silver Award, Bronze Medal, Best Team Award, Star Award
-✅ Kaggle medals, hackathon wins, competition rankings
-✅ "Appreciated by client for quality and timely delivery"
-
-❌ DO NOT extract:
-❌ Project metrics: "Reduced false positive rate by 20%"
-❌ Project outcomes: "Data Quality Improvement"
-❌ Job responsibilities or activities
-
-LOOK IN:
-1. "Awards" or "Recognition" section at top of resume
-2. "Major achievements" subsection in each project (named awards only)
-3. "Any client appreciation" subsection in each project
-
-ANTI-DUPLICATE: If same award appears in Awards section AND in a project, extract ONCE only.
-
-═══════════════════════════════════════════════════════════════
-STEP 3: EXTRACT ALL CERTIFICATIONS
-═══════════════════════════════════════════════════════════════
-
-Look for "Certifications" section. Extract EVERY bullet point as separate certification.
-Examples: Google Cloud Digital Leader, AWS Cloud Practitioner, SAFe SCRUM MASTER 6.0
-
-═══════════════════════════════════════════════════════════════
-STEP 4: EXTRACT EDUCATION
-═══════════════════════════════════════════════════════════════
-
-Look for "Education" section. Extract degree, institution, field, year range.
-
-═══════════════════════════════════════════════════════════════
-STEP 5: EXTRACT PROFILE
-═══════════════════════════════════════════════════════════════
-
-Extract: name, email, phone, location, designation, years of IT experience.
-
-═══════════════════════════════════════════════════════════════
-STEP 6: EXTRACT SKILLS (PREDEFINED LIST ONLY)
-═══════════════════════════════════════════════════════════════
-
-Rate ONLY these skills (0 = not found, 1 = basic, 2 = intermediate, 3 = expert):
-Selenium, Appium, JMeter, Postman, JIRA, TestRail,
-Python, Java, JavaScript, TypeScript, C#, SQL,
-API Testing, Mobile Testing, Performance Testing, Security Testing, Database Testing,
-Banking, Healthcare, E-Commerce, Insurance, Telecom,
-Functional Testing, Automation Testing, Regression Testing, UAT,
-Git, Jenkins, Docker, Azure DevOps,
-ChatGPT/Prompt Engineering, AI Test Automation
-
-DO NOT add any skills outside this list.
-
-═══════════════════════════════════════════════════════════════
-📝 RESUME TEXT:
-═══════════════════════════════════════════════════════════════
-
+RESUME TEXT (${fullText.length} characters):
+---
 ${fullText}
+---
 
-═══════════════════════════════════════════════════════════════
-📤 OUTPUT (STRICT JSON ONLY - NO MARKDOWN, NO BACKTICKS):
-═══════════════════════════════════════════════════════════════
+EXTRACTION RULES — READ CAREFULLY:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 1: EXTRACT ALL PROJECTS / WORK EXPERIENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Look for ANY of these patterns to find projects/experience:
+  • "Project - [CLIENT] at [COMPANY] [DATE]"
+  • "Project: [NAME]"
+  • "Project [NUMBER]: [NAME]"
+  • Company name + role + date range (e.g. "Tesco Bank | Test Manager | Sep 2025 – Feb 2026")
+  • Numbered experience entries (1. Company... 2. Company...)
+  • Any section titled: Professional Experience, Work Experience, Employment History, Career History, Projects
+
+For EACH project/role extract:
+  - ProjectName: meaningful name (Client + role or project title)
+  - Client: client/company name
+  - Role: job title / role
+  - StartDate: start month/year (e.g. "Sep 2025")
+  - EndDate: end month/year or "Present" if ongoing
+  - IsOngoing: true if current/present/ongoing
+  - Description: what the project/role was about
+  - Technologies: ALL tools, technologies, frameworks mentioned (split by comma)
+  - Outcome: key results, achievements, activities performed
+  - Domain: Banking/Healthcare/Insurance/Telecom/E-Commerce/Retail/Manufacturing/etc
+
+⚠️ CRITICAL: Extract EVERY project/role. If resume has 10 roles, extract all 10.
+Do NOT skip any. Do NOT merge multiple roles into one.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 2: EXTRACT ALL CERTIFICATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Look in ALL these places:
+  • Section titled: Certifications, Certificates, Credentials, Licenses, Qualifications
+  • Skills section (certifications sometimes listed there)
+  • Education section (professional certifications mixed with degrees)
+  • Any line containing: "Certified", "Certificate", "Certification", "License", "Credential"
+  • Common patterns: "AWS Certified...", "Google Cloud...", "ISTQB...", "PMP...", "SAFe..."
+
+For EACH certification extract:
+  - CertName: full certification name
+  - Provider: issuing organization (AWS, Google, ISTQB, PMI, etc.)
+  - IssueDate: date issued (if mentioned)
+  - ExpiryDate: expiry date (if mentioned)
+  - CredentialID: credential ID (if mentioned)
+
+⚠️ NOTE: Certifications and achievements can overlap.
+  - "ISTQB Certified" → extract as CERTIFICATION
+  - "Won Best QA Award" → extract as ACHIEVEMENT
+  - "Received AWS certification" → extract as CERTIFICATION
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 3: EXTRACT ALL ACHIEVEMENTS / AWARDS / RECOGNITIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Look in ALL these places:
+  • Section titled: Awards, Achievements, Recognition, Honors, Accomplishments
+  • "Major achievements" subsection within each project
+  • "Any client appreciation" subsection within each project
+  • Any mention of: award, medal, prize, recognition, appreciation, commendation
+
+✅ EXTRACT these as achievements:
+  • Named awards: Pegasus, Gold Award, Silver Award, Bronze Medal, Best Team Award, Star Award, Spot Award, Pat on Back
+  • External recognitions: Kaggle medals, hackathon wins, competition rankings, top performer
+  • Client appreciation: "Appreciated by client for...", "Client commendation for..."
+  • Employee of the month/quarter/year
+  • Any "Best [something]" award
+
+❌ DO NOT extract as achievements (these are project outcomes, not awards):
+  • Metrics: "Reduced false positive rate by 20%", "Improved accuracy to 82%"
+  • Project outcomes: "Data Quality Improvement", "Page Load Speed Improvement"
+  • Job responsibilities: "Managed team of 5", "Led testing for 3 projects"
+  • Technical improvements: "Reduced manual review time"
+
+⚠️ ANTI-DUPLICATE: If same award appears in Awards section AND in a project, extract ONCE only.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 4: EXTRACT EDUCATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Look for: Education, Academic Background, Qualifications, Degrees
+Extract: degree name, institution, field of study, year range
+Include: B.Tech, B.E., M.Tech, MBA, BCA, MCA, B.Sc, M.Sc, Diploma, PhD, etc.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 5: EXTRACT PROFILE INFORMATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Extract from header/contact section:
+  - name: full name
+  - email: email address
+  - phone: phone number
+  - location: city, state, country
+  - designation: current job title
+  - yearsIT: total years of IT/professional experience (number only)
+  - primarySkill: main skill/expertise area
+  - secondarySkill: second main skill
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RULE 6: RATE SKILLS FROM PREDEFINED LIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Rate ONLY these 32 skills. Look EVERYWHERE in the resume (skills section, projects, experience, certifications):
+
+TOOLS:       Selenium, Appium, JMeter, Postman, JIRA, TestRail
+LANGUAGES:   Python, Java, JavaScript, TypeScript, C#, SQL
+TESTING:     API Testing, Mobile Testing, Performance Testing, Security Testing, Database Testing
+DOMAINS:     Banking, Healthcare, E-Commerce, Insurance, Telecom
+TEST TYPES:  Functional Testing, Automation Testing, Regression Testing, UAT
+DEVOPS:      Git, Jenkins, Docker, Azure DevOps
+AI:          ChatGPT/Prompt Engineering, AI Test Automation
+
+Rating scale:
+  0 = not mentioned anywhere in resume
+  1 = briefly mentioned or implied
+  2 = used in projects, moderate experience
+  3 = primary skill, extensive experience, expert level
+
+MATCHING RULES (be generous, look for synonyms):
+  • "Selenium WebDriver" → Selenium = 3
+  • "REST API testing" or "REST Assured" → API Testing = 2
+  • "JUnit/TestNG" → Java = 2
+  • "Playwright" → Automation Testing = 2 (not Selenium)
+  • "Cypress" → Automation Testing = 2
+  • "Azure Pipelines" → Azure DevOps = 2
+  • "GitHub Actions" → Git = 2
+  • "MySQL/PostgreSQL/Oracle" → SQL = 2, Database Testing = 1
+  • "BFSI/Banking domain" → Banking = 3
+  • "Healthcare domain" → Healthcare = 3
+  • "Manual testing" → Functional Testing = 2
+  • "Regression" → Regression Testing = 2
+  • "UAT/User Acceptance" → UAT = 2
+  • "ChatGPT/AI tools" → ChatGPT/Prompt Engineering = 2
+  • "AI-powered testing" → AI Test Automation = 2
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT — STRICT JSON, NO MARKDOWN, NO BACKTICKS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 {
   "projects": [
@@ -163,9 +212,9 @@ ${fullText}
       "EndDate": "Feb 2026",
       "IsOngoing": false,
       "Description": "IT Infrastructure testing for banking systems",
-      "Outcome": "Successfully tested infrastructure components",
-      "Technologies": ["Excel", "MS Word", "Teams", "AWS"],
-      "TeamSize": 0
+      "Outcome": "Successfully delivered testing for core banking infrastructure",
+      "Technologies": ["Excel", "MS Word", "Teams", "AWS", "JIRA"],
+      "TeamSize": 5
     }
   ],
   "achievements": [
@@ -173,17 +222,17 @@ ${fullText}
       "Title": "Pegasus Award",
       "AwardType": "Pegasus",
       "Category": "Performance",
-      "DateReceived": "",
-      "Description": "",
-      "Issuer": "",
-      "ProjectContext": ""
+      "DateReceived": "2024",
+      "Description": "Awarded for outstanding performance",
+      "Issuer": "Zensar",
+      "ProjectContext": "CIBC Project"
     }
   ],
   "certifications": [
     {
       "CertName": "Google Cloud Digital Leader",
       "Provider": "Google",
-      "IssueDate": "",
+      "IssueDate": "2023",
       "ExpiryDate": "",
       "CredentialID": ""
     }
@@ -191,59 +240,96 @@ ${fullText}
   "education": [
     {
       "degree": "B. Tech in Information Technology",
-      "institution": "",
+      "institution": "Anna University",
       "field": "Information Technology",
       "year": "2003-2007"
     }
   ],
   "profile": {
-    "name": "",
-    "email": "",
-    "phone": "",
-    "location": "",
-    "designation": "",
-    "yearsIT": 0,
-    "primarySkill": "",
-    "secondarySkill": ""
+    "name": "Gayathri P",
+    "email": "gayathri@zensar.com",
+    "phone": "+91 9876543210",
+    "location": "Pune, Maharashtra",
+    "designation": "QA Manager",
+    "yearsIT": 15,
+    "primarySkill": "Test Management",
+    "secondarySkill": "Automation Testing"
   },
   "skills": {
-    "Selenium": 0, "Appium": 0, "JMeter": 0, "Postman": 0, "JIRA": 0, "TestRail": 0,
-    "Python": 0, "Java": 0, "JavaScript": 0, "TypeScript": 0, "C#": 0, "SQL": 0,
-    "API Testing": 0, "Mobile Testing": 0, "Performance Testing": 0,
-    "Security Testing": 0, "Database Testing": 0,
-    "Banking": 0, "Healthcare": 0, "E-Commerce": 0, "Insurance": 0, "Telecom": 0,
-    "Functional Testing": 0, "Automation Testing": 0, "Regression Testing": 0, "UAT": 0,
-    "Git": 0, "Jenkins": 0, "Docker": 0, "Azure DevOps": 0,
-    "ChatGPT/Prompt Engineering": 0, "AI Test Automation": 0
+    "Selenium": 0,
+    "Appium": 0,
+    "JMeter": 0,
+    "Postman": 0,
+    "JIRA": 3,
+    "TestRail": 0,
+    "Python": 0,
+    "Java": 0,
+    "JavaScript": 0,
+    "TypeScript": 0,
+    "C#": 0,
+    "SQL": 2,
+    "API Testing": 0,
+    "Mobile Testing": 0,
+    "Performance Testing": 0,
+    "Security Testing": 0,
+    "Database Testing": 0,
+    "Banking": 3,
+    "Healthcare": 0,
+    "E-Commerce": 0,
+    "Insurance": 0,
+    "Telecom": 0,
+    "Functional Testing": 3,
+    "Automation Testing": 0,
+    "Regression Testing": 2,
+    "UAT": 2,
+    "Git": 0,
+    "Jenkins": 0,
+    "Docker": 0,
+    "Azure DevOps": 2,
+    "ChatGPT/Prompt Engineering": 0,
+    "AI Test Automation": 0
   },
-  "analysis": { "completenessScore": 0, "missingCriticalFields": [], "improvementAreas": [] },
+  "analysis": {
+    "completenessScore": 85,
+    "missingCriticalFields": [],
+    "improvementAreas": ["Add more technical skills", "Add certifications"]
+  },
   "gaps": []
 }
 
-═══════════════════════════════════════════════════════════════
-✅ GRADING CRITERIA:
-═══════════════════════════════════════════════════════════════
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SELF-CHECK BEFORE RETURNING:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-YOU PASS IF:
-✅ Projects: You extracted ALL "Project -" lines (count them first, then extract all)
-✅ Certifications: You extracted ALL certifications from the Certifications section
-✅ Achievements: You extracted ONLY real named awards (not metrics)
-✅ Skills: You ONLY used skills from the predefined list above
+Before returning, verify:
+1. Did I extract ALL projects/roles? (count experience entries in resume)
+2. Did I extract ALL certifications? (check every section)
+3. Did I extract ONLY real awards as achievements? (no metrics/outcomes)
+4. Did I rate skills correctly? (0 if not mentioned, 1-3 based on depth)
+5. Did I fill profile fields? (name, email, phone, designation, location, yearsIT)
+6. Is my output valid JSON? (no trailing commas, no markdown)
 
-YOU FAIL IF:
-❌ You extracted fewer projects than "Project -" lines in the text
-❌ You missed certifications that are clearly listed
-❌ You extracted project metrics as achievements
-❌ You added skills not in the predefined list
-
-Return ONLY valid JSON. NO markdown. NO backticks. NO explanations. JUST the JSON.`;
+Return ONLY the JSON object. Nothing else.`;
 
   const result = await callResumeLLM(prompt);
 
   if (result.error || !result.data) {
-    console.error('❌ Extraction failed:', result.error);
+    console.error('❌ ZenScan extraction failed:', result.error);
     return null;
   }
 
-  return typeof result.data === 'object' ? result.data : null;
+  const data = typeof result.data === 'object' ? result.data : null;
+  if (!data) return null;
+
+  // ── Post-processing: ensure all required fields exist ──
+  return {
+    projects:       Array.isArray(data.projects)       ? data.projects       : [],
+    achievements:   Array.isArray(data.achievements)   ? data.achievements   : [],
+    certifications: Array.isArray(data.certifications) ? data.certifications : [],
+    education:      Array.isArray(data.education)      ? data.education      : [],
+    profile:        data.profile || {},
+    skills:         data.skills  || {},
+    analysis:       data.analysis || { completenessScore: 0, missingCriticalFields: [], improvementAreas: [] },
+    gaps:           Array.isArray(data.gaps) ? data.gaps : [],
+  };
 }
