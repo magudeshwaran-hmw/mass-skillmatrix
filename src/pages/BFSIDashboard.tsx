@@ -915,22 +915,27 @@ export default function BFSIDashboard() {
                         // Phase 3: Top 5 per SRF
                         const matches: Array<{ role: BFSIRole; employee: BFSIEmployee; score: number; matchedSkills: string[]; breakdown: string }> = [];
 
-                        // Skill normalization helper — maps common variations to canonical names
-                        const normalizeSkill = (s: string) => s.toLowerCase()
-                          .replace(/[^a-z0-9\s]/g, ' ')
-                          .replace(/\s+/g, ' ')
-                          .trim();
+                        // ── Skill taxonomy: map pool skill names → canonical testing skills ──
+                        const SKILL_MAP: Record<string, string[]> = {
+                          'automation': ['automation testing', 'automation', 'selenium', 'playwright', 'cypress', 'sdet', 'webdriver', 'appium'],
+                          'manual': ['functional testing', 'manual testing', 'functional', 'manual'],
+                          'performance': ['performance testing', 'jmeter', 'loadrunner', 'performance', 'load testing'],
+                          'security': ['security testing', 'security', 'penetration', 'vapt'],
+                          'api': ['api testing', 'rest', 'postman', 'api', 'restassured'],
+                          'mobile': ['mobile testing', 'mobile', 'appium', 'ios', 'android'],
+                          'database': ['database testing', 'etl', 'sql', 'database', 'data'],
+                          'accessibility': ['accessibility testing', 'accessibility', 'wcag'],
+                          'digital': ['digital testing', 'digital'],
+                          'ai': ['ai testing', 'ml testing', 'ai', 'machine learning'],
+                        };
 
-                        // Check if two skill strings are related
-                        const skillsRelated = (empSkill: string, roleSkill: string): boolean => {
-                          const e = normalizeSkill(empSkill);
-                          const r = normalizeSkill(roleSkill);
-                          if (e === r) return true;
-                          if (e.includes(r) || r.includes(e)) return true;
-                          // Word-level match: "automation" matches "automation testing"
-                          const rWords = r.split(' ').filter(w => w.length > 4);
-                          const eWords = e.split(' ').filter(w => w.length > 4);
-                          return rWords.some(rw => eWords.some(ew => ew.includes(rw) || rw.includes(ew)));
+                        // Get canonical skill category for a skill string
+                        const getSkillCategory = (skill: string): string => {
+                          const s = skill.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+                          for (const [cat, keywords] of Object.entries(SKILL_MAP)) {
+                            if (keywords.some(kw => s.includes(kw) || kw.includes(s))) return cat;
+                          }
+                          return s.split(' ')[0]; // fallback to first word
                         };
 
                         openRoles.forEach(role => {
@@ -938,65 +943,65 @@ export default function BFSIDashboard() {
                           const jdText = getJD(role).toLowerCase();
                           const rolePrimarySkill = (role.required_skills?.[0] || '').toLowerCase();
                           const roleTitle = (role.role_title || '').toLowerCase();
+                          const roleCategory = getSkillCategory(rolePrimarySkill || roleTitle);
                           const roleMatches: typeof matches = [];
 
                           poolEmployees.forEach(emp => {
-                            // Build skill set — prioritize ACTUALSKILL (primary_skill) over hierarchy names
+                            // Use ACTUALSKILL (primary_skill) as the main matching field
                             const empActualSkill = (emp.primary_skill || '').toLowerCase();
-                            const empAllSkills = [
+                            const empSkills = [
                               empActualSkill,
                               ...(emp.current_skills || []).map(s => s.toLowerCase()),
-                              (emp.practice_name || '').toLowerCase(),
-                            ].filter(s => s.length > 2);
+                            ].filter(s => s.length > 2 && !['application services', 'testing', 'application'].includes(s));
 
-                            // ── Phase 1: Rule-based pre-filter ──
-                            // Must have at least one meaningful skill overlap
-                            const hasOverlap =
-                              skillsRelated(empActualSkill, rolePrimarySkill) ||
-                              empAllSkills.some(es => skillsRelated(es, rolePrimarySkill)) ||
-                              empAllSkills.some(es => es.length > 4 && roleTitle.includes(es)) ||
-                              (jdText.length > 50 && empAllSkills.some(es => es.length > 5 && jdText.includes(es)));
+                            const empCategories = empSkills.map(getSkillCategory);
 
-                            if (!hasOverlap) return;
+                            // ── Phase 1: STRICT pre-filter — skill category must match ──
+                            const categoryMatch = empCategories.includes(roleCategory) ||
+                              empSkills.some(es => {
+                                const esNorm = es.replace(/[^a-z0-9\s]/g, ' ').trim();
+                                const rpNorm = rolePrimarySkill.replace(/[^a-z0-9\s]/g, ' ').trim();
+                                // Direct word overlap (min 5 chars)
+                                return rpNorm.split(' ').filter(w => w.length >= 5).some(w => esNorm.includes(w));
+                              });
+
+                            if (!categoryMatch) return;
 
                             // ── Phase 2: Weighted scoring ──
                             const matchedSkills: string[] = [];
                             let score = 0;
                             const breakdown: string[] = [];
 
-                            // ACTUALSKILL vs Primary Skill (40 pts) — most reliable match
-                            if (skillsRelated(empActualSkill, rolePrimarySkill)) {
-                              score += 40;
-                              matchedSkills.push(emp.primary_skill || rolePrimarySkill);
-                              breakdown.push('Actual Skill ✓');
-                            } else if (empAllSkills.some(es => skillsRelated(es, rolePrimarySkill))) {
-                              score += 25;
-                              matchedSkills.push(rolePrimarySkill);
-                              breakdown.push('Skill Match ✓');
+                            // Primary skill category match (50 pts)
+                            if (empCategories.includes(roleCategory)) {
+                              score += 50;
+                              const matchedSkill = empSkills[empCategories.indexOf(roleCategory)];
+                              matchedSkills.push(matchedSkill || rolePrimarySkill);
+                              breakdown.push(`Skill: ${matchedSkill || rolePrimarySkill} ✓`);
                             }
 
-                            // JD keyword match (up to 30 pts)
+                            // JD keyword match — only meaningful technical terms (up to 30 pts)
+                            const technicalTerms = ['selenium', 'playwright', 'cypress', 'appium', 'jmeter', 'postman',
+                              'python', 'java', 'javascript', 'typescript', 'sql', 'api', 'rest', 'cicd',
+                              'jenkins', 'docker', 'azure', 'aws', 'git', 'agile', 'scrum', 'sdet'];
                             if (jdText.length > 50) {
-                              const jdMatched = empAllSkills.filter(es => es.length > 5 && jdText.includes(es));
-                              const jdScore = Math.min(jdMatched.length * 6, 30);
+                              const jdMatched = empSkills.filter(es =>
+                                technicalTerms.some(t => es.includes(t)) && jdText.includes(es.split(' ')[0])
+                              );
+                              const jdScore = Math.min(jdMatched.length * 10, 30);
                               if (jdScore > 0) {
                                 score += jdScore;
-                                jdMatched.slice(0, 3).forEach(s => { if (!matchedSkills.includes(s)) matchedSkills.push(s); });
-                                breakdown.push(`JD: ${jdMatched.length} keywords`);
+                                jdMatched.slice(0, 2).forEach(s => { if (!matchedSkills.includes(s)) matchedSkills.push(s); });
+                                breakdown.push(`JD Match: ${jdMatched.length}`);
                               }
                             }
 
-                            // Role title match (15 pts)
-                            if (empAllSkills.some(es => es.length > 4 && roleTitle.includes(es))) {
-                              score += 15; breakdown.push('Role Title ✓');
-                            }
-
-                            // Grade match (15 pts)
+                            // Grade match (20 pts)
                             const reqGrade = meta.grade || '';
                             const empGrade = (emp as any).grade || '';
                             if (reqGrade && empGrade) {
-                              if (reqGrade === empGrade) { score += 15; breakdown.push(`Grade: ${empGrade} ✓`); }
-                              else if (reqGrade[0] === empGrade[0]) { score += 7; breakdown.push(`Grade Band: ${empGrade[0]} ✓`); }
+                              if (reqGrade === empGrade) { score += 20; breakdown.push(`Grade: ${empGrade} ✓`); }
+                              else if (reqGrade[0] === empGrade[0]) { score += 10; breakdown.push(`Grade Band: ${empGrade[0]} ✓`); }
                             }
 
                             if (score > 0) {
@@ -1009,11 +1014,11 @@ export default function BFSIDashboard() {
                             }
                           });
 
-                          // ── Phase 3: All matches per SRF sorted by score ──
+                          // ── Phase 3: Sort by score, show all ──
                           roleMatches.sort((a, b) =>
                             b.score !== a.score ? b.score - a.score : (b.employee.aging_days || 0) - (a.employee.aging_days || 0)
                           );
-                          matches.push(...roleMatches); // show ALL matched employees per SRF
+                          matches.push(...roleMatches);
                         });
 
                         if (matches.length === 0) {
