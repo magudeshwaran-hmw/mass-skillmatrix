@@ -713,6 +713,7 @@ Return ONLY valid JSON. NO markdown. NO explanations.`;
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       const errorMsg = err.error || err.message || 'Failed to create employee';
+      console.error('[Admin Create Employee] Error:', errorMsg);
       toast.error(errorMsg);
       setEmailWarningConfirmed(false);
       return;
