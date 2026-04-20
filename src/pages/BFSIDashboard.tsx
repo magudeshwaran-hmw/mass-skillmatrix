@@ -603,51 +603,28 @@ export default function BFSIDashboard() {
                     ...ALL_BFSI_SKILLS.map((skill, idx) => {
                       const isPool = supplySubTab === 'pool';
 
-                      // Match skill row from the Excel Summary (skillGaps from API)
-                      // API fields: skill, pool (pool_supply), deallocation (deallocation_supply), supply, reactive, proactive, gap
-                      const summarySkill = kpiData?.skillGaps?.find(sg => {
-                        const s = sg.skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        const k = skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        if (k.includes('sdet'))        return s.includes('sdet');
-                        if (k.includes('mobile'))      return s.includes('mobile') && s.includes('functional');
-                        if (k.includes('ai') || k.includes('ml')) return s.includes('ai') || s.includes('ml') || s.includes('deep');
-                        if (k.includes('data') || k.includes('etl')) return s.includes('etl') || s.includes('database');
-                        if (k.includes('performance')) return s.includes('performance');
-                        if (k.includes('security'))    return s.includes('security');
-                        if (k.includes('accessibility')) return s.includes('accessibility');
-                        if (k.includes('digital'))     return s.includes('digital');
-                        if (k.includes('application')) return s.includes('application');
-                        if (k === 'automationtesting') return s.includes('automation') && !s.includes('sdet');
-                        if (k === 'functionaltesting') return s.includes('functional') && !s.includes('mobile');
-                        return false;
-                      });
-
-                      // Read directly from the API-returned fields (pool / deallocation)
-                      const skillValue = summarySkill
-                        ? (isPool ? (Number(summarySkill.pool) || 0) : (Number(summarySkill.deallocation) || 0))
-                        : 0;
-
-                      // Filter using L3 skills (current_skills array) — matches how Summary sheet counts
-                      // Summary sheet counts are based on l3_skills, stored in current_skills in DB
+                      // Filter using primary_skill — same source for both card count AND modal
                       const currentFilter = (w: BFSIEmployee) => {
                         const statusMatch = isPool ? w.status === 'Available-Pool' : w.status === 'Deallocating';
                         if (!statusMatch) return false;
-                        // Check L3/L4 skills (stored in current_skills) — this matches Summary sheet counts
-                        const l3Skills = (w.current_skills || []).map(s => s.toLowerCase().replace(/[^a-z0-9]/g, ''));
+                        const ps = (w.primary_skill || '').toLowerCase().replace(/[^a-z0-9]/g, '');
                         const k = skill.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        if (k.includes('sdet'))          return l3Skills.some(s => s.includes('sdet'));
-                        if (k.includes('mobile'))        return l3Skills.some(s => s.includes('mobile') && s.includes('functional'));
-                        if (k.includes('ai') || k.includes('ml')) return l3Skills.some(s => s.includes('ai') || s.includes('ml') || s.includes('deep'));
-                        if (k.includes('data') || k.includes('etl')) return l3Skills.some(s => s.includes('etl') || s.includes('data'));
-                        if (k.includes('performance'))   return l3Skills.some(s => s.includes('performance') || s.includes('nonfunctional'));
-                        if (k.includes('security'))      return l3Skills.some(s => s.includes('security'));
-                        if (k.includes('accessibility')) return l3Skills.some(s => s.includes('accessibility'));
-                        if (k.includes('digital'))       return l3Skills.some(s => s.includes('digital'));
-                        if (k.includes('application'))   return l3Skills.some(s => s.includes('application'));
-                        if (k === 'automationtesting')   return l3Skills.some(s => s.includes('automation') && !s.includes('sdet'));
-                        if (k === 'functionaltesting')   return l3Skills.some(s => s.includes('functional') && !s.includes('mobile'));
+                        if (k.includes('sdet'))          return ps.includes('sdet');
+                        if (k.includes('mobile'))        return ps.includes('mobile') && ps.includes('functional');
+                        if (k.includes('ai') || k.includes('ml')) return ps.includes('ai') || ps.includes('ml') || ps.includes('deep');
+                        if (k.includes('data') || k.includes('etl')) return ps.includes('etl') || ps.includes('data') || ps.includes('database');
+                        if (k.includes('performance'))   return ps.includes('performance') || ps.includes('nonfunctional');
+                        if (k.includes('security'))      return ps.includes('security');
+                        if (k.includes('accessibility')) return ps.includes('accessibility');
+                        if (k.includes('digital'))       return ps.includes('digital');
+                        if (k.includes('application'))   return ps.includes('application');
+                        if (k === 'automationtesting')   return ps.includes('automation') && !ps.includes('sdet');
+                        if (k === 'functionaltesting')   return ps.includes('functional') && !ps.includes('mobile');
                         return false;
                       };
+
+                      // Card count = DB filter count = modal count — always in sync
+                      const skillValue = workforce.filter(currentFilter).length;
 
                       // Short display label
                       const labelMap: Record<string, string> = {
