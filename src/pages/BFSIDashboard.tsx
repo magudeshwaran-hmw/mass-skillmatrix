@@ -1009,11 +1009,11 @@ export default function BFSIDashboard() {
                             }
                           });
 
-                          // ── Phase 3: Top 5 per SRF ──
+                          // ── Phase 3: All matches per SRF sorted by score ──
                           roleMatches.sort((a, b) =>
                             b.score !== a.score ? b.score - a.score : (b.employee.aging_days || 0) - (a.employee.aging_days || 0)
                           );
-                          matches.push(...roleMatches.slice(0, 5));
+                          matches.push(...roleMatches); // show ALL matched employees per SRF
                         });
 
                         if (matches.length === 0) {
@@ -1022,10 +1022,10 @@ export default function BFSIDashboard() {
                         }
 
                         matches.sort((a, b) => b.score - a.score);
-                        toast.success(`Found ${matches.length} matches across ${openRoles.length} roles (top 5 per SRF)`);
+                        toast.success(`Found ${matches.length} matches across ${openRoles.length} SRFs`);
                         setSelectedMetric({
                           tab: 'match',
-                          metric: `🎯 Find a Match — ${matches.length} Results (Top 5 per SRF)`,
+                          metric: `🎯 Find a Match — ${matches.length} Results`,
                           data: matches
                         });
                       }}
@@ -1253,7 +1253,7 @@ export default function BFSIDashboard() {
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                     <div style={{ fontSize: 12, color: T.sub, fontWeight: 700, padding: '8px 12px', background: dark ? 'rgba(255,255,255,0.04)' : '#f1f5f9', borderRadius: 10 }}>
-                      📊 {srfIds.length} SRFs matched · {filtered.length} total employee-role pairs · Top 5 per SRF
+                      📊 {srfIds.length} SRFs matched · {filtered.length} total employee-role pairs
                     </div>
                     {srfIds.map(srfId => {
                       const items = grouped[srfId];
