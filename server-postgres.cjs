@@ -1894,7 +1894,8 @@ app.get('/api/bfsi/summary-data', async (req, res) => {
 app.get('/api/bfsi/skill-analysis', async (req, res) => {
   try {
     const allRoles = await query("SELECT required_skills FROM bfsi_roles WHERE status = 'Open'");
-    const allWorkforce = await query("SELECT * FROM bfsi_workforce");
+    // Only supply pool employees (Available-Pool + Deallocating)
+    const allWorkforce = await query("SELECT * FROM bfsi_workforce WHERE status IN ('Available-Pool', 'Deallocating')");
     const certifications = await query("SELECT * FROM bfsi_certifications WHERE status = 'In Progress'");
     
     const skillDemand = {};
@@ -1907,7 +1908,7 @@ app.get('/api/bfsi/skill-analysis', async (req, res) => {
       });
     });
     
-    // Categorize supply by readiness
+    // Categorize supply by readiness — pool employees are all 'ready'
     allWorkforce.rows.forEach(emp => {
       const skills = emp.current_skills || [];
       const today = new Date();
@@ -1915,7 +1916,7 @@ app.get('/api/bfsi/skill-analysis', async (req, res) => {
       const daysToGrad = gradDate ? Math.ceil((gradDate - today) / (1000 * 60 * 60 * 24)) : null;
       
       skills.forEach(skill => {
-        if (emp.status === 'Available' && !gradDate) {
+        if ((emp.status === 'Available-Pool' || emp.status === 'Deallocating') && !gradDate) {
           skillSupply.ready[skill] = (skillSupply.ready[skill] || 0) + 1;
         } else if (daysToGrad && daysToGrad <= 14) {
           skillSupply.week2[skill] = (skillSupply.week2[skill] || 0) + 1;
@@ -2056,7 +2057,8 @@ app.get('/api/bfsi/roles/aging', async (req, res) => {
 app.get('/api/bfsi/reskilling-opportunities', async (req, res) => {
   try {
     const rolesResult = await query("SELECT * FROM bfsi_roles WHERE status = 'Open'");
-    const workforceResult = await query("SELECT * FROM bfsi_workforce WHERE status = 'Available'");
+    // Only use actual supply pool (Available-Pool + Deallocating) — NOT all LOB employees
+    const workforceResult = await query("SELECT * FROM bfsi_workforce WHERE status IN ('Available-Pool', 'Deallocating')");
     const roles = rolesResult.rows || [];
     const workforce = workforceResult.rows || [];
     

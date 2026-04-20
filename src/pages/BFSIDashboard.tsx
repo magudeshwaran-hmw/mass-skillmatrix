@@ -904,10 +904,34 @@ export default function BFSIDashboard() {
                         }
 
                         // ── Matching Engine (3-Phase per SVG workflow) ───────
+                        // INPUT:
+                        //   Supply: emp.primary_skill (ACTUALSKILL from Pool sheet e.g. "Manual", "Cypress/Manual")
+                        //           emp.current_skills (all skills including hierarchy names)
+                        //   Demand: role.required_skills[0] (Primary Skill from Reactive/Proactive sheet)
+                        //           role.role_title (SRF Title)
+                        //           jdText (External JD full text)
                         // Phase 1: Rule-based pre-filter
                         // Phase 2: Weighted scoring
                         // Phase 3: Top 5 per SRF
                         const matches: Array<{ role: BFSIRole; employee: BFSIEmployee; score: number; matchedSkills: string[]; breakdown: string }> = [];
+
+                        // Skill normalization helper — maps common variations to canonical names
+                        const normalizeSkill = (s: string) => s.toLowerCase()
+                          .replace(/[^a-z0-9\s]/g, ' ')
+                          .replace(/\s+/g, ' ')
+                          .trim();
+
+                        // Check if two skill strings are related
+                        const skillsRelated = (empSkill: string, roleSkill: string): boolean => {
+                          const e = normalizeSkill(empSkill);
+                          const r = normalizeSkill(roleSkill);
+                          if (e === r) return true;
+                          if (e.includes(r) || r.includes(e)) return true;
+                          // Word-level match: "automation" matches "automation testing"
+                          const rWords = r.split(' ').filter(w => w.length > 4);
+                          const eWords = e.split(' ').filter(w => w.length > 4);
+                          return rWords.some(rw => eWords.some(ew => ew.includes(rw) || rw.includes(ew)));
+                        };
 
                         openRoles.forEach(role => {
                           const meta = parseMeta(role);
@@ -917,18 +941,22 @@ export default function BFSIDashboard() {
                           const roleMatches: typeof matches = [];
 
                           poolEmployees.forEach(emp => {
+                            // Build skill set — prioritize ACTUALSKILL (primary_skill) over hierarchy names
+                            const empActualSkill = (emp.primary_skill || '').toLowerCase();
                             const empAllSkills = [
-                              ...(emp.current_skills || []),
-                              emp.primary_skill || '',
-                              emp.practice_name || '',
-                            ].filter(Boolean).map(s => s.toLowerCase());
+                              empActualSkill,
+                              ...(emp.current_skills || []).map(s => s.toLowerCase()),
+                              (emp.practice_name || '').toLowerCase(),
+                            ].filter(s => s.length > 2);
 
                             // ── Phase 1: Rule-based pre-filter ──
-                            const hasOverlap = empAllSkills.some(es =>
-                              rolePrimarySkill.split(' ').some(w => w.length > 4 && es.includes(w)) ||
-                              roleTitle.split(' ').some(w => w.length > 4 && es.includes(w)) ||
-                              (jdText.length > 10 && es.length > 4 && jdText.includes(es))
-                            );
+                            // Must have at least one meaningful skill overlap
+                            const hasOverlap =
+                              skillsRelated(empActualSkill, rolePrimarySkill) ||
+                              empAllSkills.some(es => skillsRelated(es, rolePrimarySkill)) ||
+                              empAllSkills.some(es => es.length > 4 && roleTitle.includes(es)) ||
+                              (jdText.length > 50 && empAllSkills.some(es => es.length > 5 && jdText.includes(es)));
+
                             if (!hasOverlap) return;
 
                             // ── Phase 2: Weighted scoring ──
@@ -936,30 +964,34 @@ export default function BFSIDashboard() {
                             let score = 0;
                             const breakdown: string[] = [];
 
-                            // Primary skill (40 pts)
-                            if (empAllSkills.some(es => es.includes(rolePrimarySkill) || rolePrimarySkill.includes(es) || rolePrimarySkill.split(' ').some(w => w.length > 4 && es.includes(w)))) {
+                            // ACTUALSKILL vs Primary Skill (40 pts) — most reliable match
+                            if (skillsRelated(empActualSkill, rolePrimarySkill)) {
                               score += 40;
-                              matchedSkills.push(role.required_skills?.[0] || 'Primary Skill');
-                              breakdown.push('Primary Skill ✓');
+                              matchedSkills.push(emp.primary_skill || rolePrimarySkill);
+                              breakdown.push('Actual Skill ✓');
+                            } else if (empAllSkills.some(es => skillsRelated(es, rolePrimarySkill))) {
+                              score += 25;
+                              matchedSkills.push(rolePrimarySkill);
+                              breakdown.push('Skill Match ✓');
                             }
 
-                            // JD keywords (up to 30 pts)
-                            if (jdText.length > 10) {
-                              const jdMatched = empAllSkills.filter(es => es.length > 4 && jdText.includes(es));
+                            // JD keyword match (up to 30 pts)
+                            if (jdText.length > 50) {
+                              const jdMatched = empAllSkills.filter(es => es.length > 5 && jdText.includes(es));
                               const jdScore = Math.min(jdMatched.length * 6, 30);
                               if (jdScore > 0) {
                                 score += jdScore;
                                 jdMatched.slice(0, 3).forEach(s => { if (!matchedSkills.includes(s)) matchedSkills.push(s); });
-                                breakdown.push(`JD Keywords: ${jdMatched.length}`);
+                                breakdown.push(`JD: ${jdMatched.length} keywords`);
                               }
                             }
 
-                            // Role title (15 pts)
+                            // Role title match (15 pts)
                             if (empAllSkills.some(es => es.length > 4 && roleTitle.includes(es))) {
                               score += 15; breakdown.push('Role Title ✓');
                             }
 
-                            // Grade (15 pts)
+                            // Grade match (15 pts)
                             const reqGrade = meta.grade || '';
                             const empGrade = (emp as any).grade || '';
                             if (reqGrade && empGrade) {
@@ -968,23 +1000,28 @@ export default function BFSIDashboard() {
                             }
 
                             if (score > 0) {
-                              roleMatches.push({ role, employee: emp, score: Math.min(score, 100), matchedSkills: [...new Set(matchedSkills)], breakdown: breakdown.join(' · ') });
+                              roleMatches.push({
+                                role, employee: emp,
+                                score: Math.min(score, 100),
+                                matchedSkills: [...new Set(matchedSkills)],
+                                breakdown: breakdown.join(' · ')
+                              });
                             }
                           });
 
                           // ── Phase 3: Top 5 per SRF ──
-                          roleMatches.sort((a, b) => b.score !== a.score ? b.score - a.score : (b.employee.aging_days || 0) - (a.employee.aging_days || 0));
+                          roleMatches.sort((a, b) =>
+                            b.score !== a.score ? b.score - a.score : (b.employee.aging_days || 0) - (a.employee.aging_days || 0)
+                          );
                           matches.push(...roleMatches.slice(0, 5));
                         });
 
                         if (matches.length === 0) {
-                          toast.error('No matches found. Skills in pool may not align with open SRF requirements.');
+                          toast.error('No matches found. Pool employees skills may not align with open SRF requirements. Check that Excel data is uploaded.');
                           return;
                         }
 
-                        // Final sort: by score desc
                         matches.sort((a, b) => b.score - a.score);
-
                         toast.success(`Found ${matches.length} matches across ${openRoles.length} roles (top 5 per SRF)`);
                         setSelectedMetric({
                           tab: 'match',
