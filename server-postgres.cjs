@@ -233,7 +233,7 @@ async function initializeDatabase() {
     await query(`CREATE INDEX IF NOT EXISTS idx_certifications_employee_id ON certifications(employee_id)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_education_employee_id ON education(employee_id)`);
     await query(`CREATE INDEX IF NOT EXISTS idx_achievements_employee_id ON achievements(employee_id)`);
-    await query(`CREATE INDEX IF NOT EXISTS idx_growth_plans_employee_id ON growth_plans(employee_id)`);
+    // (growth_plans table removed — index skipped)
 
     // Create app_settings table
     await query(`
