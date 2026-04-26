@@ -56,7 +56,7 @@ export default function AppHeader() {
 
   const innerStyle = {
     maxWidth: '100%', margin: '0', height: '100%',
-    padding: '0 40px', display: 'flex',
+    padding: '0 20px', display: 'flex', position: 'relative' as const,
     alignItems: 'center', justifyContent: 'space-between', gap: 8,
   };
 
@@ -77,8 +77,8 @@ export default function AppHeader() {
           <ZensarLogo size="sm" />
         </div>
 
-        {/* Nav — scrollable row, left-aligned after logo */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, overflowX: 'auto', scrollbarWidth: 'none' }} className="sk-hide-mobile">
+        {/* Nav — centered absolutely between logo and right controls */}
+        <nav style={{ display: 'flex', alignItems: 'center', gap: 2, position: 'absolute', left: '50%', transform: 'translateX(-50%)', overflowX: 'auto', scrollbarWidth: 'none' }} className="sk-hide-mobile">
           {isLoggedIn ? (
             navItems.map(item => (
               <button key={item.path}

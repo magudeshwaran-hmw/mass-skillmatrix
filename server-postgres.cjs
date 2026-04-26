@@ -1039,6 +1039,60 @@ app.post('/api/admin/employees/update', async (req, res) => {
   }
 });
 
+// Get employee skills (batch endpoint for optimization)
+app.post('/api/employees/batch-skills', async (req, res) => {
+  try {
+    const { employeeIds } = req.body;
+    
+    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+      return res.status(400).json({ error: 'employeeIds array is required' });
+    }
+
+    // Create placeholders for the IN clause
+    const placeholders = employeeIds.map((_, index) => `$${index + 1}`).join(',');
+    const query_text = `SELECT * FROM skills WHERE employee_id IN (${placeholders})`;
+    
+    const result = await query(query_text, employeeIds);
+
+    // Group skills by employee_id
+    const skillsByEmployee = {};
+    
+    result.rows.forEach(row => {
+      if (!skillsByEmployee[row.employee_id]) {
+        skillsByEmployee[row.employee_id] = [];
+      }
+      
+      // Check if it's a predefined skill
+      const predefinedIdx = SKILL_NAMES.indexOf(row.skill_name);
+      const skillId = predefinedIdx >= 0 ? `s${predefinedIdx + 1}` : row.skill_name;
+
+      skillsByEmployee[row.employee_id].push({
+        skillId: skillId,
+        skill_name: row.skill_name, // Keep original field name for compatibility
+        skillName: row.skill_name,
+        selfRating: row.self_rating,
+        managerRating: row.manager_rating,
+        validated: row.validated
+      });
+    });
+
+    // Filter out skills with 0 rating and ensure all requested employees are in response
+    employeeIds.forEach(empId => {
+      if (!skillsByEmployee[empId]) {
+        skillsByEmployee[empId] = [];
+      } else {
+        skillsByEmployee[empId] = skillsByEmployee[empId].filter(s => s.selfRating > 0);
+      }
+    });
+
+    console.log(`📊 Batch skills fetched for ${employeeIds.length} employees, ${result.rows.length} total skills`);
+    res.json(skillsByEmployee);
+  } catch (error) {
+    console.error('❌ Batch skills error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get employee skills
 app.get('/api/employees/:id/skills', async (req, res) => {
   try {
@@ -2164,13 +2218,20 @@ function parseExcelDate(dateValue) {
         else if (year < 100) year += 1900;
         return new Date(year, month, day);
       }},
-      // DD/MM/YYYY or DD-MM-YYYY
+      // DD/MM/YYYY or MM/DD/YYYY — smart detection based on which part > 12
       { regex: /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/, parse: (m) => {
-        return new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
-      }},
-      // MM/DD/YYYY
-      { regex: /^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/, parse: (m) => {
-        return new Date(parseInt(m[3]), parseInt(m[1]) - 1, parseInt(m[2]));
+        const first = parseInt(m[1]);
+        const second = parseInt(m[2]);
+        const year = parseInt(m[3]);
+        let month, day;
+        // If first part > 12, it must be DD/MM/YYYY
+        if (first > 12) { day = first; month = second; }
+        // If second part > 12, it must be MM/DD/YYYY
+        else if (second > 12) { month = first; day = second; }
+        // Ambiguous — default to MM/DD/YYYY (US/Excel format)
+        else { month = first; day = second; }
+        // Use UTC to avoid timezone day-shift
+        return new Date(Date.UTC(year, month - 1, day));
       }},
       // YYYY-MM-DD (ISO) - already handled above but included for completeness
       { regex: /^(\d{4})-(\d{2})-(\d{2})$/, parse: (m) => {
@@ -2592,7 +2653,7 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
       }
       
       // ==========================================
-      // SHEET 5: Deallocation - Employees releasing (21 employees)
+      // SHEET 5: Deallocation - Employees releasing
       // ==========================================
       if (workbook.SheetNames.includes('Deallocation')) {
         const deallocSheet = workbook.Sheets['Deallocation'];
@@ -2600,8 +2661,12 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
         console.log(`📋 Processing Deallocation sheet: ${deallocData.length} releasing employees`);
         if (deallocData.length > 0) {
           console.log('📋 Deallocation sheet columns:', Object.keys(deallocData[0]));
-          console.log('📋 Deallocation first row sample:', JSON.stringify(deallocData[0]).substring(0, 500));
         }
+
+        // ── Clear stale deallocation dates before re-processing ──
+        // This ensures old wrong dates don't persist across uploads
+        await client.query(`UPDATE bfsi_workforce SET deallocation_date = NULL, return_to_pool_date = NULL WHERE status = 'Deallocating'`);
+        console.log('🧹 Cleared stale deallocation dates before re-processing');
         
         for (const row of deallocData) {
           const empId = String(
@@ -2615,12 +2680,20 @@ app.post('/api/bfsi/upload', upload.single('file'), async (req, res) => {
             row['EmployeeName'] || row['Name'] || 'Unknown'
           ).trim();
 
-          // DeallocationDt is the L1 column in Excel
-          const releaseDate = parseExcelDate(
-            row['DeallocationDt'] || row['Deallocation Dt'] || row['Deallocation Date'] ||
-            row['DeallocationDate'] || row['Estimated Release Date'] || row['Release Date'] ||
-            row['ReleaseDate'] || row['Release_Date']
+          // DeallocationDt is column L in Excel — try all known variants
+          const releaseDateRaw = 
+            row['DeallocationDt'] || row['Deallocation Dt'] || row['DeallocationDate'] ||
+            row['Deallocation Date'] || row['Deallocation_Dt'] || row['Deallocation_Date'] ||
+            row['DEALLOCATIONDT'] || row['DEALLOCATION_DT'] || row['DEALLOCATION DATE'] ||
+            row['Estimated Release Date'] || row['Release Date'] ||
+            row['ReleaseDate'] || row['Release_Date'] || row['EndDate'] || row['End Date'] ||
+            row['ProjectEndDate'] || row['Project End Date'] || row['End Dt'] || row['EndDt'];
+          
+          console.log(`📅 Employee ${empId} - DeallocationDt raw value: "${releaseDateRaw}" from columns:`, 
+            Object.keys(row).filter(k => k.toLowerCase().includes('dealloc') || k.toLowerCase().includes('release') || k.toLowerCase().includes('end') || k.toLowerCase().includes('date'))
           );
+          
+          const releaseDate = parseExcelDate(releaseDateRaw);
 
           const agingDays = safeParseInt(
             row['AgeingDays'] || row['Ageing Days'] || row['AgingDays'] ||

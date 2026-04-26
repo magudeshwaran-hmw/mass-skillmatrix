@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { SKILLS } from '@/lib/mockData';
 import { getEmployee, computeCompletion, saveSkillRatings } from '@/lib/localDB';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { apiGetSkills, apiGetEmployee, isServerAvailable, API_BASE } from '@/lib/api';
@@ -8,10 +7,12 @@ import type { Employee } from '@/lib/types';
 import type { ProficiencyLevel } from '@/lib/types';
 import { ArrowLeft, Download, CheckCircle2, Clock, User, Mail, Phone,
   Briefcase, MapPin, TrendingUp, Loader2, Bot, Brain, Zap, Award, ExternalLink,
+  GraduationCap,
 } from 'lucide-react';
 import { toast } from '@/lib/ToastContext';
 import { exportEmployeeToExcel } from '@/lib/localDB';
 import { computeSkillPriorities, generateCareerInsight, recommendCertifications } from '@/lib/aiIntelligence';
+import { formatZensarId, extractZensarId, formatEmployeeDisplay } from '@/lib/zensarIdUtils';
 
 const CAT_COLOR: Record<string, string> = {
   Tool: '#3B82F6', Technology: '#8B5CF6', Application: '#10B981',
@@ -29,7 +30,10 @@ export default function EmployeeDetailPage() {
   const [emp, setEmp] = useState<Employee | null | undefined>(undefined); // undefined = loading
   const [certs, setCerts] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [education, setEducation] = useState<any[]>([]);
+  const [achievements, setAchievements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [skillMatrixModal, setSkillMatrixModal] = useState<{ employee: any; skills: any[] } | null>(null);
 
   useEffect(() => {
     if (!id) { setEmp(null); setLoading(false); return; }
@@ -37,68 +41,265 @@ export default function EmployeeDetailPage() {
     async function load() {
       setLoading(true);
 
-      // 1. Check localStorage first (fast)
-      let local = getEmployee(id!);
+      let employeeData: Employee | null = null;
 
-      // 2. Try to fetch fresh data from backend and sync skills
+      // Try to fetch data from backend
       try {
         const serverUp = await isServerAvailable();
         if (serverUp) {
-          // Fetch profile
+          // Try fetching from main employee API
           const serverEmp = await apiGetEmployee(id!);
+          
           if (serverEmp) {
-            // Merge server profile into localStorage
-            const merged: Employee = {
+            // Employee found in main API
+            employeeData = {
               id:                serverEmp.ZensarID || serverEmp.id || serverEmp.ID,
-              name:              serverEmp.Name || serverEmp.name || local?.name || '',
-              email:             serverEmp.Email || serverEmp.email || local?.email || '',
-              phone:             (serverEmp as any).Phone || (serverEmp as any).phone || local?.phone || '',
-              designation:       (serverEmp as any).Designation || (serverEmp as any).designation || local?.designation || '',
-              department:        (serverEmp as any).Department || (serverEmp as any).department || local?.department || '',
-              location:          (serverEmp as any).Location || (serverEmp as any).location || local?.location || '',
-              yearsIT:           Number(serverEmp.YearsIT ?? serverEmp.yearsIT ?? local?.yearsIT ?? 0),
-              yearsZensar:       Number(serverEmp.YearsZensar ?? serverEmp.yearsZensar ?? local?.yearsZensar ?? 0),
-              primarySkill:      serverEmp.primarySkill || local?.primarySkill || '',
-              primaryDomain:     serverEmp.primaryDomain || local?.primaryDomain || '',
-              overallCapability: Number(serverEmp.overallCapability ?? local?.overallCapability ?? 0),
-              submitted:         String(serverEmp.Submitted || serverEmp.submitted) === 'Yes' || local?.submitted === true,
+              name:              serverEmp.Name || serverEmp.name || '',
+              email:             serverEmp.Email || serverEmp.email || '',
+              phone:             (serverEmp as any).Phone || (serverEmp as any).phone || '',
+              designation:       (serverEmp as any).Designation || (serverEmp as any).designation || '',
+              department:        (serverEmp as any).Department || (serverEmp as any).department || '',
+              location:          (serverEmp as any).Location || (serverEmp as any).location || '',
+              yearsIT:           Number(serverEmp.YearsIT ?? serverEmp.yearsIT ?? 0),
+              yearsZensar:       Number(serverEmp.YearsZensar ?? serverEmp.yearsZensar ?? 0),
+              primarySkill:      serverEmp.primarySkill || '',
+              primaryDomain:     serverEmp.primaryDomain || '',
+              overallCapability: Number(serverEmp.overallCapability ?? 0),
+              submitted:         String(serverEmp.Submitted || serverEmp.submitted) === 'Yes',
               resumeUploaded:    String(serverEmp.resumeUploaded) === 'Yes',
-              skills: local?.skills ?? SKILLS.map(s => ({
-                skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false,
-              })),
+              skills: [], // Will be populated from backend APIs
             };
+          } else {
+            // Not in main API, try BFSI workforce data
+            console.log(`❌ Employee ${id} not found in main API, checking BFSI workforce...`);
+            try {
+              const bfsiRes = await fetch(`${API_BASE}/bfsi/workforce`);
+              if (bfsiRes.ok) {
+                const bfsiData = await bfsiRes.json();
+                const bfsiEmployee = (bfsiData.workforce || []).find((w: any) => 
+                  String(w.employee_id) === String(id)
+                );
+                
+                if (bfsiEmployee) {
+                  console.log(`✅ Found employee in BFSI workforce data`);
+                  // Create employee from BFSI data
+                  employeeData = {
+                    id: String(bfsiEmployee.employee_id),
+                    name: bfsiEmployee.employee_name || 'Unknown',
+                    email: bfsiEmployee.email || '',
+                    phone: '',
+                    designation: bfsiEmployee.designation || '',
+                    department: 'BFSI',
+                    location: bfsiEmployee.location || '',
+                    yearsIT: 0,
+                    yearsZensar: 0,
+                    primarySkill: bfsiEmployee.primary_skill || '',
+                    primaryDomain: '',
+                    overallCapability: 0,
+                    submitted: false,
+                    resumeUploaded: false,
+                    skills: [],
+                  };
+                }
+              }
+            } catch (error) {
+              console.log(`❌ Error checking BFSI workforce:`, error);
+            }
+          }
 
-            // Fetch and merge skills
+          if (employeeData) {
+            // Fetch and merge skills from Skill Matrix
             const apiSkills = await apiGetSkills(id!);
+            console.log(`🎯 Skill Matrix API Response:`, {
+              skillsCount: apiSkills.length,
+              skills: apiSkills,
+              employeeId: id
+            });
+            
             if (apiSkills.length > 0) {
-              merged.skills = apiSkills.map(s => ({
+              console.log(`✅ Processing ${apiSkills.length} Skill Matrix skills`);
+              employeeData.skills = apiSkills.map(s => ({
                 skillId:       s.skillId,
                 selfRating:    s.selfRating as ProficiencyLevel,
                 managerRating: s.managerRating as ProficiencyLevel | null,
                 validated:     s.validated,
+                skillName:     s.skillName || s.skill_name, // Add skill name for display
+                source:        'Skill Matrix'
               }));
+              console.log(`✅ Merged skills:`, employeeData.skills);
+            } else {
+              console.log(`❌ No Skill Matrix skills found for employee ${id}`);
+              // Try direct API call to double-check
+              try {
+                const directSkillsRes = await fetch(`${API_BASE}/employees/${id}/skills`);
+                if (directSkillsRes.ok) {
+                  const directSkills = await directSkillsRes.json();
+                  console.log(`🔍 Direct API call result:`, {
+                    status: directSkillsRes.status,
+                    skillsCount: directSkills.length,
+                    skills: directSkills
+                  });
+                  
+                  if (directSkills.length > 0) {
+                    console.log(`✅ Found skills via direct API call - updating merged data`);
+                    employeeData.skills = directSkills.map((s: any, index: number) => ({
+                      skillId:       s.skillId || `skill_${index}`,
+                      selfRating:    (s.selfRating || s.self_rating || 0) as ProficiencyLevel,
+                      managerRating: (s.managerRating || s.manager_rating || null) as ProficiencyLevel | null,
+                      validated:     s.validated || false,
+                      skillName:     s.skillName || s.skill_name || 'Unknown Skill',
+                      source:        'Skill Matrix'
+                    }));
+                    console.log(`✅ Updated merged skills from direct API:`, employeeData.skills);
+                  }
+                } else {
+                  console.log(`❌ Direct API call failed: ${directSkillsRes.status}`);
+                }
+              } catch (directError) {
+                console.log(`❌ Direct API call error:`, directError);
+              }
             }
 
-            local = merged;
+            // Also try to fetch BFSI workforce skills (Excel L1-L4 data)
+            try {
+              console.log(`🔍 Fetching BFSI workforce data for employee ID: ${id}`);
+              const bfsiRes = await fetch(`${API_BASE}/bfsi/workforce`);
+              if (bfsiRes.ok) {
+                const bfsiData = await bfsiRes.json();
+                console.log(`📊 BFSI API Response:`, {
+                  totalWorkforce: bfsiData.workforce?.length || 0,
+                  searchingForId: id
+                });
+                
+                const bfsiEmployee = (bfsiData.workforce || []).find((w: any) => {
+                  const match = String(w.employee_id) === String(id) || String(w.employee_id) === String(employeeData!.id);
+                  if (match) {
+                    console.log(`✅ Found BFSI employee match:`, {
+                      employee_id: w.employee_id,
+                      employee_name: w.employee_name,
+                      primary_skill: w.primary_skill,
+                      current_skills: w.current_skills,
+                      current_skills_type: typeof w.current_skills,
+                      current_skills_length: w.current_skills?.length || 0,
+                      status: w.status
+                    });
+                  }
+                  return match;
+                });
+                
+                if (bfsiEmployee) {
+                  console.log(`🎯 BFSI Employee found:`, bfsiEmployee.employee_name);
+                  
+                  // Handle current_skills - could be array or string
+                  let currentSkills = [];
+                  if (bfsiEmployee.current_skills) {
+                    if (Array.isArray(bfsiEmployee.current_skills)) {
+                      currentSkills = bfsiEmployee.current_skills.filter(skill => skill && skill.trim() !== '');
+                    } else if (typeof bfsiEmployee.current_skills === 'string') {
+                      // Handle case where it might be a string representation
+                      try {
+                        const parsed = JSON.parse(bfsiEmployee.current_skills);
+                        if (Array.isArray(parsed)) {
+                          currentSkills = parsed.filter(skill => skill && skill.trim() !== '');
+                        }
+                      } catch {
+                        // If not JSON, treat as comma-separated string
+                        currentSkills = bfsiEmployee.current_skills.split(',').map(s => s.trim()).filter(s => s);
+                      }
+                    }
+                  }
+                  
+                  console.log(`🎯 Processed current_skills:`, {
+                    original: bfsiEmployee.current_skills,
+                    processed: currentSkills,
+                    count: currentSkills.length
+                  });
+                  
+                  // If no Skill Matrix skills, create skills from Excel data
+                  if (apiSkills.length === 0 && currentSkills.length > 0) {
+                    employeeData!.skills = currentSkills.map((skillName: string, index: number) => ({
+                      skillId: `excel_${index}`,
+                      skillName: skillName,
+                      selfRating: 2 as ProficiencyLevel, // Default to Intermediate for Excel skills
+                      managerRating: null,
+                      validated: false,
+                      source: 'Excel L1-L4'
+                    }));
+                    console.log(`✅ Created ${employeeData!.skills.length} skills from Excel data`);
+                  }
+                  
+                  // Store BFSI data for display (always store, even if empty)
+                  (employeeData as any).bfsiData = {
+                    primary_skill: bfsiEmployee.primary_skill,
+                    current_skills: currentSkills,
+                    location: bfsiEmployee.location,
+                    status: bfsiEmployee.status
+                  };
+                  
+                  console.log(`✅ BFSI data stored:`, (employeeData as any).bfsiData);
+                } else {
+                  console.log(`❌ No BFSI workforce data found for employee ${id}`);
+                  console.log(`🔍 Available employee IDs:`, (bfsiData.workforce || []).slice(0, 10).map((w: any) => ({
+                    id: w.employee_id,
+                    name: w.employee_name
+                  })));
+                }
+              } else {
+                console.log(`❌ BFSI workforce API failed: ${bfsiRes.status} ${bfsiRes.statusText}`);
+              }
+            } catch (error) {
+              console.log(`❌ Error fetching BFSI workforce data:`, error);
+            }
           }
 
-          // Fetch Certifications
-          const certRes = await fetch(`${API_BASE}/certifications/${id}`);
-          if (certRes.ok) {
-            const cData = await certRes.json();
-            setCerts(cData.certifications || []);
-          }
+          // Fetch additional data (Certifications, Projects, Education, Achievements)
+          if (employeeData) {
+            // Fetch Certifications
+            const certRes = await fetch(`${API_BASE}/certifications/${id}`);
+            if (certRes.ok) {
+              const cData = await certRes.json();
+              setCerts(cData.certifications || []);
+              console.log(`✅ Certifications loaded: ${cData.certifications?.length || 0}`);
+            } else {
+              console.log(`❌ Certifications API failed: ${certRes.status}`);
+            }
 
-          // Fetch Projects
-          const projRes = await fetch(`${API_BASE}/projects/${id}`);
-          if (projRes.ok) {
-            const pData = await projRes.json();
-            setProjects(pData.projects || []);
+            // Fetch Projects
+            const projRes = await fetch(`${API_BASE}/projects/${id}`);
+            if (projRes.ok) {
+              const pData = await projRes.json();
+              setProjects(pData.projects || []);
+              console.log(`✅ Projects loaded: ${pData.projects?.length || 0}`);
+            } else {
+              console.log(`❌ Projects API failed: ${projRes.status}`);
+            }
+
+            // Fetch Education
+            const eduRes = await fetch(`${API_BASE}/education/${id}`);
+            if (eduRes.ok) {
+              const eData = await eduRes.json();
+              setEducation(eData.education || []);
+              console.log(`✅ Education loaded: ${eData.education?.length || 0}`);
+            } else {
+              console.log(`❌ Education API failed: ${eduRes.status}`);
+            }
+
+            // Fetch Achievements
+            const achRes = await fetch(`${API_BASE}/achievements/${id}`);
+            if (achRes.ok) {
+              const aData = await achRes.json();
+              setAchievements(aData.achievements || []);
+              console.log(`✅ Achievements loaded: ${aData.achievements?.length || 0}`);
+            } else {
+              console.log(`❌ Achievements API failed: ${achRes.status}`);
+            }
           }
         }
-      } catch { /* server unavailable — use localStorage */ }
+      } catch (error) { 
+        console.log(`❌ Error loading employee data:`, error);
+      }
 
-      setEmp(local ?? null);
+      setEmp(employeeData);
       setLoading(false);
     }
 
@@ -129,8 +330,24 @@ export default function EmployeeDetailPage() {
 
   const ratedCompletion = computeCompletion(emp.skills);
   const completion = Math.max(ratedCompletion, emp.overallCapability);
-  const ratedSkills = SKILLS.filter(s => (emp.skills.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0);
-  const categories = [...new Set(SKILLS.map(s => s.category))];
+  
+  // Get skills from Skill Matrix (with skillName property)
+  const skillMatrixSkills = emp.skills.filter(s => 
+    (s as any).source === 'Skill Matrix' || 
+    (s.selfRating && s.selfRating > 0 && (s as any).skillName)
+  );
+  
+  // REMOVED: Don't use SKILLS constant (mock data)
+  // const ratedSkills = SKILLS.filter(s => (emp.skills.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0);
+  
+  console.log(`📊 Skills breakdown:`, {
+    skillMatrixSkills: skillMatrixSkills.length,
+    excelSkills: (emp as any).bfsiData?.current_skills?.length || 0,
+    primarySkill: (emp as any).bfsiData?.primary_skill ? 1 : 0
+  });
+  
+  // Define categories without using SKILLS constant
+  const categories = ['Tool', 'Technology', 'Application', 'Domain', 'TestingType', 'DevOps', 'AI'];
 
   const card: React.CSSProperties = {
     background: T.card, border: `1px solid ${T.bdr}`, borderRadius: 16, padding: '20px 24px',
@@ -158,7 +375,9 @@ export default function EmployeeDetailPage() {
                 : <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: 'rgba(245,158,11,0.12)', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' }}>⏳ Pending</span>
               }
             </div>
-            <div style={{ fontSize: 13, color: T.sub, marginBottom: 10 }}>{emp.designation} · {emp.department}</div>
+            <div style={{ fontSize: 13, color: T.sub, marginBottom: 10 }}>
+              ID: {formatZensarId(emp.id)} · {emp.designation} · {emp.department}
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {emp.email && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><Mail size={12}/>{emp.email}</span>}
               {emp.phone && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><Phone size={12}/>{emp.phone}</span>}
@@ -179,113 +398,138 @@ export default function EmployeeDetailPage() {
           </div>
         </div>
 
-        {/* ── Category Breakdown ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))', gap: 12, marginBottom: 32 }}>
-          {categories.map(cat => {
-            const catSkills = SKILLS.filter(s => s.category === cat);
-            const rated = catSkills.filter(s => (emp.skills.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0);
-            const pct = Math.round((rated.length / catSkills.length) * 100);
-            const color = CAT_COLOR[cat] || '#3B82F6';
-            return (
-              <div key={cat} style={{ padding: '14px', borderRadius: 12, background: `${color}0c`, border: `1px solid ${color}28` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{cat}</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color }}>{rated.length}/{catSkills.length}</span>
+        {/* ── Technical Proficiency Matrix ── MOVED TO TOP */}
+        <div style={card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+            <TrendingUp size={18} color="#3B82F6" />
+            <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Technical Proficiency Matrix</h3>
+            <span style={{ fontSize: 12, color: T.muted, marginLeft: 'auto' }}>
+              {skillMatrixSkills.length} Skills from Zen Matrix
+            </span>
+            {/* Zen Matrix Button */}
+            <button
+              onClick={async () => {
+                console.log(`🎯 Opening Zen Matrix for employee: ${emp.name} (${emp.id})`);
+                try {
+                  const skills = await fetch(`${API_BASE}/employees/${emp.id}/skills`).then(r => r.ok ? r.json() : []).catch(() => []);
+                  console.log(`📊 Zen Matrix skills fetched:`, skills);
+                  setSkillMatrixModal({ employee: emp, skills });
+                } catch (error) {
+                  console.error('❌ Error fetching Zen Matrix skills:', error);
+                  toast.error('Failed to load Zen Matrix data');
+                }
+              }}
+              style={{ 
+                padding: '8px 16px', 
+                background: 'linear-gradient(135deg,#10b981,#059669)', 
+                color: '#fff', 
+                borderRadius: 10, 
+                fontSize: 12, 
+                fontWeight: 900, 
+                border: 'none', 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 6, 
+                transition: '0.3s',
+                boxShadow: '0 2px 8px rgba(16,185,129,0.25)'
+              }}
+            >
+              <GraduationCap size={16} />
+              Zen Matrix
+            </button>
+          </div>
+          
+          {/* Debug Information */}
+          {process.env.NODE_ENV === 'development' && (
+            <div style={{ marginBottom: 16, padding: 12, background: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 8, fontSize: 11, color: T.sub }}>
+              <strong>Debug Info:</strong> Zen Matrix Skills Only: {skillMatrixSkills.length}
+            </div>
+          )}
+          
+          {/* Show Skill Matrix skills if available */}
+          {skillMatrixSkills.length > 0 ? (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#10B981', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                🔵 Zen Matrix (Resume Upload) - {skillMatrixSkills.length} skills
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                {skillMatrixSkills.map((skill, index) => {
+                  const skillName = (skill as any).skillName || `Skill ${index + 1}`;
+                  const lvl = skill.selfRating ?? 0;
+                  return (
+                    <div key={index} style={{ padding: '12px', borderRadius: 10, background: `${LVL_COLOR[lvl]}08`, border: `1px solid ${LVL_COLOR[lvl]}25`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize:13, fontWeight:600 }}>{skillName}</span>
+                      <span style={{ fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:20, background:`${LVL_COLOR[lvl]}15`, color:LVL_COLOR[lvl] }}>{LVL_LABEL[lvl]}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#6B7280', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                🔵 Zen Matrix (Resume Upload) - No data
+              </div>
+              <div style={{ padding: '16px 20px', background: dark ? 'rgba(107,114,128,0.1)' : 'rgba(107,114,128,0.05)', borderRadius: 12, border: '1px solid rgba(107,114,128,0.2)' }}>
+                <div style={{ fontSize: 13, color: T.sub, marginBottom: 8 }}>
+                  <strong>No Zen Matrix data found</strong>
                 </div>
-                <div style={{ height: 4, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }}>
-                  <div style={{ height: '100%', width: `${pct}%`, borderRadius: 999, background: color }} />
+                <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>
+                  This employee hasn't uploaded their resume or completed skill assessments in the Zen Matrix system. 
+                  Click the "Zen Matrix" button above to check for any available data or to understand why it's missing.
                 </div>
               </div>
-            );
-          })}
+            </div>
+          )}
+          
+          {/* Show Excel L1-L4 skills if available */}
+          {(emp as any).bfsiData?.current_skills && Array.isArray((emp as any).bfsiData.current_skills) && (emp as any).bfsiData.current_skills.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#F59E0B', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                🟡 Excel L1-L4 Skills (Workforce Data) - {(emp as any).bfsiData.current_skills.length} skills
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
+                {(emp as any).bfsiData.current_skills.map((skillName: string, index: number) => (
+                  <div key={index} style={{ padding: '12px', borderRadius: 10, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize:13, fontWeight:600 }}>{skillName}</span>
+                    <span style={{ fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:20, background:'rgba(245,158,11,0.15)', color:'#F59E0B' }}>Excel Data</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Show primary skill if available */}
+          {(emp as any).bfsiData?.primary_skill && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#8B5CF6', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                🟣 Primary Skill (BFSI Data)
+              </div>
+              <div style={{ padding: '12px', borderRadius: 10, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize:14, fontWeight:700 }}>{(emp as any).bfsiData.primary_skill}</span>
+                <span style={{ fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:20, background:'rgba(139,92,246,0.15)', color:'#8B5CF6' }}>Primary</span>
+              </div>
+            </div>
+          )}
+          
+          {/* Show message if no skills found */}
+          {skillMatrixSkills.length === 0 && !(emp as any).bfsiData?.current_skills?.length && !(emp as any).bfsiData?.primary_skill && (
+            <div style={{ textAlign: 'center', padding: '40px', color: T.muted }}>
+              <TrendingUp size={48} style={{ opacity: 0.3, marginBottom: 16 }} />
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No Skills Data Found</div>
+              <div style={{ fontSize: 13 }}>This employee hasn't uploaded their resume or skills to the system yet.</div>
+              <div style={{ fontSize: 11, marginTop: 8, color: T.sub }}>
+                Employee ID: {id} • Check console for debugging information
+              </div>
+            </div>
+          )}
         </div>
 
+        {/* REMOVED: Skill Category Breakdown section */}
+
         {/* ── AI Intelligence Panel ── */}
-        {emp.skills.some(s => s.selfRating > 0) && (
-          <div style={{ marginBottom: 32 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Brain size={17} color="#fff" />
-              </div>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>AI Professional Intelligence</h3>
-            </div>
-
-            {(() => {
-              const insight = generateCareerInsight(emp.skills, emp.name);
-              const readColor = insight.readinessScore >= 75 ? '#10B981' : insight.readinessScore >= 50 ? '#F59E0B' : '#EF4444';
-              return (
-                <div style={{ ...card, background: 'linear-gradient(135deg,rgba(59,130,246,0.05),rgba(139,92,246,0.05))', border: '1px solid rgba(59,130,246,0.15)', marginBottom: 16 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{insight.headline}</div>
-                  <div style={{ marginBottom: 16 }}>
-                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, fontWeight:700, marginBottom:4 }}>
-                        <span style={{ color: readColor }}>Senior Readiness Score</span>
-                        <span>{insight.readinessScore}%</span>
-                     </div>
-                     <div style={{ height: 6, borderRadius: 999, background: 'rgba(0,0,0,0.05)' }}>
-                        <div style={{ height: '100%', width: `${insight.readinessScore}%`, borderRadius: 999, background: readColor }} />
-                     </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 12 }}>
-                    {[
-                      { label: 'Market Positioning', text: insight.positioning, color: '#3B82F6' },
-                      { label: 'Competitive Edge', text: insight.competitiveEdge, color: '#8B5CF6' },
-                      { label: 'Next Milestone', text: insight.nextMilestone, color: '#10B981' },
-                    ].map(item => (
-                      <div key={item.label} style={{ padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.3)', border: `1px solid rgba(0,0,0,0.05)` }}>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: item.color, marginBottom: 4, textTransform:'uppercase' }}>{item.label}</div>
-                        <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5 }}>{item.text}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
-               {/* Skill Gaps */}
-               {(() => {
-                 const priorities = computeSkillPriorities(emp.skills).filter(s => s.gap > 0).slice(0, 3);
-                 return (
-                   <div style={card}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
-                         <Zap size={16} color="#F59E0B" />
-                         <span style={{ fontWeight: 700, fontSize: 14 }}>Priority Growth Areas</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {priorities.map(s => (
-                          <div key={s.skillId} style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                             <span style={{ fontSize:13 }}>{s.name}</span>
-                             <span style={{ fontSize:11, fontWeight:700, color:'#3B82F6', background:'rgba(59,130,246,0.1)', padding:'2px 8px', borderRadius:8 }}>Level {s.currentLevel} → {s.currentLevel+1}</span>
-                          </div>
-                        ))}
-                      </div>
-                   </div>
-                 );
-               })()}
-
-               {/* Recommendations */}
-               {(() => {
-                 const rCerts = recommendCertifications(emp.skills, 3);
-                 return (
-                   <div style={card}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
-                         <Award size={16} color="#10B981" />
-                         <span style={{ fontWeight: 700, fontSize: 14 }}>AI Recommendations</span>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {rCerts.slice(0, 2).map(c => (
-                          <div key={c.id} style={{ fontSize:12, lineHeight:1.4 }}>
-                             <div style={{ fontWeight:700 }}>{c.name}</div>
-                             <div style={{ color:T.muted }}>{c.whyRecommended.slice(0, 60)}...</div>
-                          </div>
-                        ))}
-                      </div>
-                   </div>
-                 );
-               })()}
-            </div>
-          </div>
-        )}
+        {/* REMOVED: AI Intelligence Panel - showing only real data from database */}
 
         {/* ── Certifications & Projects ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, marginBottom: 32 }}>
@@ -320,38 +564,108 @@ export default function EmployeeDetailPage() {
            </div>
         </div>
 
-        {/* ── Full Skill Matrix ── */}
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-            <TrendingUp size={18} color="#3B82F6" />
-            <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Technical Proficiency Matrix</h3>
-            <span style={{ fontSize: 12, color: T.muted, marginLeft: 'auto' }}>{ratedSkills.length} Skills Evaluated</span>
-          </div>
-          <div style={{ display: 'grid', gap: 20 }}>
-            {categories.map(cat => {
-              const catSkills = SKILLS.filter(s => s.category === cat);
-              return (
-                <div key={cat}>
-                  <div style={{ fontSize: 11, fontWeight: 900, color: CAT_COLOR[cat], textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>{cat}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-                    {catSkills.map(skill => {
-                      const r = emp.skills.find(rt => rt.skillId === skill.id);
-                      const lvl = r?.selfRating ?? 0;
-                      return (
-                        <div key={skill.id} style={{ padding: '12px', borderRadius: 10, background: `${LVL_COLOR[lvl]}08`, border: `1px solid ${LVL_COLOR[lvl]}25`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize:13, fontWeight:600 }}>{skill.name}</span>
-                          <span style={{ fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:20, background:`${LVL_COLOR[lvl]}15`, color:LVL_COLOR[lvl] }}>{LVL_LABEL[lvl]}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        {/* ── Education & Achievements ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, marginBottom: 32 }}>
+           <div style={card}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+                 <GraduationCap size={20} color="#8B5CF6" />
+                 <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Educational Background</h3>
+              </div>
+              <div style={{ display:'grid', gap:10 }}>
+                 {education.length === 0 ? <div style={{color:T.muted, fontSize:13}}>No education records found.</div> : education.map((e, i) => (
+                   <div key={i} style={{ padding:14, borderRadius:12, background:dark?'rgba(255,255,255,0.03)':'#fafafa', border:`1px solid ${T.bdr}` }}>
+                      <div style={{ fontWeight:700, fontSize:14, marginBottom:2 }}>{e.Degree}</div>
+                      <div style={{ fontSize:12, color:T.sub, marginBottom:4 }}>{e.Institution}</div>
+                      {e.FieldOfStudy && <div style={{ fontSize:11, color:T.muted }}>Field: {e.FieldOfStudy}</div>}
+                      {e.StartDate && <div style={{ fontSize:11, color:T.muted }}>{e.StartDate} - {e.EndDate || 'Present'}</div>}
+                      {e.Grade && <div style={{ fontSize:11, color:'#10B981', fontWeight:600 }}>Grade: {e.Grade}</div>}
+                   </div>
+                 ))}
+              </div>
+           </div>
+           <div style={card}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+                 <Award size={20} color="#10B981" />
+                 <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Awards & Achievements</h3>
+              </div>
+              <div style={{ display:'grid', gap:10 }}>
+                 {achievements.length === 0 ? <div style={{color:T.muted, fontSize:13}}>No achievements found.</div> : achievements.map((a, i) => (
+                   <div key={i} style={{ padding:14, borderRadius:12, background:dark?'rgba(255,255,255,0.03)':'#fafafa', border:`1px solid ${T.bdr}` }}>
+                      <div style={{ fontWeight:700, fontSize:14, marginBottom:2 }}>{a.AwardTitle}</div>
+                      <div style={{ fontSize:12, color:T.sub, marginBottom:4 }}>{a.AwardingOrganization}</div>
+                      {a.DateReceived && <div style={{ fontSize:11, color:T.muted }}>Received: {a.DateReceived}</div>}
+                      {a.ProjectContext && <div style={{ fontSize:11, color:'#3B82F6', marginTop:4 }}>Project: {a.ProjectContext}</div>}
+                      {a.Description && <div style={{ fontSize:11, color:T.muted, marginTop:4, lineHeight:1.4 }}>{a.Description}</div>}
+                   </div>
+                 ))}
+              </div>
+           </div>
         </div>
 
       </div>
+
+      {/* ── Skill Matrix Modal ── */}
+      {skillMatrixModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(10px)' }} onClick={() => setSkillMatrixModal(null)}>
+          <div style={{ background: T.card, borderRadius: 24, border: `1px solid ${T.bdr}`, maxWidth: 600, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '20px 32px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg,#10b981,#059669)' }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 4 }}>Zen Matrix - Skill Matrix</div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#fff' }}>
+                  {skillMatrixModal.employee.name} ({formatZensarId(skillMatrixModal.employee.id)})
+                </h3>
+              </div>
+              <button onClick={() => setSkillMatrixModal(null)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 36, height: 36, borderRadius: 10, cursor: 'pointer', fontSize: 18 }}>✕</button>
+            </div>
+            <div style={{ padding: 32, overflowY: 'auto', flex: 1 }}>
+              {skillMatrixModal.skills.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 48, color: T.sub }}>
+                  <GraduationCap size={48} color={T.bdr} style={{ margin: '0 auto 16px' }} />
+                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8 }}>No Skills Found in Zen Matrix</div>
+                  <div style={{ fontSize: 13, marginBottom: 16 }}>This employee hasn't uploaded their resume or skills to the Skill Matrix system yet.</div>
+                  <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>
+                    <strong>What is Zen Matrix?</strong><br/>
+                    Zen Matrix is the skill assessment system where employees upload their resumes and rate their technical skills. 
+                    This provides the most current and accurate skill data compared to older Excel workforce data.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ fontSize: 12, color: T.sub, fontWeight: 700, marginBottom: 8 }}>
+                    {skillMatrixModal.skills.length} skills from resume upload
+                  </div>
+                  {skillMatrixModal.skills.map((skill: any, idx: number) => {
+                    const rating = skill.selfRating || skill.self_rating || 0;
+                    const skillName = skill.skillName || skill.skill_name || 'Unknown Skill';
+                    return (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: dark ? 'rgba(255,255,255,0.04)' : '#f8fafc', borderRadius: 12, border: `1px solid ${T.bdr}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'linear-gradient(135deg,#10b981,#059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, fontWeight: 800 }}>
+                            {idx + 1}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: 14, color: T.text }}>{skillName}</div>
+                            <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>Self-rated proficiency</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ fontSize: 24, fontWeight: 800, color: rating === 3 ? '#10B981' : rating === 2 ? '#F59E0B' : '#3B82F6' }}>
+                            L{rating}
+                          </div>
+                          <div style={{ fontSize: 10, color: T.sub, fontWeight: 700 }}>
+                            {rating === 3 ? 'Expert' : rating === 2 ? 'Intermediate' : rating === 1 ? 'Beginner' : 'Not Rated'}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }

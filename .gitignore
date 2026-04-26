@@ -23,5 +23,4 @@ dist-ssr
 *.sln
 *.sw?
 
-# Environment
-.env
+# NOTE: .env is intentionally NOT ignored so it transfers with the repo

@@ -5,6 +5,7 @@ import { toast } from '@/lib/ToastContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { getAllEmployees, computeCompletion, exportAllToExcel, exportEmployeeToExcel } from '@/lib/localDB';
 import { SKILLS } from '@/lib/mockData';
+import { formatZensarId, extractZensarId, formatEmployeeDisplay } from '@/lib/zensarIdUtils';
 
 export default function EmployeeListPage() {
   const navigate = useNavigate();
@@ -165,7 +166,9 @@ export default function EmployeeListPage() {
                       : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.12)', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' }}>⏳ Pending</span>
                     }
                   </div>
-                  <div style={{ fontSize: 12, color: T.sub, marginTop: 2 }}>{emp.designation} · {emp.department}</div>
+                  <div style={{ fontSize: 12, color: T.sub, marginTop: 2 }}>
+                    ID: {formatZensarId(emp.id)} · {emp.designation} · {emp.department}
+                  </div>
                 </div>
                 {/* Progress */}
                 <div style={{ minWidth: 100, textAlign: 'right' }}>
@@ -176,11 +179,11 @@ export default function EmployeeListPage() {
                 </div>
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => navigate(`/admin/employee/${emp.id}`)}
+                  <button onClick={() => navigate(`/admin/employee/${formatZensarId(emp.id)}`)}
                     style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', color: '#60A5FA', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Eye size={16} />
                   </button>
-                  <button onClick={() => { exportEmployeeToExcel(emp.id); toast.success(`${emp.name}'s report exported!`); }}
+                  <button onClick={() => { exportEmployeeToExcel(formatZensarId(emp.id)); toast.success(`${emp.name}'s report exported!`); }}
                     style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', color: '#34D399', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Download size={16} />
                   </button>
